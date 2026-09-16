@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import AppHeader from '@/components/AppHeader'
+import MiniSparkline from '@/components/MiniSparkline'
 import { createClient } from '@/lib/supabase/client'
 import { ensurePaperUser } from '@/lib/paper-session'
 import type { MarketToken } from '@/lib/types'
@@ -26,7 +27,7 @@ export default function DiscoverHome(){
   useEffect(()=>{void load();const id=setInterval(load,10000);return()=>clearInterval(id)},[])
 
   const rows=useMemo(()=>{
-    let list=[...tokens]
+    const list=[...tokens]
     if(tab==='top')list.sort((a,b)=>b.marketCap-a.marketCap)
     if(tab==='trending')list.sort((a,b)=>(b.volume24h+Math.abs(b.priceChange24h)*1000)-(a.volume24h+Math.abs(a.priceChange24h)*1000))
     if(tab==='new')list.sort((a,b)=>(b.pairCreatedAt||0)-(a.pairCreatedAt||0))
@@ -41,13 +42,13 @@ export default function DiscoverHome(){
       const {data,error}=await supabase.functions.invoke('paper-trade',{body:{mint:t.mint,side:'buy',amountSol:buySize}})
       if(error)throw error
       if(data?.error)throw new Error(data.error)
-      setNotice(`PAPER bought ${buySize} SOL of $${t.symbol}`)
+      setNotice(`PAPER BUY filled: ${buySize} PAPER SOL of $${t.symbol}`)
     }catch(e){setNotice(e instanceof Error?e.message:'PAPER buy failed')}
     finally{setBuying('')}
   }
 
   return <div className="ax-app">
-    <AppHeader active="discover"/>
+    <AppHeader active="spot"/>
     <main className="discover-page">
       <div className="discover-toolbar">
         <div className="discover-tabs">
@@ -62,7 +63,7 @@ export default function DiscoverHome(){
       {notice&&<div className="toast-line">{notice}</div>}
       <div className="discover-table">
         <div className="discover-head"><span>Pair Info</span><span>Chart</span><span>Market Cap</span><span>Liquidity</span><span>Volume</span><span>TXNS</span><span>Token Info</span><span>Action</span></div>
-        {rows.map((t,i)=>{
+        {rows.map(t=>{
           const up=t.priceChange24h>=0
           const holder=Math.max(12,Math.round((t.buys24h+t.sells24h)*1.7))
           return <div className="discover-row" key={t.mint}>
@@ -70,13 +71,13 @@ export default function DiscoverHome(){
               <div className="pair-avatar">{t.image?<img src={t.image} alt=""/>:<span>{t.symbol.slice(0,2)}</span>}</div>
               <div><div className="pair-name">{t.symbol} <span>{t.name}</span></div><div className="pair-meta"><b>{age(t.pairCreatedAt)}</b><span>◯</span><span>◎ {holder}</span></div></div>
             </button>
-            <div className={`spark ${up?'up':'down'}`}><svg viewBox="0 0 100 34" preserveAspectRatio="none"><polyline points={i%3===0?'0,27 14,20 25,21 39,14 52,18 69,7 83,10 100,4':'0,8 14,12 28,7 42,19 56,15 72,26 88,23 100,28'} fill="none" stroke="currentColor" strokeWidth="2"/><path d={i%3===0?'M0 27 L14 20 L25 21 L39 14 L52 18 L69 7 L83 10 L100 4 L100 34 L0 34Z':'M0 8 L14 12 L28 7 L42 19 L56 15 L72 26 L88 23 L100 28 L100 34 L0 34Z'} fill="currentColor" opacity=".08"/></svg></div>
+            <MiniSparkline pool={t.pairAddress} timeframe={time}/>
             <div className="metric-cell"><b>{money(t.marketCap)}</b><span className={up?'gain':'loss'}>{up?'+':''}{t.priceChange24h.toFixed(2)}%</span></div>
             <div className="metric-cell"><b>{money(t.liquidityUsd)}</b></div>
             <div className="metric-cell"><b>{money(t.volume24h)}</b></div>
             <div className="metric-cell"><b>{(t.buys24h+t.sells24h).toLocaleString()}</b><span><em className="gain">{t.buys24h}</em> / <em className="loss">{t.sells24h}</em></span></div>
             <div className="token-info-cell"><span className="token-badge gain">◎ {Math.min(99,Math.max(0,Math.round(t.buys24h/Math.max(1,t.buys24h+t.sells24h)*100)))}%</span><span className="token-badge">◌ {holder}</span><span className="token-badge">{t.dexId||'SOL'}</span></div>
-            <button className="blue-buy" disabled={buying===t.mint} onClick={()=>void quickBuy(t)}>{buying===t.mint?'Buying…':`Buy ${buySize} SOL`}</button>
+            <button className="blue-buy" disabled={buying===t.mint} onClick={()=>void quickBuy(t)}>{buying===t.mint?'Buying…':`Buy ${buySize} PAPER SOL`}</button>
           </div>
         })}
         {!rows.length&&<div className="table-empty">Loading live Solana memecoins…</div>}
