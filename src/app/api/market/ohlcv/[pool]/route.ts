@@ -14,6 +14,7 @@ const validTimeframes = new Map([
   ['1m', ['minute', '1']],
   ['5m', ['minute', '5']],
   ['15m', ['minute', '15']],
+  ['30m', ['minute', '30']],
   ['1h', ['hour', '1']],
 ] as const)
 
@@ -24,7 +25,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ pool: strin
   }
 
   const tf = req.nextUrl.searchParams.get('tf') || '1m'
-  const config = validTimeframes.get(tf as '1m' | '5m' | '15m' | '1h') || validTimeframes.get('1m')!
+  const config = validTimeframes.get(tf as '1m' | '5m' | '15m' | '30m' | '1h') || validTimeframes.get('1m')!
   const [timeframe, aggregate] = config
 
   try {
@@ -50,6 +51,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ pool: strin
 
     return NextResponse.json({ candles, timeframe: tf, source: 'geckoterminal', live: true })
   } catch (error) {
+    console.error('ohlcv_feed_error', { pool, tf, error })
     return NextResponse.json(
       { candles: [], error: error instanceof Error ? error.message : 'chart unavailable' },
       { status: 502 },
