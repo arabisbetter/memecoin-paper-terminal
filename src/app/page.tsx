@@ -1,2 +1,2 @@
-import Terminal from "@/components/Terminal";
-export default function Home(){ return <Terminal/>; }
+import DiscoverHome from '@/components/DiscoverHome'
+export default function Home(){return <DiscoverHome/>}
