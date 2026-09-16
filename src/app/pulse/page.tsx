@@ -24,22 +24,27 @@ function Card({t,onOpen}:{t:MarketToken;onOpen:()=>void}){
 export default function PulsePage(){
   const [tokens,setTokens]=useState<MarketToken[]>([])
   const [query,setQuery]=useState('')
+  const [refreshing,setRefreshing]=useState(false)
   const router=useRouter()
-  async function load(){try{const r=await fetch('/api/market/latest',{cache:'no-store'});const j=await r.json();if(r.ok)setTokens(j.tokens||[])}catch{}}
+  async function load(){
+    setRefreshing(true)
+    try{const r=await fetch('/api/market/latest',{cache:'no-store'});const j=await r.json();if(r.ok)setTokens(j.tokens||[])}catch{}
+    finally{setRefreshing(false)}
+  }
   useEffect(()=>{void load();const id=setInterval(load,9000);return()=>clearInterval(id)},[])
   const filtered=useMemo(()=>tokens.filter(t=>!query||t.symbol.toLowerCase().includes(query.toLowerCase())||t.name.toLowerCase().includes(query.toLowerCase())),[tokens,query])
-  const newer=useMemo(()=>[...filtered].sort((a,b)=>(b.pairCreatedAt||0)-(a.pairCreatedAt||0)).slice(0,10),[filtered])
-  const final=useMemo(()=>[...filtered].filter(t=>t.marketCap>0&&t.marketCap<500000).sort((a,b)=>b.marketCap-a.marketCap).slice(0,10),[filtered])
-  const migrated=useMemo(()=>[...filtered].filter(t=>/(raydium|meteora|pumpswap)/i.test(t.dexId||'')||t.liquidityUsd>20000).sort((a,b)=>b.volume24h-a.volume24h).slice(0,10),[filtered])
+  const newer=useMemo(()=>[...filtered].sort((a,b)=>(b.pairCreatedAt||0)-(a.pairCreatedAt||0)).slice(0,12),[filtered])
+  const final=useMemo(()=>[...filtered].filter(t=>t.marketCap>0&&t.marketCap<500000).sort((a,b)=>b.marketCap-a.marketCap).slice(0,12),[filtered])
+  const migrated=useMemo(()=>[...filtered].filter(t=>/(raydium|meteora|pumpswap)/i.test(t.dexId||'')||t.liquidityUsd>20000).sort((a,b)=>b.volume24h-a.volume24h).slice(0,12),[filtered])
   return <div className="ax-app"><AppHeader active="pulse"/>
     <main className="pulse-page">
-      <div className="pulse-page-head"><h1>Pulse</h1><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Search by ticker"/><button onClick={()=>void load()}>↻ Refresh</button></div>
+      <div className="pulse-page-head"><h1>Pulse</h1><span className="beta-feed">BETA FEED</span><span className="beta-copy">Categories are approximate until direct Pump.fun ingestion is live.</span><div className="spacer"/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Search by ticker"/><button onClick={()=>void load()} disabled={refreshing}>{refreshing?'Refreshing…':'↻ Refresh'}</button></div>
       <div className="pulse-columns">
         {[
           ['New Pairs',newer],['Final Stretch',final],['Migrated',migrated]
         ].map(([title,list])=><section className="pulse-column" key={title as string}>
-          <div className="pulse-column-head"><b>{title as string}</b><span>Search by ticker</span><small>Live</small></div>
-          <div className="pulse-column-list">{(list as MarketToken[]).map(t=><Card key={t.mint} t={t} onOpen={()=>router.push(`/spot?mint=${t.mint}`)}/>)}</div>
+          <div className="pulse-column-head"><b>{title as string}</b><span>{query?`Filter: ${query}`:'Live Solana feed'}</span><small>{(list as MarketToken[]).length}</small></div>
+          <div className="pulse-column-list">{(list as MarketToken[]).map(t=><Card key={t.mint} t={t} onOpen={()=>router.push(`/spot?mint=${t.mint}`)}/>)}{!(list as MarketToken[]).length&&<div className="table-empty">No matching tokens right now.</div>}</div>
         </section>)}
       </div>
     </main>
