@@ -1,73 +1,63 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { CandlestickSeries, ColorType, CrosshairMode, HistogramSeries, createChart, type IChartApi, type ISeriesApi, type UTCTimestamp } from 'lightweight-charts'
 
-type Candle = { time: number; open: number; high: number; low: number; close: number; volume: number }
-type Timeframe = '1m' | '5m' | '15m' | '1h' | '1M'
+type Candle={time:number;open:number;high:number;low:number;close:number;volume:number}
+type Timeframe='1m'|'5m'|'15m'|'30m'|'1h'|'4h'|'1d'|'1M'
+const timeframes:Timeframe[]=['1m','5m','15m','30m','1h','4h','1d','1M']
+const formatPrice=(n:number)=>!Number.isFinite(n)?'—':n>=1?`$${n.toFixed(4)}`:n>=.01?`$${n.toFixed(6)}`:`$${n.toPrecision(5)}`
 
-const formatPrice = (n: number) => {
-  if (!Number.isFinite(n)) return '—'
-  if (n >= 1) return `$${n.toFixed(4)}`
-  if (n >= 0.01) return `$${n.toFixed(6)}`
-  return `$${n.toPrecision(5)}`
-}
+export default function CandleChart({poolAddress,currentPrice}:{poolAddress?:string;currentPrice?:number}){
+  const wrap=useRef<HTMLDivElement|null>(null)
+  const chartRef=useRef<IChartApi|null>(null)
+  const candleRef=useRef<ISeriesApi<'Candlestick'>|null>(null)
+  const volumeRef=useRef<ISeriesApi<'Histogram'>|null>(null)
+  const priceLineRef=useRef<any>(null)
+  const [tf,setTf]=useState<Timeframe>('1m'),[candles,setCandles]=useState<Candle[]>([]),[hover,setHover]=useState<Candle|null>(null),[error,setError]=useState(''),[loading,setLoading]=useState(false),[status,setStatus]=useState<'LIVE'|'DEGRADED'|'STALE'>('DEGRADED'),[asOf,setAsOf]=useState(0)
 
-export default function CandleChart({ poolAddress, currentPrice }: { poolAddress?: string; currentPrice?: number }) {
-  const [tf, setTf] = useState<Timeframe>('1m')
-  const [candles, setCandles] = useState<Candle[]>([])
-  const [hovered, setHovered] = useState<number | null>(null)
-  const [error, setError] = useState('')
-  const [loading,setLoading]=useState(false)
+  useEffect(()=>{
+    if(!wrap.current)return
+    const chart=createChart(wrap.current,{autoSize:true,layout:{background:{type:ColorType.Solid,color:'#080a0f'},textColor:'#8a92a3',fontSize:11},grid:{vertLines:{color:'#151922'},horzLines:{color:'#151922'}},crosshair:{mode:CrosshairMode.Normal,vertLine:{color:'#65708a',width:1,labelBackgroundColor:'#283044'},horzLine:{color:'#65708a',width:1,labelBackgroundColor:'#283044'}},rightPriceScale:{borderColor:'#202532',scaleMargins:{top:.08,bottom:.22}},timeScale:{borderColor:'#202532',timeVisible:true,secondsVisible:false,rightOffset:4,barSpacing:8,minBarSpacing:3},handleScroll:{mouseWheel:true,pressedMouseMove:true,horzTouchDrag:true,vertTouchDrag:false},handleScale:{axisPressedMouseMove:true,mouseWheel:true,pinch:true}})
+    const cs=chart.addSeries(CandlestickSeries,{upColor:'#2de0b0',downColor:'#ff3f80',borderVisible:false,wickUpColor:'#2de0b0',wickDownColor:'#ff3f80',priceLineVisible:true,lastValueVisible:true})
+    const vs=chart.addSeries(HistogramSeries,{priceScaleId:'',priceFormat:{type:'volume'},lastValueVisible:false,priceLineVisible:false})
+    vs.priceScale().applyOptions({scaleMargins:{top:.82,bottom:0}})
+    chart.subscribeCrosshairMove(param=>{const value=param.seriesData.get(cs) as unknown as Candle|undefined;if(value&&typeof value.open==='number')setHover(value);else setHover(null)})
+    chartRef.current=chart;candleRef.current=cs;volumeRef.current=vs
+    return()=>{chart.remove();chartRef.current=null;candleRef.current=null;volumeRef.current=null;priceLineRef.current=null}
+  },[])
 
-  useEffect(() => {
-    if (!poolAddress) { setCandles([]); setError(''); return }
-    let alive = true
-    async function load(force=false) {
+  useEffect(()=>{
+    if(!poolAddress){setCandles([]);setError('');setStatus('DEGRADED');return}
+    let alive=true
+    async function load(force=false){
       if(!force&&document.hidden)return
       if(alive)setLoading(true)
-      try {
-        const r = await fetch(`/api/market/ohlcv/${encodeURIComponent(poolAddress!)}?tf=${tf}`, { cache: 'no-store' })
-        const j = await r.json()
-        if (!r.ok) throw new Error(j.error || 'chart unavailable')
-        if (alive && Array.isArray(j.candles) && j.candles.length) { setCandles(j.candles); setError(j.warning||'') }
-      } catch (e) { if (alive) setError(e instanceof Error ? e.message : 'chart unavailable') }
-      finally{if(alive)setLoading(false)}
+      try{const r=await fetch(`/api/market/ohlcv/${encodeURIComponent(poolAddress!)}?tf=${tf}`,{cache:'no-store'}),j=await r.json();if(!r.ok)throw new Error(j.error||'chart unavailable');if(alive&&Array.isArray(j.candles)&&j.candles.length){setCandles(j.candles);setError(j.warning||'');setAsOf(Number(j.asOf||Date.now()));setStatus(j.stale?'STALE':j.warning||j.live===false?'DEGRADED':'LIVE')}}catch(e){if(alive){setError(e instanceof Error?e.message:'chart unavailable');setStatus('DEGRADED')}}finally{if(alive)setLoading(false)}
     }
-    setHovered(null);setCandles([]);void load(true)
-    const id = window.setInterval(()=>void load(), tf==='1M'?120_000:30_000)
-    const onVisible=()=>{if(!document.hidden)void load(true)}
-    document.addEventListener('visibilitychange',onVisible)
-    return () => { alive = false; window.clearInterval(id); document.removeEventListener('visibilitychange',onVisible) }
-  }, [poolAddress, tf])
+    setCandles([]);setHover(null);void load(true)
+    const id=window.setInterval(()=>void load(),tf==='1M'||tf==='1d'?120_000:30_000),visible=()=>{if(!document.hidden)void load(true)};document.addEventListener('visibilitychange',visible)
+    return()=>{alive=false;clearInterval(id);document.removeEventListener('visibilitychange',visible)}
+  },[poolAddress,tf])
 
-  const visible = useMemo(() => candles.slice(tf==='1M'?-35:-90), [candles,tf])
-  const geom = useMemo(() => {
-    if (!visible.length) return null
-    const hi = Math.max(...visible.map(c => c.high), currentPrice || 0)
-    const lows=visible.map(c => c.low).filter(v => v > 0)
-    const lo = Math.min(...lows, currentPrice && currentPrice>0 ? currentPrice : Infinity)
-    if(!Number.isFinite(lo))return null
-    const maxVol = Math.max(...visible.map(c => c.volume), 1)
-    const pad = Math.max((hi - lo) * 0.08, hi * 0.002)
-    return { hi: hi + pad, lo: Math.max(0, lo - pad), maxVol }
-  }, [visible, currentPrice])
+  useEffect(()=>{
+    if(!candleRef.current||!volumeRef.current||!candles.length)return
+    candleRef.current.setData(candles.map(c=>({time:c.time as UTCTimestamp,open:c.open,high:c.high,low:c.low,close:c.close})))
+    volumeRef.current.setData(candles.map(c=>({time:c.time as UTCTimestamp,value:c.volume,color:c.close>=c.open?'rgba(45,224,176,.24)':'rgba(255,63,128,.24)'})))
+    chartRef.current?.timeScale().fitContent()
+  },[candles])
 
-  const xFor = (i: number) => 46 + (i / Math.max(visible.length - 1, 1)) * 900
-  const yFor = (price: number) => { if (!geom) return 180; const range = Math.max(geom.hi - geom.lo, 1e-12); return 20 + ((geom.hi - price) / range) * 280 }
-  const hoverCandle = hovered == null ? visible[visible.length - 1] : visible[hovered]
+  useEffect(()=>{
+    const series=candleRef.current
+    if(!series||!currentPrice||!Number.isFinite(currentPrice))return
+    if(!priceLineRef.current)priceLineRef.current=series.createPriceLine({price:currentPrice,color:'#5b76ff',lineWidth:1,lineStyle:2,axisLabelVisible:true,title:'LIVE'})
+    else priceLineRef.current.applyOptions({price:currentPrice})
+  },[currentPrice])
 
-  return <div className="chart-card">
-    <div className="chart-toolbar"><div><span className="chart-title">REAL OHLCV</span><span className="chart-live-badge"><i/>{loading?'SYNCING':'LIVE'}</span>{hoverCandle && <span className="ohlc-readout">O {formatPrice(hoverCandle.open)} · H {formatPrice(hoverCandle.high)} · L {formatPrice(hoverCandle.low)} · C {formatPrice(hoverCandle.close)}</span>}</div><div className="tf-group">{(['1m','5m','15m','1h','1M'] as Timeframe[]).map(v => <button key={v} title={v==='1M'?'1 month · daily candles':v} className={tf===v?'tf active':'tf'} onClick={()=>setTf(v)}>{v}</button>)}</div></div>
-    <div className="chart-stage" onMouseLeave={()=>setHovered(null)}>
-      {!poolAddress && <div className="chart-state">Select a token to load its chart.</div>}
-      {poolAddress && !visible.length && !error && <div className="chart-state"><span className="chart-loader"/>Loading real {tf==='1M'?'1 month':'market'} candles…</div>}
-      {error && !visible.length && <div className="chart-state">Chart feed temporarily unavailable · retrying automatically.</div>}
-      {!!visible.length && geom && <svg viewBox="0 0 1000 390" preserveAspectRatio="none" role="img" aria-label="Real market candlestick chart">
-        {[0,1,2,3,4].map(i => { const y = 20 + i * 70; const price = geom.hi - (i/4) * (geom.hi-geom.lo); return <g key={i}><line x1="46" x2="970" y1={y} y2={y} className="chart-grid-line"/><text x="975" y={y+4} className="axis-label">{formatPrice(price)}</text></g> })}
-        {visible.map((c,i) => { const x=xFor(i),up=c.close>=c.open,colorClass=up?'candle-up':'candle-down',yOpen=yFor(c.open),yClose=yFor(c.close),yHigh=yFor(c.high),yLow=yFor(c.low),width=Math.max(3, Math.min(14, 820/Math.max(visible.length,1)*0.62)),bodyY=Math.min(yOpen,yClose),bodyH=Math.max(1.5,Math.abs(yClose-yOpen)),volH=(c.volume/geom.maxVol)*54; return <g key={`${c.time}-${i}`} onMouseEnter={()=>setHovered(i)} className="candle-hit"><rect x={x-width*0.9} y="12" width={width*1.8} height="355" fill="transparent"/><line x1={x} x2={x} y1={yHigh} y2={yLow} className={colorClass}/><rect x={x-width/2} y={bodyY} width={width} height={bodyH} rx="1" className={colorClass}/><rect x={x-width/2} y={365-volH} width={width} height={volH} className={up?'vol-up':'vol-down'}/></g> })}
-        {hovered != null && <line x1={xFor(hovered)} x2={xFor(hovered)} y1="12" y2="368" className="crosshair"/>}
-        {currentPrice && Number.isFinite(currentPrice) && <g><line x1="46" x2="970" y1={yFor(currentPrice)} y2={yFor(currentPrice)} className="price-line"/><text x="895" y={yFor(currentPrice)-7} className="price-tag">{formatPrice(currentPrice)}</text></g>}
-      </svg>}
-    </div>
+  const latest=hover||candles[candles.length-1]
+  return <div className="chart-card lw-chart-card">
+    <div className="chart-toolbar"><div className="chart-readout"><span className="chart-title">REAL OHLCV</span><span className={`chart-live-badge ${status.toLowerCase()}`}><i/>{loading?'SYNCING':status}</span>{latest&&<span className="ohlc-readout">O {formatPrice(latest.open)} · H {formatPrice(latest.high)} · L {formatPrice(latest.low)} · C {formatPrice(latest.close)}</span>}</div><div className="tf-group">{timeframes.map(v=><button key={v} title={v==='1M'?'1 month view':v} className={tf===v?'tf active':'tf'} onClick={()=>setTf(v)}>{v}</button>)}</div></div>
+    <div className="lw-chart-wrap">{!poolAddress&&<div className="chart-state">Select a token to load its chart.</div>}{poolAddress&&!candles.length&&!error&&<div className="chart-state"><span className="chart-loader"/>Loading real {tf} candles…</div>}{error&&!candles.length&&<div className="chart-state">Chart feed unavailable · retrying automatically.</div>}<div ref={wrap} className="lw-chart-canvas"/></div>
+    <div className="chart-foot"><span>{asOf?`Updated ${new Date(asOf).toLocaleTimeString()}`:'Waiting for market data'}</span>{error&&candles.length>0&&<span className="loss">{error}</span>}<a href="https://www.tradingview.com/" target="_blank" rel="noreferrer">Charts by TradingView</a></div>
   </div>
 }
