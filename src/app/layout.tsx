@@ -7,10 +7,11 @@ import "./bugfix.css";
 import "./axiom-clone.css";
 import "./terminal-finishing.css";
 import "./smoothness.css";
+import "./v3.css";
 
 export const metadata: Metadata = {
   title: "PAPER — Memecoin Paper Trading Terminal",
-  description: "Live memecoins. PAPER money. Real market movement.",
+  description: "Live Solana memecoins. PAPER money. Real market movement.",
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
