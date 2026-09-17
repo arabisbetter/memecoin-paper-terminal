@@ -20,8 +20,20 @@ import "./errors.css";
 import "./landing.css";
 
 export const metadata: Metadata = {
+  metadataBase: new URL("https://memecoin-paper-terminal.vercel.app"),
   title: "PAPER — Trade PAPER. Earn real.",
   description: "Start with $1,000 PAPER and trade real memecoin market conditions with simulated execution. No wallet. No deposits.",
+  openGraph: {
+    title: "PAPER — Trade PAPER. Earn real.",
+    description: "$1,000 PAPER. Real memecoin markets. Simulated execution. No wallet.",
+    siteName: "PAPER",
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "PAPER — Trade PAPER. Earn real.",
+    description: "$1,000 PAPER. Real memecoin markets. Simulated execution. No wallet.",
+  },
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
