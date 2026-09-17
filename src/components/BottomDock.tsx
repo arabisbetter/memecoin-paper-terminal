@@ -2,9 +2,9 @@
 
 import Link from 'next/link'
 import { useEffect, useRef, useState } from 'react'
-import { BarChart3, BriefcaseBusiness, CircleUserRound, Gauge, Radio, Settings2, SlidersHorizontal } from 'lucide-react'
+import { BarChart3, BriefcaseBusiness, CircleDollarSign, CircleUserRound, Gauge, Radio, Settings2, SlidersHorizontal } from 'lucide-react'
 
-type Active='spot'|'pulse'|'portfolio'|'leaderboard'|'profile'
+type Active='spot'|'pulse'|'portfolio'|'leaderboard'|'profile'|'coin'
 const presetValues:[string,number][]=[['P1',0.1],['P2',0.5],['P3',1]]
 
 export default function BottomDock({active}:{active:Active}){
@@ -30,6 +30,7 @@ export default function BottomDock({active}:{active:Active}){
     <Link className={active==='pulse'?'active':''} href="/pulse"><Radio size={14}/><span>Pulse</span></Link>
     <Link className={active==='portfolio'?'active':''} href="/portfolio"><BriefcaseBusiness size={14}/><span>Portfolio</span></Link>
     <Link className={active==='leaderboard'?'active':''} href="/leaderboards"><BarChart3 size={14}/><span>Leaderboard</span></Link>
+    <Link className={active==='coin'?'active':''} href="/coin"><CircleDollarSign size={14}/><span>Coin</span></Link>
     <Link className={active==='profile'?'active':''} href="/profile"><CircleUserRound size={14}/><span>Profile</span></Link>
     <div className="dock-spacer"/>
     <span className="dock-live"><i/> LIVE SOLANA</span>
