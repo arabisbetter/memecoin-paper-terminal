@@ -25,10 +25,21 @@ export default function PulsePage(){
   const [tokens,setTokens]=useState<MarketToken[]>([])
   const [query,setQuery]=useState('')
   const [refreshing,setRefreshing]=useState(false)
+  const [feedError,setFeedError]=useState('')
+  const [source,setSource]=useState('')
   const router=useRouter()
   async function load(){
     setRefreshing(true)
-    try{const r=await fetch('/api/market/latest',{cache:'no-store'});const j=await r.json();if(r.ok)setTokens(j.tokens||[])}catch{}
+    try{
+      const r=await fetch('/api/market/latest',{cache:'no-store'})
+      const j=await r.json()
+      if(!r.ok)throw new Error(j.error||`market feed ${r.status}`)
+      const next=(j.tokens||[]) as MarketToken[]
+      if(!next.length)throw new Error('Market feed returned zero Solana tokens.')
+      setTokens(next)
+      setSource(j.source||'live')
+      setFeedError(j.warning||'')
+    }catch(e){setFeedError(e instanceof Error?e.message:'Live market feed unavailable')}
     finally{setRefreshing(false)}
   }
   useEffect(()=>{void load();const id=setInterval(load,9000);return()=>clearInterval(id)},[])
@@ -39,12 +50,14 @@ export default function PulsePage(){
   return <div className="ax-app"><AppHeader active="pulse"/>
     <main className="pulse-page">
       <div className="pulse-page-head"><h1>Pulse</h1><span className="beta-feed">BETA FEED</span><span className="beta-copy">Categories are approximate until direct Pump.fun ingestion is live.</span><div className="spacer"/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Search by ticker"/><button onClick={()=>void load()} disabled={refreshing}>{refreshing?'Refreshing…':'↻ Refresh'}</button></div>
+      {feedError&&<div className="feed-status warning"><b>Market feed:</b> {feedError}<button onClick={()=>void load()}>Retry</button></div>}
+      {!feedError&&source&&<div className="feed-status"><span className="live-dot"/> Live Solana feed · {source}</div>}
       <div className="pulse-columns">
         {[
           ['New Pairs',newer],['Final Stretch',final],['Migrated',migrated]
         ].map(([title,list])=><section className="pulse-column" key={title as string}>
           <div className="pulse-column-head"><b>{title as string}</b><span>{query?`Filter: ${query}`:'Live Solana feed'}</span><small>{(list as MarketToken[]).length}</small></div>
-          <div className="pulse-column-list">{(list as MarketToken[]).map(t=><Card key={t.mint} t={t} onOpen={()=>router.push(`/spot?mint=${t.mint}`)}/>)}{!(list as MarketToken[]).length&&<div className="table-empty">No matching tokens right now.</div>}</div>
+          <div className="pulse-column-list">{(list as MarketToken[]).map(t=><Card key={t.mint} t={t} onOpen={()=>router.push(`/spot?mint=${t.mint}`)}/>)}{!(list as MarketToken[]).length&&<div className="table-empty">{feedError?'Feed unavailable — retrying automatically.':'No matching tokens right now.'}</div>}</div>
         </section>)}
       </div>
     </main>
