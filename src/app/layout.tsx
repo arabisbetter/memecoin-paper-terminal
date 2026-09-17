@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import RecoveryNudge from "@/components/RecoveryNudge";
 import "./globals.css";
 import "./product-polish.css";
 import "./spot-polish.css";
@@ -20,7 +21,7 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body>{children}<RecoveryNudge/></body>
     </html>
   );
 }
