@@ -18,11 +18,25 @@ export default function DiscoverHome(){
   const [buySize,setBuySize]=useState(.1)
   const [buying,setBuying]=useState('')
   const [notice,setNotice]=useState('')
+  const [feedError,setFeedError]=useState('')
+  const [loading,setLoading]=useState(true)
+  const [source,setSource]=useState('')
   const supabase=useMemo(()=>{try{return createClient()}catch{return null}},[])
   const router=useRouter()
 
   async function load(){
-    try{const r=await fetch('/api/market/latest',{cache:'no-store'});const j=await r.json();if(r.ok)setTokens(j.tokens||[])}catch{}
+    try{
+      const r=await fetch('/api/market/latest',{cache:'no-store'})
+      const j=await r.json()
+      if(!r.ok)throw new Error(j.error||`market feed ${r.status}`)
+      const next=(j.tokens||[]) as MarketToken[]
+      if(!next.length)throw new Error('Market feed returned zero Solana tokens.')
+      setTokens(next)
+      setSource(j.source||'live')
+      setFeedError(j.warning||'')
+    }catch(e){
+      setFeedError(e instanceof Error?e.message:'Live market feed unavailable')
+    }finally{setLoading(false)}
   }
   useEffect(()=>{void load();const id=setInterval(load,10000);return()=>clearInterval(id)},[])
 
@@ -35,7 +49,7 @@ export default function DiscoverHome(){
   },[tokens,tab])
 
   async function quickBuy(t:MarketToken){
-    if(!supabase)return
+    if(!supabase){setNotice('PAPER account service is unavailable.');return}
     try{
       setBuying(t.mint);setNotice('')
       await ensurePaperUser(supabase)
@@ -61,6 +75,8 @@ export default function DiscoverHome(){
       </div>
 
       {notice&&<div className="toast-line">{notice}</div>}
+      {feedError&&<div className="feed-status warning"><b>Market feed:</b> {feedError}<button onClick={()=>void load()}>Retry</button></div>}
+      {!feedError&&source&&<div className="feed-status"><span className="live-dot"/> Live Solana feed · {source}</div>}
       <div className="discover-table">
         <div className="discover-head"><span>Pair Info</span><span>Chart</span><span>Market Cap</span><span>Liquidity</span><span>Volume</span><span>TXNS</span><span>Token Info</span><span>Action</span></div>
         {rows.map(t=>{
@@ -80,7 +96,8 @@ export default function DiscoverHome(){
             <button className="blue-buy" disabled={buying===t.mint} onClick={()=>void quickBuy(t)}>{buying===t.mint?'Buying…':`Buy ${buySize} PAPER SOL`}</button>
           </div>
         })}
-        {!rows.length&&<div className="table-empty">Loading live Solana memecoins…</div>}
+        {!rows.length&&loading&&<div className="table-empty">Loading live Solana memecoins…</div>}
+        {!rows.length&&!loading&&feedError&&<div className="table-empty error-state">Live token feed is unavailable. Use Retry above; the page will also retry automatically every 10 seconds.</div>}
       </div>
     </main>
   </div>
