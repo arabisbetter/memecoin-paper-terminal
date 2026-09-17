@@ -1,23 +1,34 @@
 'use client'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Maximize2, Minimize2, RotateCcw } from 'lucide-react'
+import { Check, ChevronDown, Maximize2, Minimize2, RotateCcw } from 'lucide-react'
 import { CandlestickSeries, ColorType, CrosshairMode, HistogramSeries, createChart, type IChartApi, type ISeriesApi, type UTCTimestamp } from 'lightweight-charts'
 
 type Candle={time:number;open:number;high:number;low:number;close:number;volume:number}
-type Timeframe='1m'|'5m'|'15m'|'30m'|'1h'|'4h'|'1d'|'1M'
-const timeframes:Timeframe[]=['1m','5m','15m','30m','1h','4h','1d','1M']
+type Timeframe='1s'|'5s'|'15s'|'30s'|'1m'|'3m'|'5m'|'15m'|'30m'|'1h'|'4h'|'6h'|'12h'|'24h'|'1M'
+type TimeframeOption={value:Timeframe;label:string}
+type TimeframeGroup={label:string;items:TimeframeOption[]}
+
+const timeframeGroups:TimeframeGroup[]=[
+  {label:'SECONDS',items:[{value:'1s',label:'1 second'},{value:'5s',label:'5 seconds'},{value:'15s',label:'15 seconds'},{value:'30s',label:'30 seconds'}]},
+  {label:'MINUTES',items:[{value:'1m',label:'1 minute'},{value:'3m',label:'3 minutes'},{value:'5m',label:'5 minutes'},{value:'15m',label:'15 minutes'},{value:'30m',label:'30 minutes'}]},
+  {label:'HOURS',items:[{value:'1h',label:'1 hour'},{value:'4h',label:'4 hours'},{value:'6h',label:'6 hours'},{value:'12h',label:'12 hours'},{value:'24h',label:'24 hours'}]},
+  {label:'LONGER',items:[{value:'1M',label:'1 month'}]},
+]
+const timeframeLabel=(tf:Timeframe)=>timeframeGroups.flatMap(g=>g.items).find(x=>x.value===tf)?.label||tf
+const isSecondTf=(tf:Timeframe)=>tf.endsWith('s')
 const formatPrice=(n:number)=>!Number.isFinite(n)?'—':n>=1?`$${n.toFixed(4)}`:n>=.01?`$${n.toFixed(6)}`:`$${n.toPrecision(5)}`
 const compact=(n:number)=>!Number.isFinite(n)?'—':n>=1e9?`$${(n/1e9).toFixed(2)}B`:n>=1e6?`$${(n/1e6).toFixed(2)}M`:n>=1e3?`$${(n/1e3).toFixed(1)}K`:`$${n.toFixed(0)}`
-const refreshMs=(tf:Timeframe)=>tf==='1m'?12_000:tf==='5m'?15_000:tf==='15m'||tf==='30m'?25_000:tf==='1h'?35_000:tf==='4h'?60_000:120_000
+const refreshMs=(tf:Timeframe)=>tf==='1s'?1_150:tf==='5s'?1_700:tf==='15s'?2_500:tf==='30s'?3_500:tf==='1m'?12_000:tf==='3m'?13_000:tf==='5m'?15_000:tf==='15m'||tf==='30m'?25_000:tf==='1h'?35_000:tf==='4h'||tf==='6h'?60_000:tf==='12h'?90_000:120_000
 
 export default function CandleChart({poolAddress,currentPrice,symbol}:{poolAddress?:string;currentPrice?:number;symbol?:string}){
   const wrap=useRef<HTMLDivElement|null>(null)
+  const pickerRef=useRef<HTMLDivElement|null>(null)
   const chartRef=useRef<IChartApi|null>(null)
   const candleRef=useRef<ISeriesApi<'Candlestick'>|null>(null)
   const volumeRef=useRef<ISeriesApi<'Histogram'>|null>(null)
   const priceLineRef=useRef<any>(null)
-  const [tf,setTf]=useState<Timeframe>('1m'),[candles,setCandles]=useState<Candle[]>([]),[hover,setHover]=useState<Candle|null>(null),[error,setError]=useState(''),[loading,setLoading]=useState(false),[status,setStatus]=useState<'LIVE'|'DEGRADED'|'STALE'>('DEGRADED'),[asOf,setAsOf]=useState(0),[expanded,setExpanded]=useState(false)
+  const [tf,setTf]=useState<Timeframe>('1m'),[tfOpen,setTfOpen]=useState(false),[candles,setCandles]=useState<Candle[]>([]),[hover,setHover]=useState<Candle|null>(null),[error,setError]=useState(''),[loading,setLoading]=useState(false),[status,setStatus]=useState<'LIVE'|'DEGRADED'|'STALE'>('DEGRADED'),[asOf,setAsOf]=useState(0),[expanded,setExpanded]=useState(false)
 
   useEffect(()=>{
     if(!wrap.current)return
@@ -30,6 +41,16 @@ export default function CandleChart({poolAddress,currentPrice,symbol}:{poolAddre
     return()=>{chart.remove();chartRef.current=null;candleRef.current=null;volumeRef.current=null;priceLineRef.current=null}
   },[])
 
+  useEffect(()=>{chartRef.current?.timeScale().applyOptions({timeVisible:true,secondsVisible:isSecondTf(tf),rightOffset:isSecondTf(tf)?3:5,barSpacing:isSecondTf(tf)?10:8})},[tf])
+
+  useEffect(()=>{
+    if(!tfOpen)return
+    const onPointer=(event:PointerEvent)=>{if(pickerRef.current&&!pickerRef.current.contains(event.target as Node))setTfOpen(false)}
+    const onKey=(event:KeyboardEvent)=>{if(event.key==='Escape')setTfOpen(false)}
+    window.addEventListener('pointerdown',onPointer);window.addEventListener('keydown',onKey)
+    return()=>{window.removeEventListener('pointerdown',onPointer);window.removeEventListener('keydown',onKey)}
+  },[tfOpen])
+
   useEffect(()=>{
     if(!poolAddress){setCandles([]);setError('');setStatus('DEGRADED');return}
     let alive=true
@@ -41,7 +62,7 @@ export default function CandleChart({poolAddress,currentPrice,symbol}:{poolAddre
         if(alive&&Array.isArray(j.candles)&&j.candles.length){setCandles(j.candles);setError(j.warning||'');setAsOf(Number(j.asOf||Date.now()));setStatus(j.stale?'STALE':j.warning||j.live===false?'DEGRADED':'LIVE')}
       }catch(e){if(alive){setError(e instanceof Error?e.message:'chart unavailable');setStatus('DEGRADED')}}finally{if(alive)setLoading(false)}
     }
-    setCandles([]);setHover(null);void load(true)
+    setCandles([]);setHover(null);setError('');void load(true)
     const id=window.setInterval(()=>void load(),refreshMs(tf)),visible=()=>{if(!document.hidden)void load(true)};document.addEventListener('visibilitychange',visible)
     return()=>{alive=false;clearInterval(id);document.removeEventListener('visibilitychange',visible)}
   },[poolAddress,tf])
@@ -64,11 +85,13 @@ export default function CandleChart({poolAddress,currentPrice,symbol}:{poolAddre
   useEffect(()=>{requestAnimationFrame(()=>chartRef.current?.timeScale().fitContent())},[expanded])
 
   const latest=hover||candles[candles.length-1]
-  const summary=useMemo(()=>{if(candles.length<2)return{change:0,volume:0};const first=candles[0],last=candles[candles.length-1];return{change:first.open>0?(last.close/first.open-1)*100:0,volume:candles.reduce((s,c)=>s+Number(c.volume||0),0)}},[candles])
+  const summary=useMemo(()=>{if(candles.length<2)return{change:0,volume:candles.reduce((s,c)=>s+Number(c.volume||0),0)};const first=candles[0],last=candles[candles.length-1];return{change:first.open>0?(last.close/first.open-1)*100:0,volume:candles.reduce((s,c)=>s+Number(c.volume||0),0)}},[candles])
+
+  function chooseTimeframe(value:Timeframe){setTf(value);setTfOpen(false)}
 
   return <div className={`chart-card lw-chart-card p23-chart ${expanded?'expanded':''}`}>
-    <div className="chart-toolbar p23-chart-toolbar"><div className="chart-readout"><span className="chart-title">{symbol?`$${symbol} · `:''}REAL OHLCV</span><span className={`chart-live-badge ${status.toLowerCase()}`}><i/>{loading?'SYNCING':status}</span>{latest&&<span className="ohlc-readout">O {formatPrice(latest.open)} · H {formatPrice(latest.high)} · L {formatPrice(latest.low)} · C {formatPrice(latest.close)}</span>}</div><div className="chart-summary"><span className={summary.change>=0?'gain':'loss'}>{summary.change>=0?'+':''}{summary.change.toFixed(2)}%</span><span>{compact(summary.volume)} vol</span></div><div className="tf-group">{timeframes.map(v=><button key={v} title={v==='1M'?'1 month view':v} className={tf===v?'tf active':'tf'} onClick={()=>setTf(v)}>{v}</button>)}</div><div className="chart-tools"><button title="Fit chart" onClick={()=>chartRef.current?.timeScale().fitContent()}><RotateCcw size={13}/></button><button title={expanded?'Exit full chart':'Expand chart'} onClick={()=>setExpanded(v=>!v)}>{expanded?<Minimize2 size={13}/>:<Maximize2 size={13}/>}</button></div></div>
-    <div className="lw-chart-wrap">{!poolAddress&&<div className="chart-state">Select a token to load its chart.</div>}{poolAddress&&!candles.length&&!error&&<div className="chart-state"><span className="chart-loader"/>Loading real {tf} candles…</div>}{error&&!candles.length&&<div className="chart-state">Chart feed unavailable · retrying automatically.</div>}<div ref={wrap} className="lw-chart-canvas"/></div>
-    <div className="chart-foot"><span>{asOf?`Updated ${new Date(asOf).toLocaleTimeString()}`:'Waiting for market data'}</span><span>{tf==='1M'?'30 daily candles · one-month view':`${candles.length} candles · ${tf}`}</span>{error&&candles.length>0&&<span className="loss">{error}</span>}<span className="chart-provider">Market data · GeckoTerminal</span></div>
+    <div className="chart-toolbar p23-chart-toolbar"><div className="chart-readout"><span className="chart-title">{symbol?`$${symbol} · `:''}{isSecondTf(tf)?'REAL TRADE CANDLES':'REAL OHLCV'}</span><span className={`chart-live-badge ${status.toLowerCase()}`}><i/>{loading?'SYNCING':status}</span>{latest&&<span className="ohlc-readout">O {formatPrice(latest.open)} · H {formatPrice(latest.high)} · L {formatPrice(latest.low)} · C {formatPrice(latest.close)}</span>}</div><div className="chart-summary"><span className={summary.change>=0?'gain':'loss'}>{summary.change>=0?'+':''}{summary.change.toFixed(2)}%</span><span>{compact(summary.volume)} vol</span></div><div className="tf-picker" ref={pickerRef}><button className={`tf-picker-button ${tfOpen?'active':''}`} aria-expanded={tfOpen} onClick={()=>setTfOpen(v=>!v)}><span>{timeframeLabel(tf)}</span><ChevronDown size={14}/></button>{tfOpen&&<div className="tf-picker-menu" role="menu">{timeframeGroups.map(group=><div className="tf-picker-section" key={group.label}><div className="tf-picker-label">{group.label}</div>{group.items.map(item=><button key={item.value} role="menuitem" className={tf===item.value?'active':''} onClick={()=>chooseTimeframe(item.value)}><span>{item.label}</span>{tf===item.value&&<Check size={14}/>}</button>)}</div>)}</div>}</div><div className="chart-tools"><button title="Fit chart" onClick={()=>chartRef.current?.timeScale().fitContent()}><RotateCcw size={13}/></button><button title={expanded?'Exit full chart':'Expand chart'} onClick={()=>setExpanded(v=>!v)}>{expanded?<Minimize2 size={13}/>:<Maximize2 size={13}/>}</button></div></div>
+    <div className="lw-chart-wrap">{!poolAddress&&<div className="chart-state">Select a token to load its chart.</div>}{poolAddress&&!candles.length&&!error&&<div className="chart-state"><span className="chart-loader"/>Loading real {timeframeLabel(tf)} candles…</div>}{error&&!candles.length&&<div className="chart-state">{isSecondTf(tf)?'No recent trades yet for this sub-minute view · retrying automatically.':'Chart feed unavailable · retrying automatically.'}</div>}<div ref={wrap} className="lw-chart-canvas"/></div>
+    <div className="chart-foot"><span>{asOf?`Updated ${new Date(asOf).toLocaleTimeString()}`:'Waiting for market data'}</span><span>{tf==='1M'?'30 daily candles · one-month view':`${candles.length} ${isSecondTf(tf)?'trade-built ':''}candles · ${tf}`}</span>{error&&candles.length>0&&<span className="loss">{error}</span>}<span className="chart-provider">{isSecondTf(tf)?'Recent real trades':'Market OHLCV'} · GeckoTerminal</span></div>
   </div>
 }
