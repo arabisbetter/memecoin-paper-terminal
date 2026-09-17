@@ -18,6 +18,7 @@ import "./parts45.css";
 import "./final-release.css";
 import "./errors.css";
 import "./landing.css";
+import "./chart-discover-polish.css";
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://memecoin-paper-terminal.vercel.app"),
