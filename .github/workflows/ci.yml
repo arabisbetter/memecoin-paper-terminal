@@ -102,10 +102,12 @@ jobs:
           console.log(`market tape ok trades=${body.trades.length}`)
           NODE
 
-      - name: Verify public P0 routes
+      - name: Verify public terminal routes
         run: |
           curl -fsS http://127.0.0.1:3000/ >/dev/null
           curl -fsS http://127.0.0.1:3000/spot >/dev/null
+          curl -fsS http://127.0.0.1:3000/pulse >/dev/null
+          curl -fsS http://127.0.0.1:3000/portfolio >/dev/null
           curl -fsS http://127.0.0.1:3000/legal >/dev/null
 
       - name: Print server log on failure
