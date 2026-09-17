@@ -2,7 +2,7 @@ import type { MarketToken } from './types'
 
 type TxWindow={buys?:number;sells?:number}
 type DexPair = {
-  chainId?: string; dexId?: string; pairAddress?: string;
+  chainId?: string; dexId?: string; pairAddress?: string; url?:string;
   baseToken?: { address?: string; name?: string; symbol?: string };
   priceUsd?: string; priceNative?: string; marketCap?: number; fdv?: number;
   liquidity?: { usd?: number };
@@ -39,6 +39,8 @@ export function normalizePair(pair: DexPair): MarketToken | null {
     name: pair.baseToken.name || 'Unknown',
     symbol: pair.baseToken.symbol || '???',
     image: pair.info?.imageUrl,
+    pairUrl:pair.url,
+    buyUrl:pair.url,
     priceUsd: n(pair.priceUsd),
     priceNative: n(pair.priceNative),
     marketCap: n(pair.marketCap ?? pair.fdv),
