@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import RecoveryNudge from "@/components/RecoveryNudge";
 import "./globals.css";
 import "./product-polish.css";
@@ -21,19 +21,29 @@ import "./landing.css";
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://memecoin-paper-terminal.vercel.app"),
+  applicationName: "PAPER",
   title: "PAPER — Trade PAPER. Earn real.",
   description: "Start with $1,000 PAPER and trade real memecoin market conditions with simulated execution. No wallet. No deposits.",
+  keywords: ["memecoin paper trading", "Solana paper trading", "crypto trading simulator", "memecoin simulator", "paper trading", "Solana memecoins"],
+  category: "finance",
+  alternates: { canonical: "/" },
   openGraph: {
     title: "PAPER — Trade PAPER. Earn real.",
     description: "$1,000 PAPER. Real memecoin markets. Simulated execution. No wallet.",
     siteName: "PAPER",
     type: "website",
+    url: "/",
   },
   twitter: {
     card: "summary_large_image",
     title: "PAPER — Trade PAPER. Earn real.",
     description: "$1,000 PAPER. Real memecoin markets. Simulated execution. No wallet.",
   },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#05070a",
+  colorScheme: "dark",
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
