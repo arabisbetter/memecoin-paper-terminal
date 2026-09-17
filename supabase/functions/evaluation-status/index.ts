@@ -36,7 +36,7 @@ async function authoritativeEquity(admin:any,userId:string){
   const ids=[...new Set(open.map(p=>p.token_id))]
   const {data:tokens,error:tokenError}=await admin.from('tokens').select('id,mint_address').in('id',ids)
   if(tokenError)throw new Error(tokenError.message)
-  const mintById=new Map((tokens||[]).map((t:any)=>[String(t.id),String(t.mint_address)]))
+  const mintById=new Map<string,string>((tokens||[]).map((t:any)=>[String(t.id),String(t.mint_address)] as [string,string]))
   if(mintById.size!==ids.length)throw new Error('Evaluation mark unavailable: token metadata missing')
 
   const marks=await Promise.all(open.map(async p=>{

@@ -27,11 +27,11 @@ async function authoritativeEquity(admin:any,userId:string){
   ])
   if(accountError)throw new Error(accountError.message);if(positionError)throw new Error(positionError.message);if(!account)throw new Error('PAPER account not found')
   const open=(positions||[]) as {id:string;token_id:string;quantity_tokens:number}[]
-  if(!open.length)return {cashUsd:finite(account.cash_usd),openValueUsd:0,equityUsd:finite(account.cash_usd),positions:[] as any[]}
+  if(!open.length)return {cashUsd:finite(account.cash_usd),openValueUsd:0,equityUsd:finite(account.cash_usd),positions:[] as {positionId:string;mint:string;quantityTokens:number;priceUsd:number;valueUsd:number}[]}
   const ids=[...new Set(open.map(p=>p.token_id))]
   const {data:tokens,error:tokenError}=await admin.from('tokens').select('id,mint_address').in('id',ids)
   if(tokenError)throw new Error(tokenError.message)
-  const mintById=new Map((tokens||[]).map((t:any)=>[String(t.id),String(t.mint_address)]))
+  const mintById=new Map<string,string>((tokens||[]).map((t:any)=>[String(t.id),String(t.mint_address)] as [string,string]))
   if(mintById.size!==ids.length)throw new Error('evaluation mark unavailable: token metadata missing')
   const marks=await Promise.all(open.map(async p=>{const mint=mintById.get(String(p.token_id));if(!mint)throw new Error('evaluation mark unavailable: token mint missing');const started=Date.now(),pair=await bestPair(mint),ageMs=Date.now()-started;if(ageMs>10_000)throw new Error('evaluation mark unavailable: stale market data');const priceUsd=finite(pair.priceUsd);return {positionId:p.id,mint,quantityTokens:finite(p.quantity_tokens),priceUsd,valueUsd:finite(p.quantity_tokens)*priceUsd}}))
   const cashUsd=finite(account.cash_usd),openValueUsd=marks.reduce((s,p)=>s+p.valueUsd,0)
@@ -60,7 +60,7 @@ Deno.serve(async(req:Request)=>{
   if(req.method==='OPTIONS')return new Response('ok',{headers:corsHeaders})
   if(req.method!=='POST')return json({error:'method not allowed'},405)
   let admin:ReturnType<typeof createClient>|null=null
-  let userId:string|null=null
+  let userIdForLog:string|null=null
   try{
     const authHeader=req.headers.get('Authorization')
     if(!authHeader?.startsWith('Bearer '))return json({error:'PAPER account required'},401)
@@ -73,14 +73,14 @@ Deno.serve(async(req:Request)=>{
     const userClient=createClient(supabaseUrl,publishableKey,{global:{headers:{Authorization:authHeader}},auth:{persistSession:false,autoRefreshToken:false}})
     const {data:userData,error:userError}=await userClient.auth.getUser()
     if(userError||!userData.user)return json({error:'invalid session'},401)
-    userId=userData.user.id
+    const uid=userData.user.id;userIdForLog=uid
     admin=createClient(supabaseUrl,secretKey,{auth:{persistSession:false,autoRefreshToken:false}})
 
-    const {data:profile,error:profileError}=await admin.from('profiles').select('profile_completed').eq('id',userId).maybeSingle()
+    const {data:profile,error:profileError}=await admin.from('profiles').select('profile_completed').eq('id',uid).maybeSingle()
     if(profileError)throw new Error(profileError.message)
     if(!profile?.profile_completed)return json({error:'Complete your PAPER trader profile before placing an order.',code:'ONBOARDING_REQUIRED'},403)
 
-    const {data:accepted,error:legalError}=await admin.from('legal_acceptances').select('document_type,document_version').eq('user_id',userId)
+    const {data:accepted,error:legalError}=await admin.from('legal_acceptances').select('document_type,document_version').eq('user_id',uid)
     if(legalError)throw new Error(legalError.message)
     const acceptedSet=new Set((accepted||[]).map((r:any)=>`${r.document_type}:${r.document_version}`))
     const missing=REQUIRED_LEGAL.filter(([type,version])=>!acceptedSet.has(`${type}:${version}`))
@@ -88,12 +88,12 @@ Deno.serve(async(req:Request)=>{
 
     const minuteAgo=new Date(Date.now()-60_000).toISOString(),hourAgo=new Date(Date.now()-3_600_000).toISOString()
     const [{count:minuteCount},{count:hourCount}]=await Promise.all([
-      admin.from('trade_rate_events').select('id',{count:'exact',head:true}).eq('user_id',userId).gte('created_at',minuteAgo),
-      admin.from('trade_rate_events').select('id',{count:'exact',head:true}).eq('user_id',userId).gte('created_at',hourAgo),
+      admin.from('trade_rate_events').select('id',{count:'exact',head:true}).eq('user_id',uid).gte('created_at',minuteAgo),
+      admin.from('trade_rate_events').select('id',{count:'exact',head:true}).eq('user_id',uid).gte('created_at',hourAgo),
     ])
-    if((minuteCount||0)>=20||(hourCount||0)>=300){await admin.from('observability_events').insert({event_type:'paper_trade_rate_limit',severity:'warning',user_id:userId,details:{minuteCount,hourCount}});return json({error:'Too many PAPER order requests. Please wait a moment and try again.'},429)}
-    await admin.from('trade_rate_events').insert({user_id:userId})
-    const {data:risk}=await admin.from('account_security').select('flagged_for_review').eq('user_id',userId).maybeSingle()
+    if((minuteCount||0)>=20||(hourCount||0)>=300){await admin.from('observability_events').insert({event_type:'paper_trade_rate_limit',severity:'warning',user_id:uid,details:{minuteCount,hourCount}});return json({error:'Too many PAPER order requests. Please wait a moment and try again.'},429)}
+    await admin.from('trade_rate_events').insert({user_id:uid})
+    const {data:risk}=await admin.from('account_security').select('flagged_for_review').eq('user_id',uid).maybeSingle()
 
     const body=await req.json()
     const mint=String(body?.mint||'').trim(),side=String(body?.side||'').toLowerCase(),idempotencyKey=String(body?.idempotencyKey||'').trim()
@@ -101,8 +101,8 @@ Deno.serve(async(req:Request)=>{
     if(side!=='buy'&&side!=='sell')return json({error:'side must be buy or sell'},400)
     if(idempotencyKey.length<8||idempotencyKey.length>128)return json({error:'idempotency key required'},400)
 
-    const activeEvaluation=await getActiveEvaluation(admin,userId)
-    const preMark=activeEvaluation?await markEvaluation(admin,userId):null
+    const activeEvaluation=await getActiveEvaluation(admin,uid)
+    const preMark=activeEvaluation?await markEvaluation(admin,uid):null
     if(activeEvaluation&&preMark?.status&&preMark.status!=='active')return json({error:`Evaluation is ${preMark.status}.`,code:'EVALUATION_ENDED',evaluation:preMark},409)
     if(activeEvaluation&&side==='buy'&&preMark?.data_status!=='LIVE')return json({error:'Live equity could not be marked across every open position. New evaluation buys are paused rather than using an invented price.',code:'EVALUATION_MARK_UNAVAILABLE',evaluation:preMark},503)
 
@@ -130,9 +130,9 @@ Deno.serve(async(req:Request)=>{
       const impactRatio=Math.min(notionalUsd/oneSideLiquidityUsd,5)
       const fillPrice=displayedPrice*(1+impactRatio),impactPct=impactRatio*100,fillMc=marketCap>0?marketCap*(fillPrice/displayedPrice):0,feeUsd=notionalUsd*feeRate
       const requestFingerprint=`buy|${mint}|${amountSol.toFixed(12)}`
-      const {data,error}=await admin.rpc('execute_paper_buy_v2',{p_user_id:userId,p_idempotency_key:idempotencyKey,p_request_fingerprint:requestFingerprint,p_mint:mint,p_ticker:pair.baseToken?.symbol||null,p_name:pair.baseToken?.name||null,p_image_url:pair.info?.imageUrl||null,p_pair_address:pair.pairAddress||null,p_dex_id:pair.dexId||null,p_amount_sol:amountSol,p_notional_usd:notionalUsd,p_displayed_price_usd:displayedPrice,p_fill_price_usd:fillPrice,p_displayed_mc_usd:marketCap||null,p_fill_mc_usd:fillMc||null,p_liquidity_usd:liquidity,p_price_impact_pct:impactPct,p_fee_usd:feeUsd,p_sol_price_usd:solPrice,p_quote_timestamp:quoteTimestamp,p_market_data_age_ms:marketDataAgeMs,p_execution_quality:quality,p_execution_model_version:executionModelVersion})
+      const {data,error}=await admin.rpc('execute_paper_buy_v2',{p_user_id:uid,p_idempotency_key:idempotencyKey,p_request_fingerprint:requestFingerprint,p_mint:mint,p_ticker:pair.baseToken?.symbol||null,p_name:pair.baseToken?.name||null,p_image_url:pair.info?.imageUrl||null,p_pair_address:pair.pairAddress||null,p_dex_id:pair.dexId||null,p_amount_sol:amountSol,p_notional_usd:notionalUsd,p_displayed_price_usd:displayedPrice,p_fill_price_usd:fillPrice,p_displayed_mc_usd:marketCap||null,p_fill_mc_usd:fillMc||null,p_liquidity_usd:liquidity,p_price_impact_pct:impactPct,p_fee_usd:feeUsd,p_sol_price_usd:solPrice,p_quote_timestamp:quoteTimestamp,p_market_data_age_ms:marketDataAgeMs,p_execution_quality:quality,p_execution_model_version:executionModelVersion})
       if(error)throw new Error(error.message)
-      const evaluation=activeEvaluation?await markEvaluation(admin,userId):null
+      const evaluation=activeEvaluation?await markEvaluation(admin,uid):null
       return json({ok:true,paper:true,side:'buy',underReview:Boolean(risk?.flagged_for_review),dataStatus:'LIVE',market:{referencePriceUsd:displayedPrice,displayedMcUsd:marketCap,liquidityUsd:liquidity,solUsd:solPrice,quoteTimestamp,marketDataAgeMs},fill:{requestedAmountUsd:notionalUsd,requestedAmountNative:amountSol,simulatedFillPriceUsd:fillPrice,simulatedFillMcUsd:fillMc,priceImpactPct:impactPct,paperFeeUsd:feeUsd,feeBps,executionQuality:quality,executionModelVersion},account:data,evaluation})
     }
 
@@ -140,19 +140,19 @@ Deno.serve(async(req:Request)=>{
     if(sellPct<=0||sellPct>100)return json({error:'sellPct must be between 0 and 100'},400)
     const {data:tokenRow}=await admin.from('tokens').select('id').eq('mint_address',mint).maybeSingle()
     if(!tokenRow)return json({error:'no PAPER position for token'},422)
-    const {data:position,error:positionError}=await admin.from('paper_positions').select('quantity_tokens,accounting_version').eq('user_id',userId).eq('token_id',tokenRow.id).eq('status','open').maybeSingle()
+    const {data:position,error:positionError}=await admin.from('paper_positions').select('quantity_tokens,accounting_version').eq('user_id',uid).eq('token_id',tokenRow.id).eq('status','open').maybeSingle()
     if(positionError||!position)return json({error:'no open PAPER position'},422)
     if(position.accounting_version!=='usd_v2')return json({error:'legacy PAPER position cannot be sold in USD mode'},422)
     const sellQty=finite(position.quantity_tokens)*(sellPct/100),grossUsd=sellQty*displayedPrice,impactRatio=Math.min(grossUsd/oneSideLiquidityUsd,5)
     const fillPrice=displayedPrice/(1+impactRatio),impactPct=(1-fillPrice/displayedPrice)*100,fillMc=marketCap>0?marketCap*(fillPrice/displayedPrice):0
     const grossFillUsd=sellQty*fillPrice,feeUsd=grossFillUsd*feeRate,requestFingerprint=`sell|${mint}|${sellPct.toFixed(6)}`
-    const {data,error}=await admin.rpc('execute_paper_sell_v2',{p_user_id:userId,p_idempotency_key:idempotencyKey,p_request_fingerprint:requestFingerprint,p_mint:mint,p_sell_pct:sellPct,p_displayed_price_usd:displayedPrice,p_fill_price_usd:fillPrice,p_displayed_mc_usd:marketCap||null,p_fill_mc_usd:fillMc||null,p_liquidity_usd:liquidity,p_price_impact_pct:impactPct,p_fee_usd:feeUsd,p_sol_price_usd:solPrice,p_quote_timestamp:quoteTimestamp,p_market_data_age_ms:marketDataAgeMs,p_execution_quality:quality,p_execution_model_version:executionModelVersion})
+    const {data,error}=await admin.rpc('execute_paper_sell_v2',{p_user_id:uid,p_idempotency_key:idempotencyKey,p_request_fingerprint:requestFingerprint,p_mint:mint,p_sell_pct:sellPct,p_displayed_price_usd:displayedPrice,p_fill_price_usd:fillPrice,p_displayed_mc_usd:marketCap||null,p_fill_mc_usd:fillMc||null,p_liquidity_usd:liquidity,p_price_impact_pct:impactPct,p_fee_usd:feeUsd,p_sol_price_usd:solPrice,p_quote_timestamp:quoteTimestamp,p_market_data_age_ms:marketDataAgeMs,p_execution_quality:quality,p_execution_model_version:executionModelVersion})
     if(error)throw new Error(error.message)
-    const evaluation=activeEvaluation?await markEvaluation(admin,userId):null
+    const evaluation=activeEvaluation?await markEvaluation(admin,uid):null
     return json({ok:true,paper:true,side:'sell',underReview:Boolean(risk?.flagged_for_review),dataStatus:'LIVE',market:{referencePriceUsd:displayedPrice,displayedMcUsd:marketCap,liquidityUsd:liquidity,solUsd:solPrice,quoteTimestamp,marketDataAgeMs},fill:{requestedAmountUsd:grossFillUsd,requestedSellPct:sellPct,simulatedFillPriceUsd:fillPrice,simulatedFillMcUsd:fillMc,priceImpactPct:impactPct,paperFeeUsd:feeUsd,feeBps,executionQuality:quality,executionModelVersion},account:data,evaluation})
   }catch(error){
     const message=error instanceof Error?error.message:'unknown error'
-    if(admin&&userId){try{await admin.from('observability_events').insert({event_type:'paper_trade_failure',severity:'error',user_id:userId,details:{message}})}catch{}}
+    if(admin&&userIdForLog){try{await admin.from('observability_events').insert({event_type:'paper_trade_failure',severity:'error',user_id:userIdForLog,details:{message}})}catch{}}
     const status=/insufficient PAPER buying power|no open PAPER position|PAPER account not found|legacy PAPER position/.test(message)?422:/market data is stale|evaluation mark unavailable/.test(message)?503:500
     return json({error:message},status)
   }
