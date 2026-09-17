@@ -1,0 +1,43 @@
+'use client'
+
+import Link from 'next/link'
+import { useEffect, useState } from 'react'
+import { BarChart3, CircleUserRound, Gauge, Radio, Settings2, SlidersHorizontal, Trophy, Users } from 'lucide-react'
+
+type Active='spot'|'pulse'|'leaderboard'|'profile'
+const presetValues:[string,number][]=[['P1',0.1],['P2',0.5],['P3',1]]
+
+export default function BottomDock({active}:{active:Active}){
+  const [open,setOpen]=useState(false)
+  const [preset,setPreset]=useState('P1')
+
+  useEffect(()=>{
+    const saved=window.localStorage.getItem('paper.quickBuyPreset')
+    if(saved&&presetValues.some(([id])=>id===saved))setPreset(saved)
+  },[])
+
+  function choose(id:string,value:number){
+    setPreset(id)
+    setOpen(false)
+    window.localStorage.setItem('paper.quickBuyPreset',id)
+    window.localStorage.setItem('paper.quickBuySize',String(value))
+    window.dispatchEvent(new CustomEvent('paper:preset',{detail:{id,value}}))
+  }
+
+  return <footer className="ax-bottom-dock">
+    <div className="dock-preset-wrap">
+      <button className="dock-preset" onClick={()=>setOpen(v=>!v)}><SlidersHorizontal size={14}/><b>{preset}</b></button>
+      {open&&<div className="dock-preset-menu">{presetValues.map(([id,value])=><button key={id} className={preset===id?'active':''} onClick={()=>choose(id,value)}><span>{id}</span><b>{value} PAPER SOL</b></button>)}</div>}
+    </div>
+    <div className="dock-divider"/>
+    <Link className={active==='spot'?'active':''} href="/"><Gauge size={14}/><span>Markets</span></Link>
+    <Link className={active==='pulse'?'active':''} href="/pulse"><Radio size={14}/><span>Pulse</span></Link>
+    <Link className={active==='leaderboard'?'active':''} href="/leaderboards"><BarChart3 size={14}/><span>PnL</span></Link>
+    <Link className={active==='leaderboard'?'active':''} href="/leaderboards"><Trophy size={14}/><span>Traders</span></Link>
+    <Link className={active==='profile'?'active':''} href="/profile"><CircleUserRound size={14}/><span>Profile</span></Link>
+    <div className="dock-spacer"/>
+    <span className="dock-live"><i/> LIVE SOLANA</span>
+    <Link href="/profile" title="Settings"><Settings2 size={14}/></Link>
+    <Link href="/leaderboards" title="Community"><Users size={14}/></Link>
+  </footer>
+}
