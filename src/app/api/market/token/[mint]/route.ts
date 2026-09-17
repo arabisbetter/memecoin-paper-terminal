@@ -4,8 +4,21 @@ import type { MarketToken } from '@/lib/types'
 
 export const dynamic='force-dynamic'
 
+type ProfileLink={type?:string;label?:string;url?:string}
+type DexProfile={chainId?:string;tokenAddress?:string;icon?:string;description?:string;url?:string;links?:ProfileLink[]}
 const cache=new Map<string,{at:number;token:MarketToken}>()
 const FRESH_MS=5_000
+let profileCache:{at:number;items:DexProfile[]}|null=null
+
+async function latestProfiles(){
+  if(profileCache&&Date.now()-profileCache.at<300_000)return profileCache.items
+  try{const r=await fetch('https://api.dexscreener.com/token-profiles/latest/v1',{cache:'no-store',headers:{Accept:'application/json'}});if(!r.ok)return profileCache?.items||[];const body=await r.json() as DexProfile[];profileCache={at:Date.now(),items:Array.isArray(body)?body:[]};return profileCache.items}catch{return profileCache?.items||[]}
+}
+function profileLink(profile:DexProfile|undefined,kind:'website'|'twitter'|'telegram'|'buy'){
+  const links=profile?.links||[]
+  if(kind==='buy')return links.find(l=>/pump\.fun|jup\.ag|raydium\.io|meteora|dexscreener\.com/i.test(String(l.url||'')))?.url
+  return links.find(l=>String(l.type||'').toLowerCase()===kind||String(l.label||'').toLowerCase().includes(kind))?.url
+}
 
 export async function GET(_req:NextRequest,ctx:{params:Promise<{mint:string}>}){
   const {mint}=await ctx.params
@@ -13,17 +26,18 @@ export async function GET(_req:NextRequest,ctx:{params:Promise<{mint:string}>}){
   const previous=cache.get(mint)
   if(previous&&Date.now()-previous.at<FRESH_MS)return NextResponse.json({token:previous.token,live:true,cached:true,asOf:previous.at})
 
-  const controller=new AbortController()
-  const timer=setTimeout(()=>controller.abort(),7_000)
+  const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),7_000)
   try{
-    const res=await fetch(`https://api.dexscreener.com/token-pairs/v1/solana/${encodeURIComponent(mint)}`,{cache:'no-store',signal:controller.signal,headers:{Accept:'application/json'}})
+    const [res,profiles]=await Promise.all([fetch(`https://api.dexscreener.com/token-pairs/v1/solana/${encodeURIComponent(mint)}`,{cache:'no-store',signal:controller.signal,headers:{Accept:'application/json'}}),latestProfiles()])
     if(!res.ok)throw new Error(`DexScreener ${res.status}`)
     const pairs=await res.json() as unknown[]
     const tokens=pairs.map(p=>normalizePair(p as never)).filter((t):t is MarketToken=>Boolean(t)).sort((a,b)=>b.liquidityUsd-a.liquidityUsd)
     const token=tokens[0]
-    if(!token)return NextResponse.json({error:'Token not found'},{status:404})
+    if(!token)return NextResponse.json({error:'Token found, but no supported active Solana market was detected.'},{status:404})
+    const profile=profiles.find(p=>p.chainId==='solana'&&p.tokenAddress===mint)
+    if(profile){token.description=profile.description||token.description;token.profileUrl=profile.url||token.profileUrl;token.image=token.image||profile.icon;token.website=token.website||profileLink(profile,'website');token.twitter=token.twitter||profileLink(profile,'twitter');token.telegram=token.telegram||profileLink(profile,'telegram');token.buyUrl=profileLink(profile,'buy')||token.buyUrl||token.pairUrl}
     cache.set(mint,{at:Date.now(),token})
-    return NextResponse.json({token,live:true,asOf:Date.now()},{headers:{'Cache-Control':'public, s-maxage=4, stale-while-revalidate=15'}})
+    return NextResponse.json({token,live:true,asOf:Date.now(),metadata:profile?'dexscreener-profile':'pair-info'},{headers:{'Cache-Control':'public, s-maxage=4, stale-while-revalidate=15'}})
   }catch(error){
     console.error('market_token_lookup_error',{mint,error})
     if(previous)return NextResponse.json({token:previous.token,live:false,stale:true,asOf:previous.at,warning:error instanceof Error?error.message:'lookup failed'})

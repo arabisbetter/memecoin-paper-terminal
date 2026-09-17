@@ -12,6 +12,8 @@ import "./v3.css";
 import "./live-upgrade.css";
 import "./phase1.css";
 import "./p0-extra.css";
+import "./parts23.css";
+import "./parts23-tape.css";
 import "./errors.css";
 
 export const metadata: Metadata = {
