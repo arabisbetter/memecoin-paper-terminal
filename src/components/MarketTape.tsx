@@ -17,7 +17,7 @@ export default function MarketTape({poolAddress}:{poolAddress?:string}){
     let alive=true
     const load=async(force=false)=>{
       if(busy.current||(!force&&document.hidden))return
-      busy.current=true;if(alive)setLoading(true)
+      busy.current=true;if(alive&&!trades.length)setLoading(true)
       try{
         const r=await fetch(`/api/market/trades/${encodeURIComponent(poolAddress)}`,{cache:'no-store'})
         const j=await r.json()
@@ -27,7 +27,7 @@ export default function MarketTape({poolAddress}:{poolAddress?:string}){
       finally{busy.current=false;if(alive)setLoading(false)}
     }
     void load(true)
-    const id=window.setInterval(()=>void load(),30_000)
+    const id=window.setInterval(()=>void load(),5_000)
     const onVisible=()=>{if(!document.hidden)void load(true)}
     document.addEventListener('visibilitychange',onVisible)
     return()=>{alive=false;window.clearInterval(id);document.removeEventListener('visibilitychange',onVisible)}
@@ -35,7 +35,7 @@ export default function MarketTape({poolAddress}:{poolAddress?:string}){
 
   const rows=useMemo(()=>trades.slice(0,24),[trades])
   return <section className="market-tape">
-    <div className="market-tape-head"><div><b>LIVE MARKET TAPE</b><small>Real pool trades</small></div><span className={error?'tape-status warn':'tape-status'}><i/>{loading&&!rows.length?'Loading':'LIVE'}</span></div>
+    <div className="market-tape-head"><div><b>LIVE MARKET TAPE</b><small>Real pool trades · ~5s refresh</small></div><span className={error?'tape-status warn':'tape-status'}><i/>{loading&&!rows.length?'Loading':'LIVE'}</span></div>
     <div className="market-tape-columns"><span>Side</span><span>Size</span><span>Price</span><span>Trader</span><span>Time</span></div>
     <div className="market-tape-list">
       {!rows.length&&!loading&&<div className="tape-empty">{error?'Recent pool trades are temporarily unavailable.':'No recent trades returned for this pool.'}</div>}
