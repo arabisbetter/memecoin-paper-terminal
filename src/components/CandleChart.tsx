@@ -28,6 +28,8 @@ export default function CandleChart({poolAddress,currentPrice,symbol}:{poolAddre
   const candleRef=useRef<ISeriesApi<'Candlestick'>|null>(null)
   const volumeRef=useRef<ISeriesApi<'Histogram'>|null>(null)
   const priceLineRef=useRef<any>(null)
+  const renderedRef=useRef<{first:number;last:number}|null>(null)
+  const hasDataRef=useRef(false)
   const [tf,setTf]=useState<Timeframe>('1m'),[tfOpen,setTfOpen]=useState(false),[candles,setCandles]=useState<Candle[]>([]),[hover,setHover]=useState<Candle|null>(null),[error,setError]=useState(''),[loading,setLoading]=useState(false),[status,setStatus]=useState<'LIVE'|'DEGRADED'|'STALE'>('DEGRADED'),[asOf,setAsOf]=useState(0),[expanded,setExpanded]=useState(false)
 
   useEffect(()=>{
@@ -52,11 +54,12 @@ export default function CandleChart({poolAddress,currentPrice,symbol}:{poolAddre
   },[tfOpen])
 
   useEffect(()=>{
+    renderedRef.current=null;hasDataRef.current=false
     if(!poolAddress){setCandles([]);setError('');setStatus('DEGRADED');return}
     let alive=true
     async function load(force=false){
       if(!force&&document.hidden)return
-      if(alive)setLoading(true)
+      if(alive&&!hasDataRef.current)setLoading(true)
       try{
         const r=await fetch(`/api/market/ohlcv/${encodeURIComponent(poolAddress!)}?tf=${tf}`,{cache:'no-store'}),j=await r.json();if(!r.ok)throw new Error(j.error||'chart unavailable')
         if(alive&&Array.isArray(j.candles)&&j.candles.length){setCandles(j.candles);setError(j.warning||'');setAsOf(Number(j.asOf||Date.now()));setStatus(j.stale?'STALE':j.warning||j.live===false?'DEGRADED':'LIVE')}
@@ -68,10 +71,21 @@ export default function CandleChart({poolAddress,currentPrice,symbol}:{poolAddre
   },[poolAddress,tf])
 
   useEffect(()=>{
-    if(!candleRef.current||!volumeRef.current||!candles.length)return
-    candleRef.current.setData(candles.map(c=>({time:c.time as UTCTimestamp,open:c.open,high:c.high,low:c.low,close:c.close})))
-    volumeRef.current.setData(candles.map(c=>({time:c.time as UTCTimestamp,value:c.volume,color:c.close>=c.open?'rgba(45,224,176,.24)':'rgba(255,63,128,.24)'})))
-    chartRef.current?.timeScale().fitContent()
+    const cs=candleRef.current,vs=volumeRef.current
+    if(!cs||!vs||!candles.length)return
+    const first=candles[0].time,last=candles[candles.length-1].time,previous=renderedRef.current
+    const candlePoint=(c:Candle)=>({time:c.time as UTCTimestamp,open:c.open,high:c.high,low:c.low,close:c.close})
+    const volumePoint=(c:Candle)=>({time:c.time as UTCTimestamp,value:c.volume,color:c.close>=c.open?'rgba(45,224,176,.24)':'rgba(255,63,128,.24)'})
+    let fit=false
+    if(!previous||previous.first!==first){
+      cs.setData(candles.map(candlePoint));vs.setData(candles.map(volumePoint));fit=!previous
+    }else{
+      const start=candles.findIndex(c=>c.time===previous.last)
+      if(start<0){cs.setData(candles.map(candlePoint));vs.setData(candles.map(volumePoint))}
+      else for(let i=start;i<candles.length;i++){cs.update(candlePoint(candles[i]));vs.update(volumePoint(candles[i]))}
+    }
+    renderedRef.current={first,last};hasDataRef.current=true
+    if(fit)requestAnimationFrame(()=>chartRef.current?.timeScale().fitContent())
   },[candles])
 
   useEffect(()=>{
