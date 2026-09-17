@@ -1,0 +1,118 @@
+name: P0 E2E Once
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  p0-e2e:
+    if: github.event.head_commit.message == 'Run P0 E2E verification'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      SUPABASE_URL: https://bpnhybmptjenrjntvmsz.supabase.co
+      SUPABASE_PUBLISHABLE_KEY: sb_publishable_5FQkar9y4CLyciMdXD_2VQ_kjfGJBY0
+      PAPER_APP_URL: https://memecoin-paper-terminal.vercel.app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install --no-audit --no-fund
+      - name: Run anonymous account and PAPER execution E2E
+        run: |
+          node --input-type=module <<'NODE'
+          import { createClient } from '@supabase/supabase-js'
+          import crypto from 'node:crypto'
+
+          const required=(name)=>{const value=process.env[name];if(!value)throw new Error(`${name} missing`);return value}
+          const supabase=createClient(required('SUPABASE_URL'),required('SUPABASE_PUBLISHABLE_KEY'),{auth:{persistSession:false,autoRefreshToken:false,detectSessionInUrl:false}})
+          const appUrl=required('PAPER_APP_URL')
+          const check=(condition,message)=>{if(!condition)throw new Error(message)}
+          const sleep=(ms)=>new Promise(r=>setTimeout(r,ms))
+
+          const {data:authData,error:authError}=await supabase.auth.signInAnonymously({options:{data:{account_type:'paper',qa_run:'p0_e2e'}}})
+          if(authError)throw authError
+          check(authData.user?.id,'anonymous user was not created')
+          const userId=authData.user.id
+          console.log(`QA_USER_ID=${userId}`)
+
+          const {error:ensureError}=await supabase.rpc('ensure_paper_profile')
+          if(ensureError)throw ensureError
+
+          const username=`ci_${Date.now().toString(36)}`
+          const {error:profileError}=await supabase.from('profiles').update({username,display_name:'P0 E2E QA',profile_completed:true,updated_at:new Date().toISOString()}).eq('id',userId)
+          if(profileError)throw profileError
+
+          const {error:legalError}=await supabase.from('legal_acceptances').insert([
+            {user_id:userId,document_type:'tos',document_version:'v1'},
+            {user_id:userId,document_type:'privacy',document_version:'v1'},
+            {user_id:userId,document_type:'risk_disclosure',document_version:'v1'},
+          ])
+          if(legalError)throw legalError
+
+          let feed
+          let lastError
+          for(let i=0;i<3;i++){
+            try{
+              const response=await fetch(`${appUrl}/api/market/latest`,{headers:{Accept:'application/json'}})
+              if(!response.ok)throw new Error(`market feed HTTP ${response.status}`)
+              feed=await response.json()
+              if(Array.isArray(feed.tokens)&&feed.tokens.length)break
+            }catch(error){lastError=error}
+            await sleep(4000)
+          }
+          if(!feed?.tokens?.length)throw lastError||new Error('market feed returned zero tokens')
+          const token=[...feed.tokens].filter(t=>t?.mint&&Number(t.priceUsd)>0&&Number(t.liquidityUsd)>0).sort((a,b)=>Number(b.liquidityUsd)-Number(a.liquidityUsd))[0]
+          check(token?.mint,'no usable live token for E2E')
+          console.log(`QA_TOKEN=${token.symbol||token.mint} mint=${token.mint} liquidity=${token.liquidityUsd}`)
+
+          const beforeRes=await supabase.from('paper_accounts').select('cash_usd,starting_balance_usd').eq('user_id',userId).single()
+          if(beforeRes.error)throw beforeRes.error
+          const beforeCash=Number(beforeRes.data.cash_usd)
+          check(Number(beforeRes.data.starting_balance_usd)===1000,'starting bankroll is not $1,000 PAPER')
+          check(beforeCash===1000,'fresh PAPER account cash is not $1,000')
+
+          const buyKey=`ci-buy-${crypto.randomUUID()}`
+          const buy=await supabase.functions.invoke('paper-trade',{body:{mint:token.mint,side:'buy',amountSol:0.001,idempotencyKey:buyKey}})
+          if(buy.error)throw buy.error
+          if(buy.data?.error)throw new Error(buy.data.error)
+          check(buy.data?.ok===true&&buy.data?.side==='buy','buy did not fill')
+
+          const afterBuyRes=await supabase.from('paper_accounts').select('cash_usd').eq('user_id',userId).single()
+          if(afterBuyRes.error)throw afterBuyRes.error
+          const afterBuyCash=Number(afterBuyRes.data.cash_usd)
+          check(afterBuyCash<beforeCash,'buy did not reduce PAPER cash')
+
+          const replay=await supabase.functions.invoke('paper-trade',{body:{mint:token.mint,side:'buy',amountSol:0.001,idempotencyKey:buyKey}})
+          if(replay.error)throw replay.error
+          if(replay.data?.error)throw new Error(replay.data.error)
+          const afterReplayRes=await supabase.from('paper_accounts').select('cash_usd').eq('user_id',userId).single()
+          if(afterReplayRes.error)throw afterReplayRes.error
+          check(Number(afterReplayRes.data.cash_usd)===afterBuyCash,'idempotent replay changed PAPER cash')
+          check(replay.data?.account?.replayed===true,'duplicate order did not report replay')
+
+          const sellKey=`ci-sell-${crypto.randomUUID()}`
+          const sell=await supabase.functions.invoke('paper-trade',{body:{mint:token.mint,side:'sell',sellPct:100,idempotencyKey:sellKey}})
+          if(sell.error)throw sell.error
+          if(sell.data?.error)throw new Error(sell.data.error)
+          check(sell.data?.ok===true&&sell.data?.side==='sell','sell did not fill')
+
+          const [accountRes,ordersRes,fillsRes,ledgerRes,positionsRes]=await Promise.all([
+            supabase.from('paper_accounts').select('cash_usd').eq('user_id',userId).single(),
+            supabase.from('paper_orders').select('id,status,side').eq('user_id',userId),
+            supabase.from('paper_fills').select('id,side,quality').eq('user_id',userId),
+            supabase.from('paper_ledger_entries').select('amount_usd,balance_after_usd,entry_type').eq('user_id',userId).order('created_at',{ascending:true}),
+            supabase.from('paper_positions').select('status,quantity_tokens,cost_basis_usd,accounting_version').eq('user_id',userId),
+          ])
+          for(const response of [accountRes,ordersRes,fillsRes,ledgerRes,positionsRes])if(response.error)throw response.error
+          check(ordersRes.data.length===2,'expected exactly one buy order and one sell order')
+          check(fillsRes.data.length===2,'expected exactly two fills')
+          check(ordersRes.data.every(o=>o.status==='filled'),'not every PAPER order is filled')
+          check(positionsRes.data.some(p=>p.accounting_version==='usd_v2'&&p.status==='closed'&&Number(p.quantity_tokens)===0),'100% sell did not close USD PAPER position')
+          const ledgerSum=ledgerRes.data.reduce((sum,row)=>sum+Number(row.amount_usd),0)
+          const finalCash=Number(accountRes.data.cash_usd)
+          check(Math.abs(ledgerSum-finalCash)<0.000001,`ledger ${ledgerSum} does not reproduce cash ${finalCash}`)
+
+          console.log(`P0_E2E_PASS user=${userId} start=${beforeCash} after_buy=${afterBuyCash} final=${finalCash} orders=${ordersRes.data.length} fills=${fillsRes.data.length}`)
+          NODE
