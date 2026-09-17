@@ -38,6 +38,12 @@ jobs:
           cat /tmp/paper-next.log
           exit 1
 
+      - name: Verify PAPER launch homepage
+        run: |
+          grep -q "TRADE PAPER" /tmp/paper-home.html
+          grep -q "EARN REAL" /tmp/paper-home.html
+          grep -q "START TRADING" /tmp/paper-home.html
+
       - name: Verify live Solana market feed and CA lookup
         run: |
           ok=0
@@ -125,9 +131,9 @@ jobs:
           console.log(`market tape ok trades=${body.trades.length}`)
           NODE
 
-      - name: Verify public terminal routes
+      - name: Verify public PAPER routes and brand assets
         run: |
-          for route in / /spot /pulse /portfolio /chains /wallets /watchlist /rewards /leaderboards /legal; do
+          for route in / /discover /spot /pulse /portfolio /chains /wallets /watchlist /rewards /leaderboards /profile /coin /legal /opengraph-image /twitter-image /icon.svg; do
             curl -fsS "http://127.0.0.1:3000$route" >/dev/null
           done
 
