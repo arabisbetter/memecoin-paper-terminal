@@ -14,6 +14,7 @@ export async function GET(_req: NextRequest, ctx: { params: Promise<{ mint: stri
     if (!tokens[0]) return NextResponse.json({ error: "Token not found" }, { status: 404 });
     return NextResponse.json({ token: tokens[0], live: true });
   } catch (error) {
+    console.error("market_token_lookup_error", { mint, error });
     return NextResponse.json({ error: error instanceof Error ? error.message : "lookup failed" }, { status: 502 });
   }
 }
