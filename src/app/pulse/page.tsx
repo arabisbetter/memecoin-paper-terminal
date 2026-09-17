@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Eye, EyeOff, LayoutList, Settings2, Zap } from 'lucide-react'
+import { Eye, EyeOff, LayoutList, RefreshCw, Zap } from 'lucide-react'
 import AppHeader from '@/components/AppHeader'
 import BottomDock from '@/components/BottomDock'
 import { createClient } from '@/lib/supabase/client'
@@ -18,15 +18,11 @@ function PulseCard({t,compact,buySize,buying,onOpen,onBuy}:{t:MarketToken;compac
   const tx=t.buys24h+t.sells24h
   const buyPct=Math.round(t.buys24h/Math.max(1,tx)*100)
   const lqRatio=t.marketCap>0?Math.min(999,(t.liquidityUsd/t.marketCap)*100):0
-  return <button className={`pulse-card-terminal ${compact?'compact':''}`} onClick={onOpen}>
+  return <div className={`pulse-card-terminal ${compact?'compact':''}`} role="button" tabIndex={0} onClick={onOpen} onKeyDown={e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();onOpen()}}}>
     <div className="pulse-img-terminal">{t.image?<img src={t.image} alt=""/>:<span>{t.symbol.slice(0,2)}</span>}</div>
-    <div className="pulse-card-body">
-      <div className="pulse-card-title"><b>{t.symbol}</b><span>{t.name}</span><i>MC <strong>{money(t.marketCap)}</strong></i></div>
-      <div className="pulse-card-meta"><em>{age(t.pairCreatedAt)}</em><span>◯</span><span>⌕</span><span>◎ {tx}</span><span>≋ {t.priceNative?t.priceNative.toFixed(3):'—'}</span></div>
-      <div className="pulse-card-badges"><span className={buyPct>=50?'metric-pill good':'metric-pill bad'}>B {buyPct}%</span><span className="metric-pill">LQ {lqRatio.toFixed(1)}%</span><span className={t.priceChange24h>=0?'metric-pill good':'metric-pill bad'}>{t.priceChange24h>=0?'+':''}{Math.round(t.priceChange24h)}%</span><span className="metric-pill blue">{String(t.dexId||'SOL').slice(0,8)}</span></div>
-    </div>
-    <span className="pulse-quick-buy" title={`Buy ${buySize} PAPER SOL`} onClick={e=>{e.stopPropagation();onBuy()}}>{buying?'…':<Zap size={12}/>}</span>
-  </button>
+    <div className="pulse-card-body"><div className="pulse-card-title"><b>{t.symbol}</b><span>{t.name}</span><i>MC <strong>{money(t.marketCap)}</strong></i></div><div className="pulse-card-meta"><em>{age(t.pairCreatedAt)}</em><span>◯</span><span>⌕</span><span>◎ {tx}</span><span>≋ {t.priceNative?t.priceNative.toFixed(3):'—'}</span></div><div className="pulse-card-badges"><span className={buyPct>=50?'metric-pill good':'metric-pill bad'}>B {buyPct}%</span><span className="metric-pill">LQ {lqRatio.toFixed(1)}%</span><span className={t.priceChange24h>=0?'metric-pill good':'metric-pill bad'}>{t.priceChange24h>=0?'+':''}{Math.round(t.priceChange24h)}%</span><span className="metric-pill blue">{String(t.dexId||'SOL').slice(0,8)}</span></div></div>
+    <button className="pulse-quick-buy" title={`Buy ${buySize} PAPER SOL`} onClick={e=>{e.stopPropagation();onBuy()}}>{buying?'…':<Zap size={12}/>}</button>
+  </div>
 }
 
 export default function PulsePage(){
@@ -48,8 +44,7 @@ export default function PulsePage(){
   async function load(){
     setRefreshing(true)
     try{
-      const r=await fetch('/api/market/latest',{cache:'no-store'})
-      const j=await r.json()
+      const r=await fetch('/api/market/latest',{cache:'no-store'});const j=await r.json()
       if(!r.ok)throw new Error(j.error||`market feed ${r.status}`)
       const next=(j.tokens||[]) as MarketToken[]
       if(!next.length)throw new Error('Market feed returned zero Solana tokens.')
@@ -60,87 +55,32 @@ export default function PulsePage(){
 
   useEffect(()=>{void load();const id=setInterval(load,9000);return()=>clearInterval(id)},[])
   useEffect(()=>{
-    const savedId=window.localStorage.getItem('paper.quickBuyPreset')
-    const savedSize=Number(window.localStorage.getItem('paper.quickBuySize'))
+    const savedId=window.localStorage.getItem('paper.quickBuyPreset');const savedSize=Number(window.localStorage.getItem('paper.quickBuySize'))
     if(savedId&&presets.some(p=>p.id===savedId))setPresetId(savedId)
     if(Number.isFinite(savedSize)&&savedSize>0)setBuySize(savedSize)
     const handler=(event:Event)=>{const detail=(event as CustomEvent<{id:string;value:number}>).detail;if(detail){setPresetId(detail.id);setBuySize(detail.value)}}
-    window.addEventListener('paper:preset',handler)
-    return()=>window.removeEventListener('paper:preset',handler)
+    window.addEventListener('paper:preset',handler);return()=>window.removeEventListener('paper:preset',handler)
   },[])
 
-  function choosePreset(id:string,value:number){
-    setPresetId(id);setBuySize(value)
-    window.localStorage.setItem('paper.quickBuyPreset',id);window.localStorage.setItem('paper.quickBuySize',String(value))
-  }
+  function choosePreset(id:string,value:number){setPresetId(id);setBuySize(value);window.localStorage.setItem('paper.quickBuyPreset',id);window.localStorage.setItem('paper.quickBuySize',String(value))}
 
   async function quickBuy(t:MarketToken){
     if(!supabase){setNotice('PAPER account service is unavailable.');return}
     try{
-      setBuying(t.mint);setNotice('')
-      await ensurePaperUser(supabase)
+      setBuying(t.mint);setNotice('');await ensurePaperUser(supabase)
       const {data,error}=await supabase.functions.invoke('paper-trade',{body:{mint:t.mint,side:'buy',amountSol:buySize}})
-      if(error)throw error
-      if(data?.error)throw new Error(data.error)
-      setNotice(`Filled ${buySize} PAPER SOL of $${t.symbol}`)
+      if(error)throw error;if(data?.error)throw new Error(data.error)
+      setNotice(`Filled ${buySize} PAPER SOL of $${t.symbol}`);window.dispatchEvent(new Event('paper:account-changed'))
     }catch(e){setNotice(e instanceof Error?e.message:'PAPER buy failed')}
     finally{setBuying('')}
   }
 
-  const base=useMemo(()=>{
-    let list=[...tokens]
-    if(venue==='pump')list=list.filter(t=>/pump/i.test(t.dexId||''))
-    if(venue==='other')list=list.filter(t=>!(/pump/i.test(t.dexId||'')))
-    if(hideLowLiquidity)list=list.filter(t=>t.liquidityUsd>=10000)
-    return list
-  },[tokens,venue,hideLowLiquidity])
-
+  const base=useMemo(()=>{let list=[...tokens];if(venue==='pump')list=list.filter(t=>/pump/i.test(t.dexId||''));if(venue==='other')list=list.filter(t=>!(/pump/i.test(t.dexId||'')));if(hideLowLiquidity)list=list.filter(t=>t.liquidityUsd>=10000);return list},[tokens,venue,hideLowLiquidity])
   const newer=useMemo(()=>[...base].sort((a,b)=>(b.pairCreatedAt||0)-(a.pairCreatedAt||0)).slice(0,18),[base])
-  const final=useMemo(()=>{
-    const pump=base.filter(t=>/pump/i.test(t.dexId||'')&&t.marketCap>0&&t.marketCap<500000)
-    return [...(pump.length?pump:base.filter(t=>t.marketCap>0&&t.marketCap<500000))].sort((a,b)=>b.marketCap-a.marketCap).slice(0,18)
-  },[base])
-  const migrated=useMemo(()=>{
-    const moved=base.filter(t=>/(raydium|meteora|pumpswap)/i.test(t.dexId||'')||t.liquidityUsd>20000)
-    return [...moved].sort((a,b)=>b.volume24h-a.volume24h).slice(0,18)
-  },[base])
+  const final=useMemo(()=>{const pump=base.filter(t=>/pump/i.test(t.dexId||'')&&t.marketCap>0&&t.marketCap<500000);return [...(pump.length?pump:base.filter(t=>t.marketCap>0&&t.marketCap<500000))].sort((a,b)=>b.marketCap-a.marketCap).slice(0,18)},[base])
+  const migrated=useMemo(()=>{const moved=base.filter(t=>/(raydium|meteora|pumpswap)/i.test(t.dexId||'')||t.liquidityUsd>20000);return [...moved].sort((a,b)=>b.volume24h-a.volume24h).slice(0,18)},[base])
+  function filterColumn(list:MarketToken[],key:keyof typeof queries){const q=queries[key].trim().toLowerCase();return q?list.filter(t=>t.symbol.toLowerCase().includes(q)||t.name.toLowerCase().includes(q)):list}
+  const columns:{key:keyof typeof queries;title:string;list:MarketToken[]}[]=[{key:'new',title:'New Pairs',list:filterColumn(newer,'new')},{key:'final',title:'Final Stretch',list:filterColumn(final,'final')},{key:'migrated',title:'Migrated',list:filterColumn(migrated,'migrated')}]
 
-  function filterColumn(list:MarketToken[],key:keyof typeof queries){
-    const q=queries[key].trim().toLowerCase()
-    return q?list.filter(t=>t.symbol.toLowerCase().includes(q)||t.name.toLowerCase().includes(q)):list
-  }
-
-  const columns:{key:keyof typeof queries;title:string;list:MarketToken[]}[]=[
-    {key:'new',title:'New Pairs',list:filterColumn(newer,'new')},
-    {key:'final',title:'Final Stretch',list:filterColumn(final,'final')},
-    {key:'migrated',title:'Migrated',list:filterColumn(migrated,'migrated')},
-  ]
-
-  return <div className="ax-app">
-    <AppHeader active="pulse"/>
-    <main className="pulse-console">
-      <section className="pulse-console-head">
-        <h1>Pulse</h1>
-        <div className="pulse-chain-strip"><button className={venue==='all'?'active':''} onClick={()=>setVenue('all')}>All</button><button className={venue==='pump'?'active':''} onClick={()=>setVenue('pump')}>⚡</button><button className={venue==='other'?'active':''} onClick={()=>setVenue('other')}>≋</button></div>
-        <span className="beta-feed-terminal">BETA FEED</span>
-        <div className="pulse-console-spacer"/>
-        <button className={`pulse-head-control ${compact?'active':''}`} onClick={()=>setCompact(v=>!v)}><LayoutList size={14}/> Display</button>
-        <button className={`pulse-head-control ${hideLowLiquidity?'active':''}`} onClick={()=>setHideLowLiquidity(v=>!v)}>{hideLowLiquidity?<EyeOff size={14}/>:<Eye size={14}/>} Liquidity</button>
-        <button className="pulse-head-control" onClick={()=>void load()} disabled={refreshing}><Settings2 size={14}/>{refreshing?'Refreshing':'Refresh'}</button>
-        <div className="preset-strip">{presets.map(p=><button key={p.id} className={presetId===p.id?'active':''} onClick={()=>choosePreset(p.id,p.value)}>{p.id}</button>)}</div>
-      </section>
-
-      {feedError&&<div className="pulse-error"><b>Live feed:</b> {feedError}</div>}
-      {notice&&<div className="terminal-toast">{notice}</div>}
-
-      <section className="pulse-grid">
-        {columns.map(col=><article className="pulse-board-column" key={col.key}>
-          <div className="pulse-board-head"><b>{col.title}</b><input value={queries[col.key]} onChange={e=>setQueries(q=>({...q,[col.key]:e.target.value}))} placeholder="Search by ticker"/><small>{col.list.length}</small></div>
-          <div>{col.list.map(t=><PulseCard key={t.mint} t={t} compact={compact} buySize={buySize} buying={buying===t.mint} onOpen={()=>router.push(`/spot?mint=${t.mint}`)} onBuy={()=>void quickBuy(t)}/>)}{!col.list.length&&<div className="pulse-empty">{feedError?'Feed unavailable — retrying automatically.':'No matching tokens right now.'}</div>}</div>
-        </article>)}
-      </section>
-      <div className="terminal-source" style={{marginTop:8}}><i/> {feedError?'Feed degraded':`Live Solana · ${source||'market feed'}`} · New/Final/Migrated remain approximate until direct Pump.fun ingestion is live.</div>
-    </main>
-    <BottomDock active="pulse"/>
-  </div>
+  return <div className="ax-app"><AppHeader active="pulse"/><main className="pulse-console"><section className="pulse-console-head"><h1>Pulse</h1><div className="pulse-chain-strip"><button className={venue==='all'?'active':''} onClick={()=>setVenue('all')}>All</button><button className={venue==='pump'?'active':''} onClick={()=>setVenue('pump')}>⚡</button><button className={venue==='other'?'active':''} onClick={()=>setVenue('other')}>≋</button></div><span className="beta-feed-terminal">BETA FEED</span><div className="pulse-console-spacer"/><button className={`pulse-head-control ${compact?'active':''}`} onClick={()=>setCompact(v=>!v)}><LayoutList size={14}/> Display</button><button className={`pulse-head-control ${hideLowLiquidity?'active':''}`} onClick={()=>setHideLowLiquidity(v=>!v)}>{hideLowLiquidity?<EyeOff size={14}/>:<Eye size={14}/>} Liquidity</button><button className="pulse-head-control" onClick={()=>void load()} disabled={refreshing}><RefreshCw size={14}/>{refreshing?'Refreshing':'Refresh'}</button><div className="preset-strip">{presets.map(p=><button key={p.id} className={presetId===p.id?'active':''} onClick={()=>choosePreset(p.id,p.value)}>{p.id}</button>)}</div></section>{feedError&&<div className="pulse-error"><b>Live feed:</b> {feedError}</div>}{notice&&<div className="terminal-toast">{notice}</div>}<section className="pulse-grid">{columns.map(col=><article className="pulse-board-column" key={col.key}><div className="pulse-board-head"><b>{col.title}</b><input value={queries[col.key]} onChange={e=>setQueries(q=>({...q,[col.key]:e.target.value}))} placeholder="Search by ticker"/><small>{col.list.length}</small></div><div>{col.list.map(t=><PulseCard key={t.mint} t={t} compact={compact} buySize={buySize} buying={buying===t.mint} onOpen={()=>router.push(`/spot?mint=${t.mint}`)} onBuy={()=>void quickBuy(t)}/>)}{!col.list.length&&<div className="pulse-empty">{feedError?'Feed unavailable — retrying automatically.':'No matching tokens right now.'}</div>}</div></article>)}</section><div className="terminal-source" style={{marginTop:8}}><i/> {feedError?'Feed degraded':`Live Solana · ${source||'market feed'}`} · New/Final/Migrated remain approximate until direct Pump.fun ingestion is live.</div></main><BottomDock active="pulse"/></div>
 }
