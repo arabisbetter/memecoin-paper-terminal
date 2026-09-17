@@ -53,7 +53,8 @@ jobs:
           const fs=require('fs')
           const body=JSON.parse(fs.readFileSync('/tmp/paper-market.json','utf8'))
           if(!Array.isArray(body.tokens) || body.tokens.length===0) throw new Error('live market feed returned zero tokens')
-          const first=body.tokens.find(t=>t && t.mint && t.pairAddress && Number(t.priceUsd)>0)
+          const active=t=>t && t.mint && t.pairAddress && Number(t.priceUsd)>0 && (Number(t.buys5m||0)+Number(t.sells5m||0)>0)
+          const first=body.tokens.find(active)||body.tokens.find(t=>t && t.mint && t.pairAddress && Number(t.priceUsd)>0)
           if(!first) throw new Error('live market feed has no usable priced token with a pool')
           fs.writeFileSync('/tmp/paper-mint.txt', String(first.mint))
           fs.writeFileSync('/tmp/paper-pool.txt', String(first.pairAddress))
@@ -104,7 +105,7 @@ jobs:
           console.log(`Base contract lookup ok ${body.token.symbol||body.token.mint}`)
           NODE
 
-      - name: Verify real OHLCV chart and market tape
+      - name: Verify real OHLCV, one-second candles, and market tape
         run: |
           pool=$(cat /tmp/paper-pool.txt)
           chart_ok=0
@@ -123,6 +124,25 @@ jobs:
             sleep 5
           done
           if [ "$chart_ok" -ne 1 ]; then cat /tmp/paper-chart.json 2>/dev/null || true; exit 1; fi
+
+          seconds_ok=0
+          for attempt in 1 2 3; do
+            if curl -fsS "http://127.0.0.1:3000/api/market/ohlcv/$pool?tf=1s" -o /tmp/paper-1s.json; then
+              if node - <<'NODE'
+          const fs=require('fs')
+          const body=JSON.parse(fs.readFileSync('/tmp/paper-1s.json','utf8'))
+          if(body.timeframe!=='1s')throw new Error('one-second chart returned wrong timeframe')
+          if(!Array.isArray(body.candles)||body.candles.length<1)throw new Error('one-second chart returned zero real trade candles')
+          const c=body.candles.at(-1)
+          for(const k of ['time','open','high','low','close'])if(!Number.isFinite(Number(c[k])))throw new Error(`invalid one-second candle ${k}`)
+          console.log(`1s candles ok source=${body.source} candles=${body.candles.length}`)
+          NODE
+              then seconds_ok=1; break; fi
+            fi
+            sleep 4
+          done
+          if [ "$seconds_ok" -ne 1 ]; then cat /tmp/paper-1s.json 2>/dev/null || true; exit 1; fi
+
           curl -fsS "http://127.0.0.1:3000/api/market/trades/$pool" -o /tmp/paper-tape.json
           node - <<'NODE'
           const fs=require('fs')
