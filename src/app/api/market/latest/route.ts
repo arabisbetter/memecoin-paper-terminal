@@ -23,6 +23,7 @@ export async function GET() {
     const tokens = [...bestByMint.values()].filter(Boolean).sort((a, b) => (b?.pairCreatedAt || 0) - (a?.pairCreatedAt || 0));
     return NextResponse.json({ tokens, source: "dexscreener", live: true });
   } catch (error) {
+    console.error("market_latest_feed_error", error);
     return NextResponse.json({ tokens: [], error: error instanceof Error ? error.message : "market feed error" }, { status: 502 });
   }
 }
