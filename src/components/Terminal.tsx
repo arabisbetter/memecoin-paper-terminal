@@ -2,17 +2,14 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import AppHeader from '@/components/AppHeader'
+import BottomDock from '@/components/BottomDock'
 import CandleChart from '@/components/CandleChart'
 import { createClient } from '@/lib/supabase/client'
 import { ensurePaperUser } from '@/lib/paper-session'
 import type { MarketToken } from '@/lib/types'
 
-type DbPosition={
-  id:string;token_id:string;quantity_tokens:number;cost_basis_sol:number;average_entry_price_usd:number;average_entry_mc_usd:number|null;realized_pnl_sol:number;opened_at:string;
-  tokens:{mint_address:string;ticker:string|null;name:string|null;image_url:string|null}|null
-}
+type DbPosition={id:string;token_id:string;quantity_tokens:number;cost_basis_sol:number;average_entry_price_usd:number;average_entry_mc_usd:number|null;realized_pnl_sol:number;opened_at:string;tokens:{mint_address:string;ticker:string|null;name:string|null;image_url:string|null}|null}
 type LivePosition=DbPosition&{current?:MarketToken}
-
 const money=(n:number)=>!Number.isFinite(n)?'—':n>=1e9?`$${(n/1e9).toFixed(2)}B`:n>=1e6?`$${(n/1e6).toFixed(2)}M`:n>=1e3?`$${(n/1e3).toFixed(1)}K`:`$${n.toFixed(n<1?6:2)}`
 const pct=(n:number)=>`${n>=0?'+':''}${n.toFixed(2)}%`
 const short=(s:string)=>s.length>11?`${s.slice(0,5)}…${s.slice(-4)}`:s
@@ -66,10 +63,16 @@ export default function Terminal(){
     let alive=true
     void(async()=>{try{const user=await ensurePaperUser(supabase);if(alive)await loadAccount(user.id)}catch(e){if(alive)setMessage(e instanceof Error?e.message:'Could not start PAPER account')}})()
     void loadFeed()
-    const feedId=setInterval(loadFeed,10000)
-    const acctId=setInterval(()=>{void loadAccount()},15000)
+    const feedId=setInterval(loadFeed,10000);const acctId=setInterval(()=>{void loadAccount()},15000)
     return()=>{alive=false;clearInterval(feedId);clearInterval(acctId)}
   },[supabase,loadAccount,loadFeed])
+
+  useEffect(()=>{
+    const saved=Number(window.localStorage.getItem('paper.quickBuySize'))
+    if(Number.isFinite(saved)&&saved>0)setAmount(saved)
+    const handler=(event:Event)=>{const detail=(event as CustomEvent<{value:number}>).detail;if(detail?.value)setAmount(detail.value)}
+    window.addEventListener('paper:preset',handler);return()=>window.removeEventListener('paper:preset',handler)
+  },[])
 
   useEffect(()=>{
     if(!selected)return
@@ -77,10 +80,7 @@ export default function Terminal(){
     return()=>clearInterval(id)
   },[selected?.mint])
 
-  const visible=useMemo(()=>{
-    const q=query.trim().toLowerCase();if(!q)return tokens
-    return tokens.filter(t=>t.symbol.toLowerCase().includes(q)||t.name.toLowerCase().includes(q)||t.mint.toLowerCase().includes(q))
-  },[tokens,query])
+  const visible=useMemo(()=>{const q=query.trim().toLowerCase();if(!q)return tokens;return tokens.filter(t=>t.symbol.toLowerCase().includes(q)||t.name.toLowerCase().includes(q)||t.mint.toLowerCase().includes(q))},[tokens,query])
   const selectedPosition=selected?positions.find(p=>p.tokens?.mint_address===selected.mint):undefined
 
   async function trade(){
@@ -96,37 +96,15 @@ export default function Terminal(){
     finally{setBusy(false)}
   }
 
-  async function copyMint(){
-    if(!selected)return
-    try{await navigator.clipboard.writeText(selected.mint);setCopied(true);setTimeout(()=>setCopied(false),1000)}catch{}
-  }
+  async function copyMint(){if(!selected)return;try{await navigator.clipboard.writeText(selected.mint);setCopied(true);setTimeout(()=>setCopied(false),1000)}catch{}}
 
   return <div className="ax-app">
     <AppHeader active="spot"/>
     <main className="spot-detail">
-      <aside className="spot-token-list">
-        <div className="spot-search"><input placeholder="Search ticker, name or mint" value={query} onChange={e=>setQuery(e.target.value)}/><button onClick={()=>void loadFeed()}>↻</button></div>
-        <div className="spot-list-head">LIVE MEMECOINS <span>{visible.length}</span></div>
-        <div className="token-list">{visible.map(t=><button key={t.mint} className={`token-row ${selected?.mint===t.mint?'selected':''}`} onClick={()=>setSelected(t)}><div className="token-avatar">{t.image?<img src={t.image} alt=""/>:t.symbol.slice(0,2)}</div><div className="token-copy"><div className="token-line"><b>${t.symbol}</b><span>{t.name}</span></div><div className="token-sub">MC {money(t.marketCap)} · LQ {money(t.liquidityUsd)}</div></div><div className="token-price"><b>{money(t.priceUsd)}</b><span className={t.priceChange24h>=0?'gain':'loss'}>{pct(t.priceChange24h)}</span></div></button>)}</div>
-      </aside>
-
-      <section className="spot-market">
-        <div className="token-head">{selected?<><div className="token-avatar large">{selected.image?<img src={selected.image} alt=""/>:selected.symbol.slice(0,2)}</div><div><div className="token-title">${selected.symbol}<span>{selected.name}</span></div><button className="mint-button" onClick={()=>void copyMint()}>{copied?'Copied':short(selected.mint)} ⧉</button></div><div className="spacer"/><div className="headline-stat"><small>PRICE</small><b>{money(selected.priceUsd)}</b></div><div className="headline-stat"><small>24H</small><b className={selected.priceChange24h>=0?'gain':'loss'}>{pct(selected.priceChange24h)}</b></div><div className="headline-stat"><small>MC</small><b>{money(selected.marketCap)}</b></div></>:<span>Select a live memecoin</span>}</div>
-        <CandleChart poolAddress={selected?.pairAddress} currentPrice={selected?.priceUsd}/>
-        <div className="metric-strip">{[['Market Cap',selected?money(selected.marketCap):'—'],['Liquidity',selected?money(selected.liquidityUsd):'—'],['24H Volume',selected?money(selected.volume24h):'—'],['Buys',selected?String(selected.buys24h):'—'],['Sells',selected?String(selected.sells24h):'—']].map(([l,v])=><div className="metric" key={l}><small>{l}</small><b>{v}</b></div>)}</div>
-        <div className="positions-panel"><div className="positions-title"><span>OPEN PAPER POSITIONS</span><span>{paperCash==null?'—':`${paperCash.toFixed(2)} PAPER SOL balance`}</span></div><div className="pos-head"><span>Token</span><span>Cost</span><span>Entry MC</span><span>Current MC</span><span>PAPER ROI</span></div>{positions.length===0?<div className="loading">No open PAPER positions yet.</div>:positions.map(p=>{const current=p.current?.priceUsd||Number(p.average_entry_price_usd);const roi=(current/Number(p.average_entry_price_usd)-1)*100;return <button className="pos-row" key={p.id} onClick={()=>{const token=tokens.find(t=>t.mint===p.tokens?.mint_address);if(token)setSelected(token)}}><b>${p.tokens?.ticker||'MEME'}</b><span>{Number(p.cost_basis_sol).toFixed(3)} PAPER SOL</span><span>{money(Number(p.average_entry_mc_usd||0))}</span><span>{money(p.current?.marketCap||0)}</span><span className={roi>=0?'gain':'loss'}>{pct(roi)}</span></button>})}</div>
-      </section>
-
-      <aside className="spot-trade-panel">
-        <div className="panel-title">INSTANT PAPER TRADE</div>
-        <div className="panel-body">
-          <div className="side-switch"><button className={side==='buy'?'buy':''} onClick={()=>setSide('buy')}>BUY PAPER</button><button className={side==='sell'?'sell':''} onClick={()=>setSide('sell')}>SELL PAPER</button></div>
-          {side==='buy'?<><label>SIZE · PAPER SOL</label><input className="amount" type="number" min=".01" value={amount} onChange={e=>setAmount(Math.max(.01,Number(e.target.value)||.01))}/><div className="preset-grid">{[.1,.5,1,5].map(v=><button key={v} className="preset" onClick={()=>setAmount(v)}>{v}</button>)}</div></>:<><label>SELL POSITION</label><div className="preset-grid">{[25,50,75,100].map(v=><button key={v} className={`preset ${sellPct===v?'selected':''}`} onClick={()=>setSellPct(v)}>{v}%</button>)}</div>{!selectedPosition&&<div className="disclaimer">No open PAPER position in this token.</div>}</>}
-          <button className="paper-buy" disabled={busy||!selected||(side==='sell'&&!selectedPosition)} onClick={()=>void trade()}>{busy?'VERIFYING LIVE MARKET…':`${side==='buy'?'PAPER BUY':'PAPER SELL'} ${selected?`$${selected.symbol}`:'TOKEN'}`}</button>
-          {message&&<div className="disclaimer">{message}</div>}
-          <div className="disclaimer"><b>PAPER ONLY</b><br/>No real trade is submitted. Fills use current market price, liquidity-aware impact and simulated fees.</div>
-        </div>
-      </aside>
+      <aside className="spot-token-list"><div className="spot-search"><input placeholder="Search ticker, name or mint" value={query} onChange={e=>setQuery(e.target.value)}/><button onClick={()=>void loadFeed()}>↻</button></div><div className="spot-list-head">LIVE MEMECOINS <span>{visible.length}</span></div><div className="token-list">{visible.map(t=><button key={t.mint} className={`token-row ${selected?.mint===t.mint?'selected':''}`} onClick={()=>setSelected(t)}><div className="token-avatar">{t.image?<img src={t.image} alt=""/>:t.symbol.slice(0,2)}</div><div className="token-copy"><div className="token-line"><b>${t.symbol}</b><span>{t.name}</span></div><div className="token-sub">MC {money(t.marketCap)} · LQ {money(t.liquidityUsd)}</div></div><div className="token-price"><b>{money(t.priceUsd)}</b><span className={t.priceChange24h>=0?'gain':'loss'}>{pct(t.priceChange24h)}</span></div></button>)}</div></aside>
+      <section className="spot-market"><div className="token-head">{selected?<><div className="token-avatar large">{selected.image?<img src={selected.image} alt=""/>:selected.symbol.slice(0,2)}</div><div><div className="token-title">${selected.symbol}<span>{selected.name}</span></div><button className="mint-button" onClick={()=>void copyMint()}>{copied?'Copied':short(selected.mint)} ⧉</button></div><div className="spacer"/><div className="headline-stat"><small>PRICE</small><b>{money(selected.priceUsd)}</b></div><div className="headline-stat"><small>24H</small><b className={selected.priceChange24h>=0?'gain':'loss'}>{pct(selected.priceChange24h)}</b></div><div className="headline-stat"><small>MC</small><b>{money(selected.marketCap)}</b></div></>:<span>Select a live memecoin</span>}</div><CandleChart poolAddress={selected?.pairAddress} currentPrice={selected?.priceUsd}/><div className="metric-strip">{[['Market Cap',selected?money(selected.marketCap):'—'],['Liquidity',selected?money(selected.liquidityUsd):'—'],['24H Volume',selected?money(selected.volume24h):'—'],['Buys',selected?String(selected.buys24h):'—'],['Sells',selected?String(selected.sells24h):'—']].map(([l,v])=><div className="metric" key={l}><small>{l}</small><b>{v}</b></div>)}</div><div className="positions-panel"><div className="positions-title"><span>OPEN PAPER POSITIONS</span><span>{paperCash==null?'—':`${paperCash.toFixed(2)} PAPER SOL balance`}</span></div><div className="pos-head"><span>Token</span><span>Cost</span><span>Entry MC</span><span>Current MC</span><span>PAPER ROI</span></div>{positions.length===0?<div className="loading">No open PAPER positions yet.</div>:positions.map(p=>{const current=p.current?.priceUsd||Number(p.average_entry_price_usd);const roi=(current/Number(p.average_entry_price_usd)-1)*100;return <button className="pos-row" key={p.id} onClick={()=>{const token=tokens.find(t=>t.mint===p.tokens?.mint_address);if(token)setSelected(token)}}><b>${p.tokens?.ticker||'MEME'}</b><span>{Number(p.cost_basis_sol).toFixed(3)} PAPER SOL</span><span>{money(Number(p.average_entry_mc_usd||0))}</span><span>{money(p.current?.marketCap||0)}</span><span className={roi>=0?'gain':'loss'}>{pct(roi)}</span></button>})}</div></section>
+      <aside className="spot-trade-panel"><div className="panel-title">INSTANT PAPER TRADE</div><div className="panel-body"><div className="side-switch"><button className={side==='buy'?'buy':''} onClick={()=>setSide('buy')}>BUY PAPER</button><button className={side==='sell'?'sell':''} onClick={()=>setSide('sell')}>SELL PAPER</button></div>{side==='buy'?<><label>SIZE · PAPER SOL</label><input className="amount" type="number" min=".01" value={amount} onChange={e=>setAmount(Math.max(.01,Number(e.target.value)||.01))}/><div className="preset-grid">{[.1,.5,1,5].map(v=><button key={v} className="preset" onClick={()=>setAmount(v)}>{v}</button>)}</div></>:<><label>SELL POSITION</label><div className="preset-grid">{[25,50,75,100].map(v=><button key={v} className={`preset ${sellPct===v?'selected':''}`} onClick={()=>setSellPct(v)}>{v}%</button>)}</div>{!selectedPosition&&<div className="disclaimer">No open PAPER position in this token.</div>}</>}<button className="paper-buy" disabled={busy||!selected||(side==='sell'&&!selectedPosition)} onClick={()=>void trade()}>{busy?'VERIFYING LIVE MARKET…':`${side==='buy'?'PAPER BUY':'PAPER SELL'} ${selected?`$${selected.symbol}`:'TOKEN'}`}</button>{message&&<div className="disclaimer">{message}</div>}<div className="disclaimer"><b>PAPER ONLY</b><br/>No real trade is submitted. Fills use current market price, liquidity-aware impact and simulated fees.</div></div></aside>
     </main>
+    <BottomDock active="spot"/>
   </div>
 }
