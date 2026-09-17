@@ -4,10 +4,11 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -18,3 +19,73 @@ jobs:
         env:
           NEXT_PUBLIC_SUPABASE_URL: https://bpnhybmptjenrjntvmsz.supabase.co
           NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: placeholder
+
+      - name: Start production build
+        run: |
+          NEXT_PUBLIC_SUPABASE_URL=https://bpnhybmptjenrjntvmsz.supabase.co \
+          NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=placeholder \
+          npm start -- -p 3000 > /tmp/paper-next.log 2>&1 &
+          echo $! > /tmp/paper-next.pid
+
+      - name: Wait for PAPER server
+        run: |
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:3000/ >/tmp/paper-home.html; then
+              exit 0
+            fi
+            sleep 1
+          done
+          cat /tmp/paper-next.log
+          exit 1
+
+      - name: Verify live market feed and CA lookup
+        run: |
+          ok=0
+          for attempt in 1 2 3; do
+            if curl -fsS http://127.0.0.1:3000/api/market/latest -o /tmp/paper-market.json; then
+              if node - <<'NODE'
+          const fs=require('fs')
+          const body=JSON.parse(fs.readFileSync('/tmp/paper-market.json','utf8'))
+          if(!Array.isArray(body.tokens) || body.tokens.length===0) throw new Error('live market feed returned zero tokens')
+          const first=body.tokens.find(t=>t && t.mint && Number(t.priceUsd)>0)
+          if(!first) throw new Error('live market feed has no usable priced token')
+          fs.writeFileSync('/tmp/paper-mint.txt', String(first.mint))
+          console.log(`market source=${body.source || 'unknown'} tokens=${body.tokens.length} sample=${first.symbol || first.mint}`)
+          NODE
+              then
+                ok=1
+                break
+              fi
+            fi
+            sleep 5
+          done
+          if [ "$ok" -ne 1 ]; then
+            echo "Live market feed failed after retries"
+            cat /tmp/paper-market.json 2>/dev/null || true
+            cat /tmp/paper-next.log
+            exit 1
+          fi
+          mint=$(cat /tmp/paper-mint.txt)
+          curl -fsS "http://127.0.0.1:3000/api/market/token/$mint" -o /tmp/paper-token.json
+          node - <<'NODE'
+          const fs=require('fs')
+          const body=JSON.parse(fs.readFileSync('/tmp/paper-token.json','utf8'))
+          if(!body.token || !body.token.mint || Number(body.token.priceUsd)<=0) throw new Error('direct token lookup did not return a usable live token')
+          console.log(`CA lookup ok mint=${body.token.mint} price=${body.token.priceUsd}`)
+          NODE
+
+      - name: Verify public P0 routes
+        run: |
+          curl -fsS http://127.0.0.1:3000/ >/dev/null
+          curl -fsS http://127.0.0.1:3000/legal >/dev/null
+
+      - name: Print server log on failure
+        if: failure()
+        run: cat /tmp/paper-next.log || true
+
+      - name: Stop PAPER server
+        if: always()
+        run: |
+          if [ -f /tmp/paper-next.pid ]; then
+            kill "$(cat /tmp/paper-next.pid)" 2>/dev/null || true
+          fi
