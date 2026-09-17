@@ -28,9 +28,17 @@ async function registerSessionSignal(supabase:SupabaseClient,user:User){
   }
 }
 
+async function guaranteeProfile(supabase:SupabaseClient){
+  const {error}=await supabase.rpc('ensure_paper_profile')
+  if(error)throw new Error(`Could not initialize PAPER balance: ${error.message}`)
+}
+
 export async function ensurePaperUser(supabase: SupabaseClient): Promise<User> {
-  const { data: sessionData } = await supabase.auth.getSession()
+  const { data: sessionData, error: sessionError } = await supabase.auth.getSession()
+  if(sessionError)throw sessionError
+
   if (sessionData.session?.user) {
+    await guaranteeProfile(supabase)
     void registerSessionSignal(supabase,sessionData.session.user)
     return sessionData.session.user
   }
@@ -43,6 +51,7 @@ export async function ensurePaperUser(supabase: SupabaseClient): Promise<User> {
 
   if (error) throw error
   if (!data.user) throw new Error('Could not create PAPER account')
+  await guaranteeProfile(supabase)
   void registerSessionSignal(supabase,data.user)
   return data.user
 }
