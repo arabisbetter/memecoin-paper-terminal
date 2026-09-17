@@ -1,8 +1,9 @@
 'use client'
 
-import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
 import { useParams } from 'next/navigation'
+import AppHeader from '@/components/AppHeader'
+import BottomDock from '@/components/BottomDock'
 import { createClient } from '@/lib/supabase/client'
 import { ensurePaperUser } from '@/lib/paper-session'
 
@@ -27,8 +28,7 @@ export default function TraderPage(){
       ])
       if(!live)return
       if(pe){setError(pe.message);return}
-      setProfile(p as Profile)
-      if(!se&&s)setStats(s as Stats)
+      setProfile(p as Profile);if(!se&&s)setStats(s as Stats)
     })()
     return()=>{live=false}
   },[supabase,params.id])
@@ -47,23 +47,15 @@ export default function TraderPage(){
     }catch(e){setReportMessage(e instanceof Error?e.message:'Could not submit report')}
   }
 
-  return <div className="page-shell">
-    <header className="page-top"><Link href="/" className="brand">PAPER</Link><div className="spacer"/><Link href="/">Spot</Link><Link href="/pulse">Pulse</Link><Link href="/leaderboards">Leaderboard</Link></header>
-    <main className="page-content narrow">
+  return <div className="ax-app">
+    <AppHeader active="leaderboard"/>
+    <main className="terminal-page"><div className="terminal-page-inner">
       {error?<div className="error-card">Trader not found.</div>:!profile?<div className="empty-card">Loading trader…</div>:<>
-        <div className="public-profile">
-          <div className={`public-avatar accent-${profile.accent||'violet'}`}>{profile.avatar_url?<img src={profile.avatar_url} alt="Profile"/>:profile.avatar_emoji||'🪙'}</div>
-          <div><div className="eyebrow">PAPER TRADER</div><h2>{profile.display_name||'Paper Trader'}</h2><p>@{profile.username||'paper_trader'}{profile.x_handle?` · ${profile.x_handle}`:''}</p>{profile.bio&&<p style={{marginTop:9,maxWidth:470,lineHeight:1.5}}>{profile.bio}</p>}</div>
-          <div className="spacer"/><button className="report-button" onClick={()=>void reportProfile()}>REPORT</button>
-        </div>
+        <div className="public-profile"><div className={`public-avatar accent-${profile.accent||'violet'}`}>{profile.avatar_url?<img src={profile.avatar_url} alt="Profile"/>:profile.avatar_emoji||'🪙'}</div><div><div className="terminal-eyebrow">PAPER TRADER</div><h2>{profile.display_name||'Paper Trader'}</h2><p>@{profile.username||'paper_trader'}{profile.x_handle?` · ${profile.x_handle}`:''}</p>{profile.bio&&<p style={{marginTop:9,maxWidth:470,lineHeight:1.5}}>{profile.bio}</p>}</div><div className="spacer"/><button className="report-button" onClick={()=>void reportProfile()}>REPORT</button></div>
         {reportMessage&&<div className="profile-message">{reportMessage}</div>}
-        <div className="stat-grid">
-          <div className="stat-card"><small>PAPER P&amp;L</small><b className={(stats?.paper_pnl_sol||0)>=0?'gain':'loss'}>{(stats?.paper_pnl_sol||0)>=0?'+':''}{Number(stats?.paper_pnl_sol||0).toFixed(2)} PAPER SOL</b></div>
-          <div className="stat-card"><small>ROI</small><b>{Number(stats?.roi_pct||0).toFixed(2)}%</b></div>
-          <div className="stat-card"><small>WIN RATE</small><b>{Number(stats?.win_rate_pct||0).toFixed(1)}%</b></div>
-          <div className="stat-card"><small>TRADES</small><b>{stats?.trades_count||0}</b></div>
-        </div>
+        <div className="stat-grid"><div className="stat-card"><small>PAPER P&amp;L</small><b className={(stats?.paper_pnl_sol||0)>=0?'gain':'loss'}>{(stats?.paper_pnl_sol||0)>=0?'+':''}{Number(stats?.paper_pnl_sol||0).toFixed(2)} PAPER SOL</b></div><div className="stat-card"><small>ROI</small><b>{Number(stats?.roi_pct||0).toFixed(2)}%</b></div><div className="stat-card"><small>WIN RATE</small><b>{Number(stats?.win_rate_pct||0).toFixed(1)}%</b></div><div className="stat-card"><small>TRADES</small><b>{stats?.trades_count||0}</b></div></div>
       </>}
-    </main>
+    </div></main>
+    <BottomDock active="leaderboard"/>
   </div>
 }
