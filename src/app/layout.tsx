@@ -17,10 +17,11 @@ import "./parts23-tape.css";
 import "./parts45.css";
 import "./final-release.css";
 import "./errors.css";
+import "./landing.css";
 
 export const metadata: Metadata = {
-  title: "PAPER — Memecoin Paper Trading Terminal",
-  description: "Real memecoin market data. Simulated PAPER trading. No wallet required.",
+  title: "PAPER — Trade PAPER. Earn real.",
+  description: "Start with $1,000 PAPER and trade real memecoin market conditions with simulated execution. No wallet. No deposits.",
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
