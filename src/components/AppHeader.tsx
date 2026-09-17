@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
+import { BarChart3, Radio, Settings2 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { ensurePaperUser } from '@/lib/paper-session'
 
@@ -9,7 +10,6 @@ const blocked=/(nigg|fagg|kike|spic|chink|wetback|tranny|retard)/i
 
 type Profile={id:string;username:string|null;display_name:string|null;avatar_url:string|null;avatar_emoji:string|null;paper_cash_sol:number;profile_completed:boolean}
 type Active='discover'|'pulse'|'spot'|'leaderboard'|'profile'
-
 const sleep=(ms:number)=>new Promise(resolve=>setTimeout(resolve,ms))
 
 export default function AppHeader({active}:{active:Active}){
@@ -27,14 +27,10 @@ export default function AppHeader({active}:{active:Active}){
   useEffect(()=>{
     if(!supabase){setStarting(false);setMessage('PAPER account service is not configured.');return}
     let alive=true
-
     async function readProfile(userId:string){
       let lastError=''
       for(let attempt=0;attempt<7;attempt++){
-        const {data,error}=await supabase!.from('profiles')
-          .select('id,username,display_name,avatar_url,avatar_emoji,paper_cash_sol,profile_completed')
-          .eq('id',userId)
-          .maybeSingle()
+        const {data,error}=await supabase!.from('profiles').select('id,username,display_name,avatar_url,avatar_emoji,paper_cash_sol,profile_completed').eq('id',userId).maybeSingle()
         if(!alive)return null
         if(data)return data as Profile
         if(error)lastError=error.message
@@ -42,7 +38,6 @@ export default function AppHeader({active}:{active:Active}){
       }
       throw new Error(lastError||'PAPER profile was not created. Please refresh once.')
     }
-
     void(async()=>{
       try{
         setStarting(true)
@@ -56,11 +51,8 @@ export default function AppHeader({active}:{active:Active}){
         setDisplayName(p.profile_completed?p.display_name||'':'')
         setAvatarPreview(p.avatar_url||null)
         setMessage('')
-      }catch(e){
-        if(alive)setMessage(e instanceof Error?e.message:'Could not start PAPER account')
-      }finally{
-        if(alive)setStarting(false)
-      }
+      }catch(e){if(alive)setMessage(e instanceof Error?e.message:'Could not start PAPER account')}
+      finally{if(alive)setStarting(false)}
     })()
     return()=>{alive=false}
   },[supabase])
@@ -72,9 +64,7 @@ export default function AppHeader({active}:{active:Active}){
     if(!['image/png','image/jpeg','image/webp'].includes(file.type)){setMessage('Use a PNG, JPG, or WebP image.');return}
     if(file.size>2_000_000){setMessage('PFP must be under 2 MB.');return}
     if(avatarPreview?.startsWith('blob:'))URL.revokeObjectURL(avatarPreview)
-    setAvatarFile(file)
-    setAvatarPreview(URL.createObjectURL(file))
-    setMessage('')
+    setAvatarFile(file);setAvatarPreview(URL.createObjectURL(file));setMessage('')
   }
 
   async function uploadAvatar(){
@@ -89,8 +79,7 @@ export default function AppHeader({active}:{active:Active}){
 
   async function finishOnboarding(){
     if(!supabase||!uid)return
-    const u=username.trim()
-    const d=(displayName.trim()||u)
+    const u=username.trim();const d=(displayName.trim()||u)
     if(!/^[A-Za-z0-9_]{3,24}$/.test(u)){setMessage('Username must be 3–24 letters, numbers, or underscores.');return}
     if(blocked.test(`${u} ${d}`)){setMessage('Choose a different username or display name.');return}
     setSaving(true);setMessage('')
@@ -98,9 +87,7 @@ export default function AppHeader({active}:{active:Active}){
       const avatarUrl=await uploadAvatar()
       const {data,error}=await supabase.from('profiles').update({username:u,display_name:d,avatar_url:avatarUrl,profile_completed:true,updated_at:new Date().toISOString()}).eq('id',uid).select('id,username,display_name,avatar_url,avatar_emoji,paper_cash_sol,profile_completed').single()
       if(error)throw error
-      setProfile(data as Profile)
-      setAvatarPreview((data as Profile).avatar_url||null)
-      setAvatarFile(null)
+      setProfile(data as Profile);setAvatarPreview((data as Profile).avatar_url||null);setAvatarFile(null)
     }catch(e){setMessage(e instanceof Error?e.message:'Could not create profile')}
     finally{setSaving(false)}
   }
@@ -115,7 +102,9 @@ export default function AppHeader({active}:{active:Active}){
         <Link className={active==='pulse'?'active':''} href="/pulse">Pulse</Link>
       </nav>
       <div className="ax-header-spacer"/>
-      <div className="paper-status-pill"><span className="status-dot"/> PAPER ACCOUNT</div>
+      <Link className="icon-control" href="/leaderboards" title="PAPER PnL leaderboard"><BarChart3 size={15}/></Link>
+      <Link className="icon-control" href="/pulse" title="Live Pulse"><Radio size={15}/></Link>
+      <Link className="icon-control" href="/profile" title="Settings"><Settings2 size={15}/></Link>
       <div className="ax-balance-pill"><span className="sol-dot">≋</span>{profile?Number(profile.paper_cash_sol).toFixed(2):(starting?'Starting…':'Error')} <small>PAPER SOL</small></div>
       <Link href="/profile" className={`ax-pfp ${active==='profile'?'active':''}`}>{pfp?<img src={pfp} alt="Profile"/>:<span>{profile?.avatar_emoji||'◢'}</span>}</Link>
     </header>
@@ -126,7 +115,7 @@ export default function AppHeader({active}:{active:Active}){
       <div className="onboard-card">
         <div className="onboard-brand"><span className="ax-mark">▲</span> PAPER</div>
         <h1>Create your trader profile</h1>
-        <p>Pick a name and optional PFP. Your account starts with <b>1,000 PAPER SOL</b>. No crypto wallet is required.</p>
+        <p>Choose a username and optional PFP. You start with <b>1,000 PAPER SOL</b>. No crypto wallet is connected to trade.</p>
         <label className="pfp-upload">
           <div className="pfp-preview">{avatarPreview?<img src={avatarPreview} alt="PFP preview"/>:<span>◢</span>}</div>
           <div><b>{avatarPreview?'Change PFP':'Add a PFP'}</b><small>PNG/JPG/WebP · max 2 MB · or keep default</small></div>
