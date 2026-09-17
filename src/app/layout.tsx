@@ -8,6 +8,7 @@ import "./axiom-clone.css";
 import "./terminal-finishing.css";
 import "./smoothness.css";
 import "./v3.css";
+import "./live-upgrade.css";
 
 export const metadata: Metadata = {
   title: "PAPER — Memecoin Paper Trading Terminal",
