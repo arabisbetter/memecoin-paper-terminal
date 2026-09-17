@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import "./product-polish.css";
+import "./spot-polish.css";
 
 export const metadata: Metadata = {
   title: "PAPER — Memecoin Paper Trading Terminal",
