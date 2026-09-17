@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import "./product-polish.css";
 
 export const metadata: Metadata = {
-  title: "PAPER.FUN — Memecoin Paper Trading Terminal",
-  description: "Real memecoins. Real pumps. Real rugs. Paper money.",
+  title: "PAPER — Memecoin Paper Trading Terminal",
+  description: "Live memecoins. PAPER money. Real market movement.",
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
