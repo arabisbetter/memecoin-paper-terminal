@@ -5,6 +5,7 @@ import "./spot-polish.css";
 import "./leader-polish.css";
 import "./bugfix.css";
 import "./axiom-clone.css";
+import "./terminal-finishing.css";
 
 export const metadata: Metadata = {
   title: "PAPER — Memecoin Paper Trading Terminal",
