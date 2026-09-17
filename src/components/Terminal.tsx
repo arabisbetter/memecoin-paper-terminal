@@ -1,7 +1,8 @@
 'use client'
 
+import Link from 'next/link'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Eye, ExternalLink } from 'lucide-react'
+import { Eye, ExternalLink, HeartHandshake, Info, ShieldCheck } from 'lucide-react'
 import AppHeader from '@/components/AppHeader'
 import BottomDock from '@/components/BottomDock'
 import CandleChart from '@/components/CandleChart'
@@ -15,6 +16,7 @@ type LivePosition=DbPosition&{current?:MarketToken}
 const money=(n:number)=>!Number.isFinite(n)?'—':n>=1e9?`$${(n/1e9).toFixed(2)}B`:n>=1e6?`$${(n/1e6).toFixed(2)}M`:n>=1e3?`$${(n/1e3).toFixed(1)}K`:`$${n.toFixed(n<1?6:2)}`
 const pct=(n:number)=>`${n>=0?'+':''}${n.toFixed(2)}%`
 const short=(s:string)=>s.length>11?`${s.slice(0,5)}…${s.slice(-4)}`:s
+const ageText=(ms?:number)=>{if(!ms)return'Unknown';const m=Math.max(0,Date.now()-ms)/60000;if(m<60)return`${Math.floor(m)} minutes`;const h=m/60;if(h<24)return`${Math.floor(h)} hours`;return`${Math.floor(h/24)} days`}
 
 export default function Terminal(){
   const supabase=useMemo(()=>{try{return createClient()}catch{return null}},[])
@@ -76,7 +78,7 @@ export default function Terminal(){
     let alive=true
     void(async()=>{try{const user=await ensurePaperUser(supabase);if(alive)await loadAccount(user.id,true)}catch(e){if(alive)setMessage(e instanceof Error?e.message:'Could not start PAPER account')}})()
     void loadFeed(true)
-    const feedId=window.setInterval(()=>void loadFeed(),12_000),acctId=window.setInterval(()=>void loadAccount(),12_000)
+    const feedId=window.setInterval(()=>void loadFeed(),8_000),acctId=window.setInterval(()=>void loadAccount(),12_000)
     const onVisible=()=>{if(!document.hidden){void loadFeed(true);void loadAccount(undefined,true)}}
     const onAccount=()=>void loadAccount(undefined,true)
     document.addEventListener('visibilitychange',onVisible);window.addEventListener('paper:account-changed',onAccount)
@@ -87,8 +89,8 @@ export default function Terminal(){
 
   useEffect(()=>{
     if(!selected)return
-    const refresh=async()=>{if(document.hidden)return;try{const r=await fetch(`/api/market/token/${encodeURIComponent(selected.mint)}`,{cache:'no-store'});const j=await r.json();if(r.ok&&j.token)setSelected(j.token)}catch{}}
-    const id=window.setInterval(()=>void refresh(),6_000)
+    const refresh=async()=>{if(document.hidden)return;try{const r=await fetch(`/api/market/token/${encodeURIComponent(selected.mint)}`,{cache:'no-store'});const j=await r.json();if(r.ok&&j.token)setSelected(cur=>cur?{...cur,...j.token,description:j.token.description||cur.description,profileUrl:j.token.profileUrl||cur.profileUrl,buyUrl:j.token.buyUrl||cur.buyUrl}:j.token)}catch{}}
+    const id=window.setInterval(()=>void refresh(),3_000)
     return()=>window.clearInterval(id)
   },[selected?.mint])
 
@@ -109,6 +111,7 @@ export default function Terminal(){
 
   const visible=useMemo(()=>{const q=query.trim().toLowerCase();if(!q)return tokens;return tokens.filter(t=>t.symbol.toLowerCase().includes(q)||t.name.toLowerCase().includes(q)||t.mint.toLowerCase().includes(q))},[tokens,query])
   const selectedPosition=selected?positions.find(p=>p.tokens?.mint_address===selected.mint):undefined
+  const description=selected?.description?.trim()|| (selected?`${selected.name} ($${selected.symbol}) is a live Solana token currently trading on ${selected.dexId||'a decentralized market'}. This panel uses public market metadata: ${money(selected.marketCap)} market cap, ${money(selected.liquidityUsd)} liquidity and ${money(selected.volume24h)} 24-hour volume. Always verify the project links and contract address before using a real-money venue.`:'')
 
   async function trade(){
     if(!selected||!supabase||!userId)return
@@ -129,9 +132,11 @@ export default function Terminal(){
     <main className="spot-detail">
       <aside className="spot-token-list"><div className="spot-search"><input placeholder="Search ticker, name or mint" value={query} onChange={e=>setQuery(e.target.value)}/><button onClick={()=>void loadFeed(true)}>↻</button></div><div className="spot-list-head">LIVE MEMECOINS <span>{visible.length}</span></div><div className="token-list">{visible.map(t=><button key={t.mint} className={`token-row ${selected?.mint===t.mint?'selected':''}`} onClick={()=>setSelected(t)}><div className="token-avatar">{t.image?<img src={t.image} alt="" loading="lazy"/>:t.symbol.slice(0,2)}</div><div className="token-copy"><div className="token-line"><b>${t.symbol}</b><span>{t.name}</span></div><div className="token-sub">MC {money(t.marketCap)} · LQ {money(t.liquidityUsd)}</div></div><div className="token-price"><b>{money(t.priceUsd)}</b><span className={t.priceChange24h>=0?'gain':'loss'}>{pct(t.priceChange24h)}</span></div></button>)}</div></aside>
       <section className="spot-market">
-        <div className="token-head">{selected?<><div className="token-avatar large">{selected.image?<img src={selected.image} alt=""/>:selected.symbol.slice(0,2)}</div><div><div className="token-title">${selected.symbol}<span>{selected.name}</span></div><div className="token-link-row"><button className="mint-button" onClick={()=>void copyMint()}>{copied?'Copied':short(selected.mint)} ⧉</button>{selected.website&&<a href={selected.website} target="_blank" rel="noreferrer">Web <ExternalLink size={10}/></a>}{selected.twitter&&<a href={selected.twitter} target="_blank" rel="noreferrer">X <ExternalLink size={10}/></a>}</div></div><div className="spacer"/><div className="headline-stat"><small>VIEWS</small><b className="view-stat"><Eye size={12}/>{viewCount.toLocaleString()}</b></div><div className="headline-stat"><small>PRICE</small><b>{money(selected.priceUsd)}</b></div><div className="headline-stat"><small>24H</small><b className={selected.priceChange24h>=0?'gain':'loss'}>{pct(selected.priceChange24h)}</b></div><div className="headline-stat"><small>MC</small><b>{money(selected.marketCap)}</b></div></>:<span>Select a live memecoin</span>}</div>
+        <div className="token-head">{selected?<><div className="token-avatar large">{selected.image?<img src={selected.image} alt=""/>:selected.symbol.slice(0,2)}</div><div><div className="token-title">${selected.symbol}<span>{selected.name}</span></div><div className="token-link-row"><button className="mint-button" onClick={()=>void copyMint()}>{copied?'Copied':short(selected.mint)} ⧉</button>{selected.website&&<a href={selected.website} target="_blank" rel="noreferrer">Web <ExternalLink size={10}/></a>}{selected.twitter&&<a href={selected.twitter} target="_blank" rel="noreferrer">X <ExternalLink size={10}/></a>}{selected.telegram&&<a href={selected.telegram} target="_blank" rel="noreferrer">TG <ExternalLink size={10}/></a>}</div></div><div className="spacer"/><div className="headline-stat"><small>VIEWS</small><b className="view-stat"><Eye size={12}/>{viewCount.toLocaleString()}</b></div><div className="headline-stat"><small>PRICE</small><b>{money(selected.priceUsd)}</b></div><div className="headline-stat"><small>24H</small><b className={selected.priceChange24h>=0?'gain':'loss'}>{pct(selected.priceChange24h)}</b></div><div className="headline-stat"><small>MC</small><b>{money(selected.marketCap)}</b></div></>:<span>Select a live memecoin</span>}</div>
         <CandleChart poolAddress={selected?.pairAddress} currentPrice={selected?.priceUsd}/>
         <div className="metric-strip">{[['Market Cap',selected?money(selected.marketCap):'—'],['Liquidity',selected?money(selected.liquidityUsd):'—'],['24H Volume',selected?money(selected.volume24h):'—'],['24H Buys',selected?String(selected.buys24h):'—'],['24H Sells',selected?String(selected.sells24h):'—']].map(([l,v])=><div className="metric" key={l}><small>{l}</small><b>{v}</b></div>)}</div>
+        {selected&&<section className="coin-intel-card"><div className="coin-intel-title"><Info size={15}/><div><b>WHAT IS ${selected.symbol}?</b><small>Project metadata + live market context</small></div><span>{ageText(selected.pairCreatedAt)} old</span></div><p>{description}</p><div className="coin-intel-facts"><span><b>{selected.dexId||'Solana DEX'}</b><small>Venue</small></span><span><b>{money(selected.liquidityUsd)}</b><small>Liquidity</small></span><span><b>{money(Number(selected.volume5m||0))}</b><small>5m volume</small></span><span><b>{Number(selected.buys5m||0)} / {Number(selected.sells5m||0)}</b><small>5m buys / sells</small></span></div><div className="coin-intel-actions">{selected.website&&<a href={selected.website} target="_blank" rel="noreferrer">PROJECT SITE <ExternalLink size={12}/></a>}{selected.profileUrl&&<a href={selected.profileUrl} target="_blank" rel="noreferrer">MARKET PROFILE <ExternalLink size={12}/></a>}{(selected.buyUrl||selected.pairUrl)&&<a className="real-market-link" href={selected.buyUrl||selected.pairUrl} target="_blank" rel="noreferrer">OPEN REAL MARKET <ExternalLink size={12}/></a>}</div><div className="real-market-warning"><ShieldCheck size={13}/> Real-market links leave PAPER and may involve real funds. PAPER trades above remain simulated.</div></section>}
+        <div className="impact-mini"><HeartHandshake size={16}/><div><b>Giveaway Match Pledge</b><span>Official PAPER giveaways are matched dollar-for-dollar with a charity donation. $1,000 given away → $1,000 donated.</span></div><Link href="/coin">How it works →</Link></div>
         <div className="detail-data-grid">
           <div className="positions-panel"><div className="positions-title"><span>OPEN PAPER POSITIONS</span><span>{paperCash.toFixed(2)} PAPER SOL balance</span></div><div className="pos-head"><span>Token</span><span>Cost</span><span>Entry MC</span><span>Current MC</span><span>PAPER ROI</span></div>{positions.length===0?<div className="loading">No open PAPER positions yet.</div>:positions.map(p=>{const current=p.current?.priceUsd||Number(p.average_entry_price_usd);const roi=(current/Number(p.average_entry_price_usd)-1)*100;return <button className="pos-row" key={p.id} onClick={()=>{const token=tokens.find(t=>t.mint===p.tokens?.mint_address);if(token)setSelected(token)}}><b>${p.tokens?.ticker||'MEME'}</b><span>{Number(p.cost_basis_sol).toFixed(3)} PAPER SOL</span><span>{money(Number(p.average_entry_mc_usd||0))}</span><span>{money(p.current?.marketCap||0)}</span><span className={roi>=0?'gain':'loss'}>{pct(roi)}</span></button>})}</div>
           <MarketTape poolAddress={selected?.pairAddress}/>
