@@ -8,7 +8,7 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 18
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -38,7 +38,7 @@ jobs:
           cat /tmp/paper-next.log
           exit 1
 
-      - name: Verify live market feed and CA lookup
+      - name: Verify live Solana market feed and CA lookup
         run: |
           ok=0
           for attempt in 1 2 3; do
@@ -53,26 +53,49 @@ jobs:
           fs.writeFileSync('/tmp/paper-pool.txt', String(first.pairAddress))
           console.log(`market source=${body.source || 'unknown'} tokens=${body.tokens.length} sample=${first.symbol || first.mint}`)
           NODE
-              then
-                ok=1
-                break
-              fi
+              then ok=1; break; fi
             fi
             sleep 5
           done
-          if [ "$ok" -ne 1 ]; then
-            echo "Live market feed failed after retries"
-            cat /tmp/paper-market.json 2>/dev/null || true
-            cat /tmp/paper-next.log
-            exit 1
-          fi
+          if [ "$ok" -ne 1 ]; then cat /tmp/paper-market.json 2>/dev/null || true; cat /tmp/paper-next.log; exit 1; fi
           mint=$(cat /tmp/paper-mint.txt)
           curl -fsS "http://127.0.0.1:3000/api/market/token/$mint" -o /tmp/paper-token.json
           node - <<'NODE'
           const fs=require('fs')
           const body=JSON.parse(fs.readFileSync('/tmp/paper-token.json','utf8'))
           if(!body.token || !body.token.mint || Number(body.token.priceUsd)<=0) throw new Error('direct token lookup did not return a usable live token')
-          console.log(`CA lookup ok mint=${body.token.mint} price=${body.token.priceUsd}`)
+          console.log(`Solana CA lookup ok mint=${body.token.mint} price=${body.token.priceUsd}`)
+          NODE
+
+      - name: Verify Base and Ethereum live feeds
+        run: |
+          for chain in base ethereum; do
+            ok=0
+            for attempt in 1 2 3; do
+              if curl -fsS "http://127.0.0.1:3000/api/market/chain/$chain" -o "/tmp/$chain-market.json"; then
+                if CHAIN="$chain" node - <<'NODE'
+          const fs=require('fs')
+          const chain=process.env.CHAIN
+          const body=JSON.parse(fs.readFileSync(`/tmp/${chain}-market.json`,'utf8'))
+          if(!Array.isArray(body.tokens)||body.tokens.length===0)throw new Error(`${chain} feed returned zero tokens`)
+          const first=body.tokens.find(t=>t&&/^0x[a-fA-F0-9]{40}$/.test(String(t.mint||''))&&Number(t.priceUsd)>0)
+          if(!first)throw new Error(`${chain} feed has no usable token`)
+          fs.writeFileSync(`/tmp/${chain}-address.txt`,String(first.mint))
+          console.log(`${chain} feed source=${body.source||'unknown'} tokens=${body.tokens.length} sample=${first.symbol||first.mint}`)
+          NODE
+                then ok=1; break; fi
+              fi
+              sleep 5
+            done
+            if [ "$ok" -ne 1 ]; then cat "/tmp/$chain-market.json" 2>/dev/null || true; exit 1; fi
+          done
+          base_address=$(cat /tmp/base-address.txt)
+          curl -fsS "http://127.0.0.1:3000/api/market/chain/base/token/$base_address" -o /tmp/base-token.json
+          node - <<'NODE'
+          const fs=require('fs')
+          const body=JSON.parse(fs.readFileSync('/tmp/base-token.json','utf8'))
+          if(!body.token||Number(body.token.priceUsd)<=0)throw new Error('Base contract lookup failed')
+          console.log(`Base contract lookup ok ${body.token.symbol||body.token.mint}`)
           NODE
 
       - name: Verify real OHLCV chart and market tape
@@ -104,11 +127,9 @@ jobs:
 
       - name: Verify public terminal routes
         run: |
-          curl -fsS http://127.0.0.1:3000/ >/dev/null
-          curl -fsS http://127.0.0.1:3000/spot >/dev/null
-          curl -fsS http://127.0.0.1:3000/pulse >/dev/null
-          curl -fsS http://127.0.0.1:3000/portfolio >/dev/null
-          curl -fsS http://127.0.0.1:3000/legal >/dev/null
+          for route in / /spot /pulse /portfolio /chains /wallets /watchlist /rewards /leaderboards /legal; do
+            curl -fsS "http://127.0.0.1:3000$route" >/dev/null
+          done
 
       - name: Print server log on failure
         if: failure()

@@ -1,5 +1,6 @@
 export type MarketToken = {
   mint: string;
+  chainId?: 'solana' | 'base' | 'ethereum' | string;
   pairAddress?: string;
   name: string;
   symbol: string;

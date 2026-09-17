@@ -15,6 +15,7 @@ import "./p0-extra.css";
 import "./parts23.css";
 import "./parts23-tape.css";
 import "./parts45.css";
+import "./final-release.css";
 import "./errors.css";
 
 export const metadata: Metadata = {
