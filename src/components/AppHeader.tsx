@@ -8,8 +8,9 @@ import { ensurePaperUser } from '@/lib/paper-session'
 const blocked=/(nigg|fagg|kike|spic|chink|wetback|tranny|retard)/i
 
 type Profile={id:string;username:string|null;display_name:string|null;avatar_url:string|null;avatar_emoji:string|null;paper_cash_sol:number;profile_completed:boolean}
+type Active='discover'|'pulse'|'spot'|'leaderboard'|'profile'
 
-type Active='discover'|'pulse'|'spot'|'wallet'|'leaderboard'|'profile'
+const sleep=(ms:number)=>new Promise(resolve=>setTimeout(resolve,ms))
 
 export default function AppHeader({active}:{active:Active}){
   const supabase=useMemo(()=>{try{return createClient()}catch{return null}},[])
@@ -21,25 +22,45 @@ export default function AppHeader({active}:{active:Active}){
   const [avatarFile,setAvatarFile]=useState<File|null>(null)
   const [saving,setSaving]=useState(false)
   const [message,setMessage]=useState('')
+  const [starting,setStarting]=useState(true)
 
   useEffect(()=>{
-    if(!supabase)return
+    if(!supabase){setStarting(false);setMessage('PAPER account service is not configured.');return}
     let alive=true
+
+    async function readProfile(userId:string){
+      let lastError=''
+      for(let attempt=0;attempt<7;attempt++){
+        const {data,error}=await supabase!.from('profiles')
+          .select('id,username,display_name,avatar_url,avatar_emoji,paper_cash_sol,profile_completed')
+          .eq('id',userId)
+          .maybeSingle()
+        if(!alive)return null
+        if(data)return data as Profile
+        if(error)lastError=error.message
+        await sleep(150*(attempt+1))
+      }
+      throw new Error(lastError||'PAPER profile was not created. Please refresh once.')
+    }
+
     void(async()=>{
       try{
+        setStarting(true)
         const user=await ensurePaperUser(supabase)
         if(!alive)return
         setUid(user.id)
-        const {data,error}=await supabase.from('profiles').select('id,username,display_name,avatar_url,avatar_emoji,paper_cash_sol,profile_completed').eq('id',user.id).single()
-        if(error)throw error
-        if(alive&&data){
-          const p=data as Profile
-          setProfile(p)
-          setUsername(p.profile_completed?p.username||'':'')
-          setDisplayName(p.profile_completed?p.display_name||'':'')
-          setAvatarPreview(p.avatar_url||null)
-        }
-      }catch(e){if(alive)setMessage(e instanceof Error?e.message:'Could not start PAPER account')}
+        const p=await readProfile(user.id)
+        if(!alive||!p)return
+        setProfile(p)
+        setUsername(p.profile_completed?p.username||'':'')
+        setDisplayName(p.profile_completed?p.display_name||'':'')
+        setAvatarPreview(p.avatar_url||null)
+        setMessage('')
+      }catch(e){
+        if(alive)setMessage(e instanceof Error?e.message:'Could not start PAPER account')
+      }finally{
+        if(alive)setStarting(false)
+      }
     })()
     return()=>{alive=false}
   },[supabase])
@@ -95,9 +116,11 @@ export default function AppHeader({active}:{active:Active}){
       </nav>
       <div className="ax-header-spacer"/>
       <div className="paper-status-pill"><span className="status-dot"/> PAPER ACCOUNT</div>
-      <div className="ax-balance-pill"><span className="sol-dot">≋</span>{profile?Number(profile.paper_cash_sol).toFixed(2):'—'} <small>PAPER SOL</small></div>
+      <div className="ax-balance-pill"><span className="sol-dot">≋</span>{profile?Number(profile.paper_cash_sol).toFixed(2):(starting?'Starting…':'Error')} <small>PAPER SOL</small></div>
       <Link href="/profile" className={`ax-pfp ${active==='profile'?'active':''}`}>{pfp?<img src={pfp} alt="Profile"/>:<span>{profile?.avatar_emoji||'◢'}</span>}</Link>
     </header>
+
+    {!profile&&!starting&&message&&<div className="account-start-error"><b>PAPER account could not load.</b><span>{message}</span><button onClick={()=>location.reload()}>Retry</button></div>}
 
     {profile&&!profile.profile_completed&&<div className="onboard-backdrop">
       <div className="onboard-card">
