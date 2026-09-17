@@ -16,8 +16,7 @@ export default function MiniSparkline({pool,timeframe='5m'}:{pool?:string;timefr
         if(alive&&r.ok)setCandles((j.candles||[]).slice(-36))
       }catch{if(alive)setCandles([])}
     }
-    void load()
-    const id=setInterval(load,30000)
+    void load();const id=setInterval(load,30000)
     return()=>{alive=false;clearInterval(id)}
   },[pool,timeframe])
 
@@ -26,10 +25,10 @@ export default function MiniSparkline({pool,timeframe='5m'}:{pool?:string;timefr
     const values=candles.map(c=>Number(c.close)).filter(Number.isFinite)
     if(values.length<2)return null
     const min=Math.min(...values),max=Math.max(...values),span=Math.max(max-min,Number.EPSILON)
-    const points=values.map((v,i)=>`${(i/(values.length-1))*100},${31-((v-min)/span)*27}`).join(' ')
-    return {points,up:values.at(-1)!>=values[0]}
+    const pts=values.map((v,i)=>({x:(i/(values.length-1))*100,y:31-((v-min)/span)*27}))
+    return {line:pts.map(p=>`${p.x},${p.y}`).join(' '),area:`0,34 ${pts.map(p=>`${p.x},${p.y}`).join(' ')} 100,34`,up:values.at(-1)!>=values[0]}
   },[candles])
 
   if(!graph)return <div className="spark spark-loading"><span>—</span></div>
-  return <div className={`spark ${graph.up?'up':'down'}`} title={`Real ${timeframe} market candles`}><svg viewBox="0 0 100 34" preserveAspectRatio="none"><polyline points={graph.points} fill="none" stroke="currentColor" strokeWidth="2" vectorEffect="non-scaling-stroke"/></svg></div>
+  return <div className={`spark ${graph.up?'up':'down'}`} title={`Real ${timeframe} market candles`}><svg viewBox="0 0 100 34" preserveAspectRatio="none"><polygon className="spark-fill" points={graph.area}/><polyline points={graph.line} fill="none" stroke="currentColor" strokeWidth="1.8" vectorEffect="non-scaling-stroke"/></svg></div>
 }
