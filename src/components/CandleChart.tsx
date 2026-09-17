@@ -1,24 +1,27 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { Maximize2, Minimize2, RotateCcw } from 'lucide-react'
 import { CandlestickSeries, ColorType, CrosshairMode, HistogramSeries, createChart, type IChartApi, type ISeriesApi, type UTCTimestamp } from 'lightweight-charts'
 
 type Candle={time:number;open:number;high:number;low:number;close:number;volume:number}
 type Timeframe='1m'|'5m'|'15m'|'30m'|'1h'|'4h'|'1d'|'1M'
 const timeframes:Timeframe[]=['1m','5m','15m','30m','1h','4h','1d','1M']
 const formatPrice=(n:number)=>!Number.isFinite(n)?'—':n>=1?`$${n.toFixed(4)}`:n>=.01?`$${n.toFixed(6)}`:`$${n.toPrecision(5)}`
+const compact=(n:number)=>!Number.isFinite(n)?'—':n>=1e9?`$${(n/1e9).toFixed(2)}B`:n>=1e6?`$${(n/1e6).toFixed(2)}M`:n>=1e3?`$${(n/1e3).toFixed(1)}K`:`$${n.toFixed(0)}`
+const refreshMs=(tf:Timeframe)=>tf==='1m'?12_000:tf==='5m'?15_000:tf==='15m'||tf==='30m'?25_000:tf==='1h'?35_000:tf==='4h'?60_000:120_000
 
-export default function CandleChart({poolAddress,currentPrice}:{poolAddress?:string;currentPrice?:number}){
+export default function CandleChart({poolAddress,currentPrice,symbol}:{poolAddress?:string;currentPrice?:number;symbol?:string}){
   const wrap=useRef<HTMLDivElement|null>(null)
   const chartRef=useRef<IChartApi|null>(null)
   const candleRef=useRef<ISeriesApi<'Candlestick'>|null>(null)
   const volumeRef=useRef<ISeriesApi<'Histogram'>|null>(null)
   const priceLineRef=useRef<any>(null)
-  const [tf,setTf]=useState<Timeframe>('1m'),[candles,setCandles]=useState<Candle[]>([]),[hover,setHover]=useState<Candle|null>(null),[error,setError]=useState(''),[loading,setLoading]=useState(false),[status,setStatus]=useState<'LIVE'|'DEGRADED'|'STALE'>('DEGRADED'),[asOf,setAsOf]=useState(0)
+  const [tf,setTf]=useState<Timeframe>('1m'),[candles,setCandles]=useState<Candle[]>([]),[hover,setHover]=useState<Candle|null>(null),[error,setError]=useState(''),[loading,setLoading]=useState(false),[status,setStatus]=useState<'LIVE'|'DEGRADED'|'STALE'>('DEGRADED'),[asOf,setAsOf]=useState(0),[expanded,setExpanded]=useState(false)
 
   useEffect(()=>{
     if(!wrap.current)return
-    const chart=createChart(wrap.current,{autoSize:true,layout:{background:{type:ColorType.Solid,color:'#080a0f'},textColor:'#8a92a3',fontSize:11},grid:{vertLines:{color:'#151922'},horzLines:{color:'#151922'}},crosshair:{mode:CrosshairMode.Normal,vertLine:{color:'#65708a',width:1,labelBackgroundColor:'#283044'},horzLine:{color:'#65708a',width:1,labelBackgroundColor:'#283044'}},rightPriceScale:{borderColor:'#202532',scaleMargins:{top:.08,bottom:.22}},timeScale:{borderColor:'#202532',timeVisible:true,secondsVisible:false,rightOffset:4,barSpacing:8,minBarSpacing:3},handleScroll:{mouseWheel:true,pressedMouseMove:true,horzTouchDrag:true,vertTouchDrag:false},handleScale:{axisPressedMouseMove:true,mouseWheel:true,pinch:true}})
+    const chart=createChart(wrap.current,{autoSize:true,layout:{background:{type:ColorType.Solid,color:'#07090d'},textColor:'#8d96aa',fontSize:11},grid:{vertLines:{color:'#141821'},horzLines:{color:'#141821'}},crosshair:{mode:CrosshairMode.Normal,vertLine:{color:'#68738d',width:1,labelBackgroundColor:'#273044'},horzLine:{color:'#68738d',width:1,labelBackgroundColor:'#273044'}},rightPriceScale:{borderColor:'#202632',scaleMargins:{top:.06,bottom:.22}},timeScale:{borderColor:'#202632',timeVisible:true,secondsVisible:false,rightOffset:5,barSpacing:8,minBarSpacing:2,fixLeftEdge:false,fixRightEdge:false},handleScroll:{mouseWheel:true,pressedMouseMove:true,horzTouchDrag:true,vertTouchDrag:false},handleScale:{axisPressedMouseMove:true,mouseWheel:true,pinch:true}})
     const cs=chart.addSeries(CandlestickSeries,{upColor:'#2de0b0',downColor:'#ff3f80',borderVisible:false,wickUpColor:'#2de0b0',wickDownColor:'#ff3f80',priceLineVisible:true,lastValueVisible:true})
     const vs=chart.addSeries(HistogramSeries,{priceScaleId:'',priceFormat:{type:'volume'},lastValueVisible:false,priceLineVisible:false})
     vs.priceScale().applyOptions({scaleMargins:{top:.82,bottom:0}})
@@ -33,10 +36,13 @@ export default function CandleChart({poolAddress,currentPrice}:{poolAddress?:str
     async function load(force=false){
       if(!force&&document.hidden)return
       if(alive)setLoading(true)
-      try{const r=await fetch(`/api/market/ohlcv/${encodeURIComponent(poolAddress!)}?tf=${tf}`,{cache:'no-store'}),j=await r.json();if(!r.ok)throw new Error(j.error||'chart unavailable');if(alive&&Array.isArray(j.candles)&&j.candles.length){setCandles(j.candles);setError(j.warning||'');setAsOf(Number(j.asOf||Date.now()));setStatus(j.stale?'STALE':j.warning||j.live===false?'DEGRADED':'LIVE')}}catch(e){if(alive){setError(e instanceof Error?e.message:'chart unavailable');setStatus('DEGRADED')}}finally{if(alive)setLoading(false)}
+      try{
+        const r=await fetch(`/api/market/ohlcv/${encodeURIComponent(poolAddress!)}?tf=${tf}`,{cache:'no-store'}),j=await r.json();if(!r.ok)throw new Error(j.error||'chart unavailable')
+        if(alive&&Array.isArray(j.candles)&&j.candles.length){setCandles(j.candles);setError(j.warning||'');setAsOf(Number(j.asOf||Date.now()));setStatus(j.stale?'STALE':j.warning||j.live===false?'DEGRADED':'LIVE')}
+      }catch(e){if(alive){setError(e instanceof Error?e.message:'chart unavailable');setStatus('DEGRADED')}}finally{if(alive)setLoading(false)}
     }
     setCandles([]);setHover(null);void load(true)
-    const id=window.setInterval(()=>void load(),tf==='1M'||tf==='1d'?120_000:30_000),visible=()=>{if(!document.hidden)void load(true)};document.addEventListener('visibilitychange',visible)
+    const id=window.setInterval(()=>void load(),refreshMs(tf)),visible=()=>{if(!document.hidden)void load(true)};document.addEventListener('visibilitychange',visible)
     return()=>{alive=false;clearInterval(id);document.removeEventListener('visibilitychange',visible)}
   },[poolAddress,tf])
 
@@ -50,14 +56,19 @@ export default function CandleChart({poolAddress,currentPrice}:{poolAddress?:str
   useEffect(()=>{
     const series=candleRef.current
     if(!series||!currentPrice||!Number.isFinite(currentPrice))return
-    if(!priceLineRef.current)priceLineRef.current=series.createPriceLine({price:currentPrice,color:'#5b76ff',lineWidth:1,lineStyle:2,axisLabelVisible:true,title:'LIVE'})
+    if(!priceLineRef.current)priceLineRef.current=series.createPriceLine({price:currentPrice,color:'#6179ff',lineWidth:1,lineStyle:2,axisLabelVisible:true,title:'LIVE'})
     else priceLineRef.current.applyOptions({price:currentPrice})
   },[currentPrice])
 
+  useEffect(()=>{if(!expanded)return;const old=document.body.style.overflow;document.body.style.overflow='hidden';const key=(e:KeyboardEvent)=>{if(e.key==='Escape')setExpanded(false)};window.addEventListener('keydown',key);return()=>{document.body.style.overflow=old;window.removeEventListener('keydown',key)}},[expanded])
+  useEffect(()=>{requestAnimationFrame(()=>chartRef.current?.timeScale().fitContent())},[expanded])
+
   const latest=hover||candles[candles.length-1]
-  return <div className="chart-card lw-chart-card">
-    <div className="chart-toolbar"><div className="chart-readout"><span className="chart-title">REAL OHLCV</span><span className={`chart-live-badge ${status.toLowerCase()}`}><i/>{loading?'SYNCING':status}</span>{latest&&<span className="ohlc-readout">O {formatPrice(latest.open)} · H {formatPrice(latest.high)} · L {formatPrice(latest.low)} · C {formatPrice(latest.close)}</span>}</div><div className="tf-group">{timeframes.map(v=><button key={v} title={v==='1M'?'1 month view':v} className={tf===v?'tf active':'tf'} onClick={()=>setTf(v)}>{v}</button>)}</div></div>
+  const summary=useMemo(()=>{if(candles.length<2)return{change:0,volume:0};const first=candles[0],last=candles[candles.length-1];return{change:first.open>0?(last.close/first.open-1)*100:0,volume:candles.reduce((s,c)=>s+Number(c.volume||0),0)}},[candles])
+
+  return <div className={`chart-card lw-chart-card p23-chart ${expanded?'expanded':''}`}>
+    <div className="chart-toolbar p23-chart-toolbar"><div className="chart-readout"><span className="chart-title">{symbol?`$${symbol} · `:''}REAL OHLCV</span><span className={`chart-live-badge ${status.toLowerCase()}`}><i/>{loading?'SYNCING':status}</span>{latest&&<span className="ohlc-readout">O {formatPrice(latest.open)} · H {formatPrice(latest.high)} · L {formatPrice(latest.low)} · C {formatPrice(latest.close)}</span>}</div><div className="chart-summary"><span className={summary.change>=0?'gain':'loss'}>{summary.change>=0?'+':''}{summary.change.toFixed(2)}%</span><span>{compact(summary.volume)} vol</span></div><div className="tf-group">{timeframes.map(v=><button key={v} title={v==='1M'?'1 month view':v} className={tf===v?'tf active':'tf'} onClick={()=>setTf(v)}>{v}</button>)}</div><div className="chart-tools"><button title="Fit chart" onClick={()=>chartRef.current?.timeScale().fitContent()}><RotateCcw size={13}/></button><button title={expanded?'Exit full chart':'Expand chart'} onClick={()=>setExpanded(v=>!v)}>{expanded?<Minimize2 size={13}/>:<Maximize2 size={13}/>}</button></div></div>
     <div className="lw-chart-wrap">{!poolAddress&&<div className="chart-state">Select a token to load its chart.</div>}{poolAddress&&!candles.length&&!error&&<div className="chart-state"><span className="chart-loader"/>Loading real {tf} candles…</div>}{error&&!candles.length&&<div className="chart-state">Chart feed unavailable · retrying automatically.</div>}<div ref={wrap} className="lw-chart-canvas"/></div>
-    <div className="chart-foot"><span>{asOf?`Updated ${new Date(asOf).toLocaleTimeString()}`:'Waiting for market data'}</span>{error&&candles.length>0&&<span className="loss">{error}</span>}<a href="https://www.tradingview.com/" target="_blank" rel="noreferrer">Charts by TradingView</a></div>
+    <div className="chart-foot"><span>{asOf?`Updated ${new Date(asOf).toLocaleTimeString()}`:'Waiting for market data'}</span><span>{tf==='1M'?'30 daily candles · one-month view':`${candles.length} candles · ${tf}`}</span>{error&&candles.length>0&&<span className="loss">{error}</span>}<span className="chart-provider">Market data · GeckoTerminal</span></div>
   </div>
 }
