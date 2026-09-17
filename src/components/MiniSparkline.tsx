@@ -1,24 +1,69 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 
 type Candle={time:number;open:number;high:number;low:number;close:number;volume:number}
+type Timeframe='1m'|'5m'|'15m'|'30m'|'1h'
 
-export default function MiniSparkline({pool,timeframe='5m'}:{pool?:string;timeframe?:'1m'|'5m'|'15m'|'30m'|'1h'}){
+type CacheEntry={at:number;candles:Candle[]}
+const cache=new Map<string,CacheEntry>()
+const CACHE_MS=45_000
+
+export default function MiniSparkline({pool,timeframe='5m'}:{pool?:string;timeframe?:Timeframe}){
+  const hostRef=useRef<HTMLDivElement|null>(null)
+  const [visible,setVisible]=useState(false)
   const [candles,setCandles]=useState<Candle[]>([])
+  const [loading,setLoading]=useState(false)
+
   useEffect(()=>{
-    if(!pool){setCandles([]);return}
+    const node=hostRef.current
+    if(!node)return
+    if(typeof IntersectionObserver==='undefined'){setVisible(true);return}
+    const observer=new IntersectionObserver(entries=>{
+      if(entries.some(entry=>entry.isIntersecting)){setVisible(true);observer.disconnect()}
+    },{rootMargin:'260px 0px'})
+    observer.observe(node)
+    return()=>observer.disconnect()
+  },[])
+
+  useEffect(()=>{
+    if(!pool||!visible){if(!pool)setCandles([]);return}
+    const key=`${pool}:${timeframe}`
     let alive=true
-    const load=async()=>{
-      try{
-        const r=await fetch(`/api/market/ohlcv/${encodeURIComponent(pool)}?tf=${timeframe}`,{cache:'no-store'})
-        const j=await r.json()
-        if(alive&&r.ok)setCandles((j.candles||[]).slice(-36))
-      }catch{if(alive)setCandles([])}
+    let controller:AbortController|undefined
+
+    const applyCached=()=>{
+      const hit=cache.get(key)
+      if(hit?.candles.length){setCandles(hit.candles);return hit}
+      return null
     }
-    void load();const id=setInterval(load,30000)
-    return()=>{alive=false;clearInterval(id)}
-  },[pool,timeframe])
+
+    const load=async(force=false)=>{
+      if(document.hidden&&!force)return
+      const hit=cache.get(key)
+      if(!force&&hit&&Date.now()-hit.at<CACHE_MS){if(alive)setCandles(hit.candles);return}
+      controller?.abort()
+      controller=new AbortController()
+      if(!hit&&alive)setLoading(true)
+      try{
+        const r=await fetch(`/api/market/ohlcv/${encodeURIComponent(pool)}?tf=${timeframe}`,{cache:'no-store',signal:controller.signal})
+        const j=await r.json()
+        const next=((j.candles||[]) as Candle[]).slice(-36)
+        if(!r.ok||next.length<2)return
+        cache.set(key,{at:Date.now(),candles:next})
+        if(alive)setCandles(next)
+      }catch(error){
+        if((error as {name?:string})?.name!=='AbortError'&&!hit&&alive)setCandles([])
+      }finally{if(alive)setLoading(false)}
+    }
+
+    applyCached()
+    void load()
+    const id=window.setInterval(()=>void load(true),60_000)
+    const onVisible=()=>{if(!document.hidden)void load()}
+    document.addEventListener('visibilitychange',onVisible)
+    return()=>{alive=false;controller?.abort();window.clearInterval(id);document.removeEventListener('visibilitychange',onVisible)}
+  },[pool,timeframe,visible])
 
   const graph=useMemo(()=>{
     if(candles.length<2)return null
@@ -26,9 +71,11 @@ export default function MiniSparkline({pool,timeframe='5m'}:{pool?:string;timefr
     if(values.length<2)return null
     const min=Math.min(...values),max=Math.max(...values),span=Math.max(max-min,Number.EPSILON)
     const pts=values.map((v,i)=>({x:(i/(values.length-1))*100,y:31-((v-min)/span)*27}))
-    return {line:pts.map(p=>`${p.x},${p.y}`).join(' '),area:`0,34 ${pts.map(p=>`${p.x},${p.y}`).join(' ')} 100,34`,up:values.at(-1)!>=values[0]}
+    const line=pts.map(p=>`${p.x},${p.y}`).join(' ')
+    return {line,area:`0,34 ${line} 100,34`,up:values.at(-1)!>=values[0]}
   },[candles])
 
-  if(!graph)return <div className="spark spark-loading"><span>—</span></div>
-  return <div className={`spark ${graph.up?'up':'down'}`} title={`Real ${timeframe} market candles`}><svg viewBox="0 0 100 34" preserveAspectRatio="none"><polygon className="spark-fill" points={graph.area}/><polyline points={graph.line} fill="none" stroke="currentColor" strokeWidth="1.8" vectorEffect="non-scaling-stroke"/></svg></div>
+  return <div ref={hostRef} className={`spark ${graph?(graph.up?'up':'down'):'spark-loading'} ${loading?'is-refreshing':''}`} title={graph?`Real ${timeframe} market candles`:'Loading market candles'}>
+    {graph?<svg viewBox="0 0 100 34" preserveAspectRatio="none" aria-hidden="true"><polygon className="spark-fill" points={graph.area}/><polyline points={graph.line} fill="none" stroke="currentColor" strokeWidth="1.8" vectorEffect="non-scaling-stroke"/></svg>:<span>—</span>}
+  </div>
 }
