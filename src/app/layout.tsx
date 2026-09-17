@@ -9,10 +9,11 @@ import "./terminal-finishing.css";
 import "./smoothness.css";
 import "./v3.css";
 import "./live-upgrade.css";
+import "./phase1.css";
 
 export const metadata: Metadata = {
   title: "PAPER — Memecoin Paper Trading Terminal",
-  description: "Live Solana memecoins. PAPER money. Real market movement.",
+  description: "Real memecoin market data. Simulated PAPER trading. No wallet required.",
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
