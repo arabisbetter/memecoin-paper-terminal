@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
-import { Activity, ArrowUpRight, BarChart3, Check, Eye, Layers3, ShieldCheck, Sparkles, Zap } from 'lucide-react'
+import { Activity, ArrowUpRight, BarChart3, Check, Eye, HeartHandshake, Layers3, ShieldCheck, Sparkles, Zap } from 'lucide-react'
 import type { MarketToken } from '@/lib/types'
 
 const money=(n:number)=>{
@@ -29,7 +29,7 @@ function MiniBars({token}:{token:MarketToken}){
 
 export default function LandingHome(){
   const [tokens,setTokens]=useState<MarketToken[]>([]),[source,setSource]=useState('market feed'),[status,setStatus]=useState<'LIVE'|'DEGRADED'|'LOADING'>('LOADING'),[active,setActive]=useState(0)
-  useEffect(()=>{let mounted=true,busy=false;async function load(){if(busy||document.hidden)return;busy=true;try{const r=await fetch('/api/market/latest',{cache:'no-store'}),j=await r.json();if(!r.ok)throw new Error(j.error||'feed unavailable');if(!mounted)return;setTokens(Array.isArray(j.tokens)?j.tokens:[]);setSource(String(j.source||'market feed'));setStatus(j.stale||j.warning||j.live===false?'DEGRADED':'LIVE')}catch{if(mounted)setStatus('DEGRADED')}finally{busy=false}}void load();const feed=window.setInterval(load,5000),rotate=window.setInterval(()=>setActive(v=>v+1),4200);return()=>{mounted=false;clearInterval(feed);clearInterval(rotate)}},[])
+  useEffect(()=>{let mounted=true,busy=false;async function load(){if(busy||document.hidden)return;busy=true;try{const r=await fetch('/api/market/latest',{cache:'no-store'}),j=await r.json();if(!r.ok)throw new Error(j.error||'feed unavailable');if(!mounted)return;setTokens(Array.isArray(j.tokens)?j.tokens:[]);setSource(String(j.source||'market feed'));setStatus(j.stale||j.warning||j.live===false?'DEGRADED':'LIVE')}catch{if(mounted)setStatus('DEGRADED')}finally{busy=false}}void load();const feed=window.setInterval(load,8000),rotate=window.setInterval(()=>setActive(v=>v+1),5200);const visible=()=>{if(!document.hidden)void load()};document.addEventListener('visibilitychange',visible);return()=>{mounted=false;clearInterval(feed);clearInterval(rotate);document.removeEventListener('visibilitychange',visible)}},[])
   const ranked=useMemo(()=>[...tokens].filter(t=>Number(t.priceUsd)>0).sort((a,b)=>hotScore(b)-hotScore(a)).slice(0,8),[tokens])
   const hero=ranked.length?ranked[active%ranked.length]:null
   const totalVolume=ranked.reduce((n,t)=>n+Number(t.volume5m||0),0)
@@ -38,7 +38,7 @@ export default function LandingHome(){
     <div className="paper-ambient paper-ambient-a"/><div className="paper-ambient paper-ambient-b"/><div className="paper-grid"/>
     <header className="paper-nav">
       <Link href="/" className="paper-brand"><span className="paper-brand-mark"><PaperMark/></span><span>PAPER</span></Link>
-      <nav className="paper-nav-links"><Link href="/spot">Trade</Link><Link href="/pulse">Pulse</Link><Link href="/portfolio">Portfolio</Link><Link href="/leaderboards">Leaderboard</Link><Link href="/chains">Chains</Link></nav>
+      <nav className="paper-nav-links"><Link href="/spot">Trade</Link><Link href="/pulse">Pulse</Link><Link href="/portfolio">Portfolio</Link><Link href="/leaderboards">Leaderboard</Link><a href="#charity">Charity</a></nav>
       <Link href="/spot" className="paper-nav-cta">Launch PAPER <ArrowUpRight size={15}/></Link>
     </header>
 
@@ -68,7 +68,7 @@ export default function LandingHome(){
       </div>
     </section>
 
-    <section className="paper-marquee" aria-label="PAPER principles"><div>{Array.from({length:2}).map((_,group)=><span key={group}>REAL MARKETS <i/> PAPER MONEY <i/> NO WALLET <i/> TRACK EVERYTHING <i/> LEARN FASTER <i/> TRADE PAPER. EARN REAL. <i/></span>)}</div></section>
+    <section className="paper-marquee" aria-label="PAPER principles"><div>{Array.from({length:2}).map((_,group)=><span key={group}>REAL MARKETS <i/> PAPER MONEY <i/> NO WALLET <i/> TRACK EVERYTHING <i/> LEARN FASTER <i/> GIVE REAL <i/> TRADE PAPER. EARN REAL. <i/></span>)}</div></section>
 
     <section className="paper-manifesto paper-section">
       <div className="paper-section-tag">THE IDEA</div>
@@ -88,8 +88,19 @@ export default function LandingHome(){
       <div className="paper-truth-stack"><article><Eye/><span><b>REAL MARKET INPUTS</b><small>Prices and activity come from external market providers, not synthetic candles.</small></span></article><article><ShieldCheck/><span><b>SIMULATED EXECUTION</b><small>PAPER only — no real trade is submitted.</small></span></article><article><Layers3/><span><b>MULTI-CHAIN WATCH</b><small>Solana trading plus Base and Ethereum market discovery in watch mode.</small></span></article><article><Sparkles/><span><b>STATUS, NOT CASH</b><small>Points and tiers are community status. Real-money prizes remain disabled.</small></span></article></div>
     </section>
 
+    <section id="charity" className="paper-charity paper-section">
+      <div className="paper-charity-glow"/>
+      <div className="paper-charity-icon"><HeartHandshake size={38}/></div>
+      <div className="paper-section-tag">REAL IMPACT · FUTURE PLEDGE</div>
+      <h2>TRADE PAPER.<br/><span>GIVE REAL.</span></h2>
+      <p className="paper-charity-lead">If official PAPER giveaways are activated, our stated policy is a <b>dollar-for-dollar charity match</b>: every $1 distributed in an official giveaway is paired with $1 donated to charity.</p>
+      <div className="paper-charity-grid"><article><small>EXAMPLE GIVEAWAY</small><strong>$1,000</strong><span>to the community</span></article><div className="paper-charity-plus">+</div><article><small>CHARITY MATCH</small><strong>$1,000</strong><span>donated to charity</span></article><div className="paper-charity-equals">=</div><article className="impact"><small>VISIBLE IMPACT</small><strong>$2,000</strong><span>community + charity</span></article></div>
+      <div className="paper-charity-proof"><ShieldCheck size={18}/><span><b>Proof over promises.</b> Giveaway rules, recipients, donation amounts and receipts should be published together after each completed campaign. Giveaways and matching are not active yet.</span></div>
+      <div className="paper-charity-actions"><Link href="/coin">CHARITY POLICY <ArrowUpRight size={14}/></Link><Link href="/rewards">REWARDS &amp; POINTS <ArrowUpRight size={14}/></Link></div>
+    </section>
+
     <section className="paper-final-cta paper-section"><div className="paper-final-mark"><PaperMark/></div><div className="paper-section-tag">READY?</div><h2>TRADE PAPER.<br/><span>EARN REAL.</span></h2><p>Real market experience starts with fake money.</p><Link href="/spot" className="paper-primary-btn"><Zap size={18}/> START WITH $1,000 PAPER</Link></section>
 
-    <footer className="paper-footer"><div className="paper-brand"><span className="paper-brand-mark"><PaperMark/></span><span>PAPER</span></div><p>PAPER is a simulated trading product. No real trade is submitted. External market links may involve real funds.</p><div><Link href="/legal#terms">Terms</Link><Link href="/legal#privacy">Privacy</Link><Link href="/legal#risk">Risk</Link></div></footer>
+    <footer className="paper-footer"><div className="paper-brand"><span className="paper-brand-mark"><PaperMark/></span><span>PAPER</span></div><p>PAPER is a simulated trading product. No real trade is submitted. External market links may involve real funds.</p><div><a href="#charity">Charity</a><Link href="/legal#terms">Terms</Link><Link href="/legal#privacy">Privacy</Link><Link href="/legal#risk">Risk</Link></div></footer>
   </main>
 }
