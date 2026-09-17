@@ -4,7 +4,7 @@ export default function manifest():MetadataRoute.Manifest{
   return {
     name:'PAPER — Trade PAPER. Earn real.',
     short_name:'PAPER',
-    description:'Real memecoin market data with simulated PAPER trading. No wallet. No deposits.',
+    description:'Live Solana memecoin paper trading and free evaluation with simulated capital.',
     start_url:'/',
     display:'standalone',
     background_color:'#05070a',
