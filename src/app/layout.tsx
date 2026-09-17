@@ -10,6 +10,7 @@ import "./smoothness.css";
 import "./v3.css";
 import "./live-upgrade.css";
 import "./phase1.css";
+import "./errors.css";
 
 export const metadata: Metadata = {
   title: "PAPER — Memecoin Paper Trading Terminal",
