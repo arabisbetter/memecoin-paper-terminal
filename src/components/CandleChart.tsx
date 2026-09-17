@@ -26,35 +26,32 @@ export default function CandleChart({ poolAddress, currentPrice }: { poolAddress
       return
     }
     let alive = true
-    let controller:AbortController|undefined
-    async function load(force=false) {
-      if(document.hidden&&!force)return
-      controller?.abort()
-      controller=new AbortController()
-      if(alive)setLoading(true)
+    async function load() {
+      if (document.hidden) return
+      if (alive) setLoading(true)
       try {
-        const r = await fetch(`/api/market/ohlcv/${encodeURIComponent(poolAddress)}?tf=${tf}`, { cache: 'no-store', signal:controller.signal })
+        const r = await fetch(`/api/market/ohlcv/${encodeURIComponent(poolAddress)}?tf=${tf}`, { cache: 'no-store' })
         const j = await r.json()
         if (!r.ok) throw new Error(j.error || 'chart unavailable')
-        const next=(j.candles||[]) as Candle[]
-        if (alive&&next.length) {
-          setCandles(next)
+        if (alive) {
+          const next = (j.candles || []) as Candle[]
+          if (next.length) setCandles(next)
           setError('')
-          setHovered(null)
         }
       } catch (e) {
-        if((e as {name?:string})?.name!=='AbortError'&&alive)setError(e instanceof Error ? e.message : 'chart unavailable')
-      } finally { if(alive)setLoading(false) }
+        if (alive) setError(e instanceof Error ? e.message : 'chart unavailable')
+      } finally {
+        if (alive) setLoading(false)
+      }
     }
-    void load(true)
-    const id = window.setInterval(()=>void load(), 12_000)
-    const onVisible=()=>{if(!document.hidden)void load(true)}
-    document.addEventListener('visibilitychange',onVisible)
+    void load()
+    const id = window.setInterval(() => void load(), 12000)
+    const onVisible = () => { if (!document.hidden) void load() }
+    document.addEventListener('visibilitychange', onVisible)
     return () => {
       alive = false
-      controller?.abort()
       window.clearInterval(id)
-      document.removeEventListener('visibilitychange',onVisible)
+      document.removeEventListener('visibilitychange', onVisible)
     }
   }, [poolAddress, tf])
 
@@ -62,9 +59,7 @@ export default function CandleChart({ poolAddress, currentPrice }: { poolAddress
   const geom = useMemo(() => {
     if (!visible.length) return null
     const hi = Math.max(...visible.map(c => c.high), currentPrice || 0)
-    const positiveLows=visible.map(c=>c.low).filter(v=>v>0)
-    const lo = Math.min(...positiveLows, currentPrice && currentPrice>0 ? currentPrice : Infinity)
-    if(!Number.isFinite(lo))return null
+    const lo = Math.min(...visible.map(c => c.low).filter(v => v > 0), currentPrice || Infinity)
     const maxVol = Math.max(...visible.map(c => c.volume), 1)
     const pad = Math.max((hi - lo) * 0.08, hi * 0.002)
     return { hi: hi + pad, lo: Math.max(0, lo - pad), maxVol }
@@ -79,7 +74,7 @@ export default function CandleChart({ poolAddress, currentPrice }: { poolAddress
 
   const hoverCandle = hovered == null ? visible[visible.length - 1] : visible[hovered]
 
-  return <div className={`chart-card ${loading?'is-loading':''}`}>
+  return <div className={`chart-card ${loading ? 'is-loading' : ''}`}>
     <div className="chart-toolbar">
       <div>
         <span className="chart-title">LIVE CHART</span>
@@ -91,7 +86,7 @@ export default function CandleChart({ poolAddress, currentPrice }: { poolAddress
     </div>
     <div className="chart-stage" onMouseLeave={()=>setHovered(null)}>
       {!poolAddress && <div className="chart-state">Select a token to load its chart.</div>}
-      {poolAddress && !visible.length && loading && <div className="chart-state chart-loading">Loading real market candles…</div>}
+      {poolAddress && !visible.length && !error && <div className="chart-state chart-loading">Loading real market candles…</div>}
       {error && !visible.length && <div className="chart-state">Historical candles are temporarily unavailable.</div>}
       {!!visible.length && geom && <svg viewBox="0 0 1000 390" preserveAspectRatio="none" role="img" aria-label="Live candlestick chart">
         {[0,1,2,3,4].map(i => {
@@ -115,7 +110,7 @@ export default function CandleChart({ poolAddress, currentPrice }: { poolAddress
         {hovered != null && <line x1={xFor(hovered)} x2={xFor(hovered)} y1="12" y2="368" className="crosshair"/>}
         {currentPrice && Number.isFinite(currentPrice) && <g><line x1="46" x2="970" y1={yFor(currentPrice)} y2={yFor(currentPrice)} className="price-line"/><text x="895" y={yFor(currentPrice)-7} className="price-tag">{formatPrice(currentPrice)}</text></g>}
       </svg>}
-      {loading&&visible.length>0&&<div className="chart-refresh-indicator" aria-label="Refreshing chart"/>}
+      {loading && visible.length > 0 && <div className="chart-refresh-indicator" aria-label="Refreshing chart"/>}
     </div>
   </div>
 }
