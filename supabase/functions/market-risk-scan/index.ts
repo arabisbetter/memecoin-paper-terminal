@@ -48,10 +48,11 @@ async function rpc(endpoint:string,method:string,params:unknown[]){
 }
 async function health(admin:any,provider:string,ok:boolean,latencyMs:number|null,error?:string,metadata:Record<string,unknown>={}){
   const {data:cur}=await admin.from('paper_market_provider_health').select('consecutive_successes,consecutive_failures').eq('provider',provider).maybeSingle()
+  const skipped=metadata?.skipped===true
   await admin.from('paper_market_provider_health').upsert({
-    provider,status:ok?'LIVE':(Number(cur?.consecutive_failures||0)>=1?'DOWN':'DEGRADED'),
+    provider,status:ok?'LIVE':(skipped?'DEGRADED':Number(cur?.consecutive_failures||0)>=1?'DOWN':'DEGRADED'),
     last_latency_ms:latencyMs,consecutive_successes:ok?Number(cur?.consecutive_successes||0)+1:0,
-    consecutive_failures:ok?0:Number(cur?.consecutive_failures||0)+1,
+    consecutive_failures:ok||skipped?0:Number(cur?.consecutive_failures||0)+1,
     last_success_at:ok?new Date().toISOString():undefined,last_failure_at:ok?undefined:new Date().toISOString(),
     last_error:ok?null:String(error||'provider unavailable').slice(0,500),metadata,updated_at:new Date().toISOString()
   },{onConflict:'provider'})
@@ -108,6 +109,7 @@ Deno.serve(async(req:Request)=>{
     }
 
     const heliusKey=Deno.env.get('HELIUS_API_KEY')
+    if(!heliusKey)await health(admin,'helius',false,null,'HELIUS_API_KEY not configured',{skipped:true})
     const endpoint=heliusKey
       ?`https://mainnet.helius-rpc.com/?api-key=${encodeURIComponent(heliusKey)}`
       :'https://api.mainnet-beta.solana.com'
