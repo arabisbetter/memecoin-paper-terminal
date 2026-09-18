@@ -7,8 +7,9 @@ import {
 } from 'lucide-react'
 import {
   CandlestickSeries, ColorType, CrosshairMode, HistogramSeries, LineSeries, PriceScaleMode,
-  createChart, type IChartApi, type ISeriesApi, type UTCTimestamp
+  createChart, createSeriesMarkers, type IChartApi, type ISeriesApi, type UTCTimestamp
 } from 'lightweight-charts'
+import { createClient } from '@/lib/supabase/client'
 
 type Candle={time:number;open:number;high:number;low:number;close:number;volume:number}
 type Timeframe='1s'|'5s'|'15s'|'30s'|'1m'|'3m'|'5m'|'15m'|'30m'|'1h'|'4h'|'6h'|'12h'|'24h'|'1M'
@@ -17,7 +18,8 @@ type TimeframeGroup={label:string;items:TimeframeOption[]}
 type ChartMode='price'|'marketCap'
 type QuoteMode='usd'|'sol'
 type ScaleMode='normal'|'percent'|'log'
-type UserLevel={price:number;color:string;title:string}
+type UserLevel={price:number;color:string;title:string;mode:ChartMode;quote:QuoteMode}
+type PaperTradeMarker={id:string;action:'buy'|'sell';simulated_fill_price_usd:number;simulated_fill_mc_usd:number|null;ts:string}
 
 const timeframeGroups:TimeframeGroup[]=[
   {label:'SECONDS',items:[{value:'1s',label:'1 second'},{value:'5s',label:'5 seconds'},{value:'15s',label:'15 seconds'},{value:'30s',label:'30 seconds'}]},
@@ -64,9 +66,10 @@ const vwap=(rows:Candle[])=>{
 }
 
 export default function CandleChart({
-  poolAddress,currentPrice,currentMarketCap,currentSolUsd,averageEntryPrice,averageEntryMarketCap,symbol,venue
+  poolAddress,tokenId,currentPrice,currentMarketCap,currentSolUsd,averageEntryPrice,averageEntryMarketCap,symbol,venue
 }:{
   poolAddress?:string
+  tokenId?:string
   currentPrice?:number
   currentMarketCap?:number
   currentSolUsd?:number
@@ -75,6 +78,7 @@ export default function CandleChart({
   symbol?:string
   venue?:string
 }){
+  const supabase=useMemo(()=>{try{return createClient()}catch{return null}},[])
   const wrap=useRef<HTMLDivElement|null>(null)
   const pickerRef=useRef<HTMLDivElement|null>(null)
   const chartRef=useRef<IChartApi|null>(null)
@@ -85,12 +89,14 @@ export default function CandleChart({
   const vwapRef=useRef<ISeriesApi<'Line'>|null>(null)
   const priceLineRef=useRef<any>(null)
   const costLineRef=useRef<any>(null)
+  const tradeMarkersRef=useRef<any>(null)
   const userPriceLines=useRef<any[]>([])
   const userLevels=useRef<UserLevel[]>([])
   const redoLevels=useRef<UserLevel[]>([])
   const renderedRef=useRef<{first:number;last:number;mode:ChartMode;quote:QuoteMode}|null>(null)
   const hasDataRef=useRef(false)
   const userPickedMode=useRef(false)
+  const workspaceLoaded=useRef(false)
 
   const [tf,setTf]=useState<Timeframe>('1s')
   const [tfOpen,setTfOpen]=useState(false)
@@ -112,6 +118,8 @@ export default function CandleChart({
   const [showEma9,setShowEma9]=useState(false)
   const [showEma21,setShowEma21]=useState(false)
   const [showVwap,setShowVwap]=useState(false)
+  const [showTradeMarkers,setShowTradeMarkers]=useState(true)
+  const [trades,setTrades]=useState<PaperTradeMarker[]>([])
   const [levelVersion,setLevelVersion]=useState(0)
 
   const impliedSupply=useMemo(()=>{
@@ -128,6 +136,34 @@ export default function CandleChart({
   },[mcAvailable,mode])
   useEffect(()=>{if(quote==='sol'&&!solAvailable)setQuote('usd')},[quote,solAvailable])
   useEffect(()=>{setHover(null)},[mode,quote])
+
+  useEffect(()=>{
+    try{
+      const saved=JSON.parse(localStorage.getItem('paper.chart.workspace.v2')||'{}')
+      if(saved.tf&&timeframeGroups.flatMap(g=>g.items).some(i=>i.value===saved.tf))setTf(saved.tf)
+      if(saved.mode==='price'||saved.mode==='marketCap'){setMode(saved.mode);userPickedMode.current=true}
+      if(saved.quote==='usd'||saved.quote==='sol')setQuote(saved.quote)
+      if(saved.scaleMode==='normal'||saved.scaleMode==='percent'||saved.scaleMode==='log')setScaleMode(saved.scaleMode)
+      if(typeof saved.showVolume==='boolean')setShowVolume(saved.showVolume)
+      if(typeof saved.showGrid==='boolean')setShowGrid(saved.showGrid)
+      if(typeof saved.showCrosshair==='boolean')setShowCrosshair(saved.showCrosshair)
+      if(typeof saved.showEma9==='boolean')setShowEma9(saved.showEma9)
+      if(typeof saved.showEma21==='boolean')setShowEma21(saved.showEma21)
+      if(typeof saved.showVwap==='boolean')setShowVwap(saved.showVwap)
+      if(typeof saved.showTradeMarkers==='boolean')setShowTradeMarkers(saved.showTradeMarkers)
+      if(Array.isArray(saved.levels))userLevels.current=saved.levels.filter((l:any)=>Number(l?.price)>0&&(l?.mode==='price'||l?.mode==='marketCap')&&(l?.quote==='usd'||l?.quote==='sol')).slice(0,25)
+    }catch{}
+    workspaceLoaded.current=true
+    setLevelVersion(v=>v+1)
+  },[])
+
+  useEffect(()=>{
+    if(!workspaceLoaded.current)return
+    localStorage.setItem('paper.chart.workspace.v2',JSON.stringify({
+      tf,mode,quote,scaleMode,showVolume,showGrid,showCrosshair,showEma9,showEma21,showVwap,showTradeMarkers,
+      levels:userLevels.current
+    }))
+  },[tf,mode,quote,scaleMode,showVolume,showGrid,showCrosshair,showEma9,showEma21,showVwap,showTradeMarkers,levelVersion])
 
   useEffect(()=>{
     if(!wrap.current)return
@@ -180,6 +216,7 @@ export default function CandleChart({
       vwapRef.current=null
       priceLineRef.current=null
       costLineRef.current=null
+      tradeMarkersRef.current=null
       userPriceLines.current=[]
     }
   },[])
