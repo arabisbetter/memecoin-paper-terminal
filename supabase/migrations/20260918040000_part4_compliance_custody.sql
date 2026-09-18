@@ -159,12 +159,18 @@ alter table public.paper_funded_profiles enable row level security;
 drop policy if exists paper_funded_profiles_read_own on public.paper_funded_profiles;
 create policy paper_funded_profiles_read_own on public.paper_funded_profiles
   for select to authenticated using ((select auth.uid())=user_id);
+drop policy if exists paper_funded_profiles_update_own_preference on public.paper_funded_profiles;
+create policy paper_funded_profiles_update_own_preference on public.paper_funded_profiles
+  for update to authenticated
+  using ((select auth.uid())=user_id)
+  with check ((select auth.uid())=user_id);
 revoke all on public.paper_funded_profiles from public,anon,authenticated;
 grant select(user_id,stage,kyc_status,kyc_provider,kyc_reference,kyc_verified_at,payout_wallet_address,
   payout_wallet_verified_at,approved_at,activated_at,updated_at,jurisdiction_country_code,
   jurisdiction_region_code,jurisdiction_status,age_verified,sanctions_status,aml_status,tax_status,
   preferred_payout_asset,compliance_checked_at,requalify_after)
 on public.paper_funded_profiles to authenticated;
+grant update(preferred_payout_asset,updated_at) on public.paper_funded_profiles to authenticated;
 
 alter table public.paper_platform_flags enable row level security;
 drop policy if exists paper_platform_flags_read on public.paper_platform_flags;
