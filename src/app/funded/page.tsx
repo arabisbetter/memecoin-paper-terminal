@@ -106,8 +106,11 @@ export default function FundedPage(){
       const body=tradeSide==='buy'
         ?{mint,side:'buy',notionalUsd:notional,slippageBps:slippage,idempotencyKey:crypto.randomUUID()}
         :{mint,side:'sell',sellPct,slippageBps:slippage,idempotencyKey:crypto.randomUUID()}
-      const {data,error}=await supabase.functions.invoke('funded-execution',{body})
-      if(error)throw error;if(data?.error)throw new Error(data.error)
+      const {data:{session},error:sessionError}=await supabase.auth.getSession()
+      if(sessionError||!session?.access_token)throw new Error('Authenticated session required')
+      const response=await fetch('/api/funded/execute',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+session.access_token},body:JSON.stringify(body)})
+      const data=await response.json().catch(()=>({}))
+      if(!response.ok||data?.error)throw new Error(data?.error||'Funded order failed')
       setMessage('Funded order confirmed: '+String(data?.txSignature||data?.orderId||'confirmed'))
       await load()
     }catch(e){setMessage(e instanceof Error?e.message:'Funded order failed')}finally{setTradeBusy(false)}
