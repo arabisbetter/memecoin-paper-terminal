@@ -17,7 +17,11 @@
     "next": "^16.0.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
-    "zod": "^4.1.11"
+    "zod": "^4.1.11",
+    "@solana/web3.js": "1.99.0",
+    "@sumsub/websdk-react": "2.9.0",
+    "@turnkey/sdk-server": "8.4.0",
+    "@turnkey/solana": "1.1.40"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",
