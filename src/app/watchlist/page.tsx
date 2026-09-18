@@ -156,7 +156,8 @@ export default function WatchlistPage(){
       if(!watch?.push_enabled)continue
       notified.add(event.id)
       const label=event.alert_type==='price'?'price':event.alert_type.replaceAll('_',' ')
-      const body='
+      const body='$'+(event.token_symbol||'TOKEN')+' · '+label+' alert triggered'
+      new Notification('PAPER '+label+' alert',{body,tag:'paper-alert-'+event.id})
     }
   },[alerts,items,notificationPermission,notified])
 
@@ -310,7 +311,8 @@ export default function WatchlistPage(){
             ?<div className="watch-alert-empty">No triggered server alerts yet.</div>
             :<div className="watch-alert-event-list">
               {alerts.slice(0,8).map(event=><button className={'watch-alert-event '+(event.status==='unread'?'unread':'')} key={event.id} onClick={()=>void markAlertRead(event.id)}>
-                <span><b>{'
+                <span><b>{'$'+(event.token_symbol||'TOKEN')}</b><small>{event.alert_type.replaceAll('_',' ').toUpperCase()}</small></span>
+                <strong>{event.alert_type==='price'?money(Number(event.observed_price_usd)):Number(event.observed_price_usd).toLocaleString(undefined,{maximumFractionDigits:2})}</strong>
                 <time>{new Date(event.created_at).toLocaleString()}</time>
               </button>)}
             </div>}
