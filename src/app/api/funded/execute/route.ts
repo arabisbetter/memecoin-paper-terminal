@@ -3,6 +3,7 @@ import { createClient } from '@supabase/supabase-js'
 import { Turnkey } from '@turnkey/sdk-server'
 import { TurnkeySigner } from '@turnkey/solana'
 import { VersionedTransaction } from '@solana/web3.js'
+import { consumeServerRateLimit, validateActiveSession } from '@/lib/server/security'
 
 export const runtime='nodejs'
 
@@ -118,7 +119,10 @@ export async function POST(req:NextRequest){
     const {data:{user},error:userError}=await userClient.auth.getUser()
     if(userError||!user||user.is_anonymous)return out({error:'verified login required'},401)
     userId=user.id
+    if(!(await validateActiveSession(admin,user.id,auth,false)))return out({error:'session revoked or expired'},401)
 
+    const contentLength=Number(req.headers.get('content-length')||0)
+    if(contentLength>16384)return out({error:'request body too large'},413)
     const body=await req.json().catch(()=>({}))
     const mint=String(body?.mint||'').trim(),side=String(body?.side||'').toLowerCase(),idempotencyKey=String(body?.idempotencyKey||'').trim()
     const slippageBps=Math.round(finite(body?.slippageBps,300))
@@ -129,6 +133,9 @@ export async function POST(req:NextRequest){
 
     const {data:existing}=await admin.from('paper_funded_orders').select('*').eq('user_id',userId).eq('idempotency_key',idempotencyKey).maybeSingle()
     if(existing)return out({ok:existing.status==='confirmed',idempotent:true,orderId:existing.id,status:existing.status,txSignature:existing.tx_signature||null,rejectionReason:existing.rejection_reason||existing.last_error||null})
+
+    const tradeRate=await consumeServerRateLimit(admin,'funded_trade',userId,12,60)
+    if(tradeRate?.allowed===false)return out({error:'RATE_LIMITED',retryAfterSeconds:tradeRate.retry_after_seconds||60},429)
 
     const {data:account,error:accountError}=await admin.from('paper_funded_accounts').select('*').eq('user_id',userId).maybeSingle()
     if(accountError)throw new Error(accountError.message)
