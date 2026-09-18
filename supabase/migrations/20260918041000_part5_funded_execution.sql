@@ -604,6 +604,10 @@ begin
   if s.id is null then raise exception 'settlement not found'; end if;
   if s.status='paid' then return jsonb_build_object('ok',true,'idempotent',true,'tx_signature',s.payout_tx_signature); end if;
   if s.status<>'approved' then raise exception 'settlement not approved'; end if;
+  if s.approved_by is null or s.approved_at is null then raise exception 'ADMIN_APPROVAL_REQUIRED'; end if;
+  if s.trader_share_usd>2000 and (
+    s.second_approved_by is null or s.second_approved_at is null or s.second_approved_by=s.approved_by
+  ) then raise exception 'SECOND_ADMIN_APPROVAL_REQUIRED'; end if;
   if not coalesce((select real_payouts_enabled from public.paper_platform_flags where id=true),false) then
     raise exception 'REAL_PAYOUTS_DISABLED';
   end if;
