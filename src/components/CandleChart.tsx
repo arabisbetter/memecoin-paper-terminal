@@ -3,12 +3,14 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   Activity, Camera, Check, ChevronDown, Crosshair, Eye, Maximize2, Minimize2,
-  Minus, MousePointer2, Plus, Redo2, RotateCcw, Settings2, SlidersHorizontal, Undo2
+  Minus, MousePointer2, Plus, Redo2, RotateCcw, Settings2, SlidersHorizontal, Undo2, TrendingUp, Square, MoveRight, Trash2
 } from 'lucide-react'
 import {
   CandlestickSeries, ColorType, CrosshairMode, HistogramSeries, LineSeries, PriceScaleMode,
-  createChart, type IChartApi, type ISeriesApi, type UTCTimestamp
+  createChart, createSeriesMarkers, type IChartApi, type ISeriesApi, type UTCTimestamp
 } from 'lightweight-charts'
+import { createClient } from '@/lib/supabase/client'
+import ChartDrawingOverlay, { type DrawingTool } from '@/components/ChartDrawingOverlay'
 
 type Candle={time:number;open:number;high:number;low:number;close:number;volume:number}
 type Timeframe='1s'|'5s'|'15s'|'30s'|'1m'|'3m'|'5m'|'15m'|'30m'|'1h'|'4h'|'6h'|'12h'|'24h'|'1M'
@@ -17,7 +19,8 @@ type TimeframeGroup={label:string;items:TimeframeOption[]}
 type ChartMode='price'|'marketCap'
 type QuoteMode='usd'|'sol'
 type ScaleMode='normal'|'percent'|'log'
-type UserLevel={price:number;color:string;title:string}
+type UserLevel={price:number;color:string;title:string;mode:ChartMode;quote:QuoteMode}
+type PaperTradeMarker={id:string;action:'buy'|'sell';simulated_fill_price_usd:number;simulated_fill_mc_usd:number|null;ts:string}
 
 const timeframeGroups:TimeframeGroup[]=[
   {label:'SECONDS',items:[{value:'1s',label:'1 second'},{value:'5s',label:'5 seconds'},{value:'15s',label:'15 seconds'},{value:'30s',label:'30 seconds'}]},
@@ -64,9 +67,10 @@ const vwap=(rows:Candle[])=>{
 }
 
 export default function CandleChart({
-  poolAddress,currentPrice,currentMarketCap,currentSolUsd,averageEntryPrice,averageEntryMarketCap,symbol,venue
+  poolAddress,tokenId,currentPrice,currentMarketCap,currentSolUsd,averageEntryPrice,averageEntryMarketCap,symbol,venue
 }:{
   poolAddress?:string
+  tokenId?:string
   currentPrice?:number
   currentMarketCap?:number
   currentSolUsd?:number
@@ -75,6 +79,7 @@ export default function CandleChart({
   symbol?:string
   venue?:string
 }){
+  const supabase=useMemo(()=>{try{return createClient()}catch{return null}},[])
   const wrap=useRef<HTMLDivElement|null>(null)
   const pickerRef=useRef<HTMLDivElement|null>(null)
   const chartRef=useRef<IChartApi|null>(null)
@@ -85,12 +90,14 @@ export default function CandleChart({
   const vwapRef=useRef<ISeriesApi<'Line'>|null>(null)
   const priceLineRef=useRef<any>(null)
   const costLineRef=useRef<any>(null)
+  const tradeMarkersRef=useRef<any>(null)
   const userPriceLines=useRef<any[]>([])
   const userLevels=useRef<UserLevel[]>([])
   const redoLevels=useRef<UserLevel[]>([])
   const renderedRef=useRef<{first:number;last:number;mode:ChartMode;quote:QuoteMode}|null>(null)
   const hasDataRef=useRef(false)
   const userPickedMode=useRef(false)
+  const workspaceLoaded=useRef(false)
 
   const [tf,setTf]=useState<Timeframe>('1s')
   const [tfOpen,setTfOpen]=useState(false)
@@ -112,6 +119,9 @@ export default function CandleChart({
   const [showEma9,setShowEma9]=useState(false)
   const [showEma21,setShowEma21]=useState(false)
   const [showVwap,setShowVwap]=useState(false)
+  const [showTradeMarkers,setShowTradeMarkers]=useState(true)
+  const [trades,setTrades]=useState<PaperTradeMarker[]>([])
+  const [drawingTool,setDrawingTool]=useState<DrawingTool>('none'),[drawingClearSignal,setDrawingClearSignal]=useState(0)
   const [levelVersion,setLevelVersion]=useState(0)
 
   const impliedSupply=useMemo(()=>{
@@ -128,6 +138,34 @@ export default function CandleChart({
   },[mcAvailable,mode])
   useEffect(()=>{if(quote==='sol'&&!solAvailable)setQuote('usd')},[quote,solAvailable])
   useEffect(()=>{setHover(null)},[mode,quote])
+
+  useEffect(()=>{
+    try{
+      const saved=JSON.parse(localStorage.getItem('paper.chart.workspace.v2')||'{}')
+      if(saved.tf&&timeframeGroups.flatMap(g=>g.items).some(i=>i.value===saved.tf))setTf(saved.tf)
+      if(saved.mode==='price'||saved.mode==='marketCap'){setMode(saved.mode);userPickedMode.current=true}
+      if(saved.quote==='usd'||saved.quote==='sol')setQuote(saved.quote)
+      if(saved.scaleMode==='normal'||saved.scaleMode==='percent'||saved.scaleMode==='log')setScaleMode(saved.scaleMode)
+      if(typeof saved.showVolume==='boolean')setShowVolume(saved.showVolume)
+      if(typeof saved.showGrid==='boolean')setShowGrid(saved.showGrid)
+      if(typeof saved.showCrosshair==='boolean')setShowCrosshair(saved.showCrosshair)
+      if(typeof saved.showEma9==='boolean')setShowEma9(saved.showEma9)
+      if(typeof saved.showEma21==='boolean')setShowEma21(saved.showEma21)
+      if(typeof saved.showVwap==='boolean')setShowVwap(saved.showVwap)
+      if(typeof saved.showTradeMarkers==='boolean')setShowTradeMarkers(saved.showTradeMarkers)
+      if(Array.isArray(saved.levels))userLevels.current=saved.levels.filter((l:any)=>Number(l?.price)>0&&(l?.mode==='price'||l?.mode==='marketCap')&&(l?.quote==='usd'||l?.quote==='sol')).slice(0,25)
+    }catch{}
+    workspaceLoaded.current=true
+    setLevelVersion(v=>v+1)
+  },[])
+
+  useEffect(()=>{
+    if(!workspaceLoaded.current)return
+    localStorage.setItem('paper.chart.workspace.v2',JSON.stringify({
+      tf,mode,quote,scaleMode,showVolume,showGrid,showCrosshair,showEma9,showEma21,showVwap,showTradeMarkers,
+      levels:userLevels.current
+    }))
+  },[tf,mode,quote,scaleMode,showVolume,showGrid,showCrosshair,showEma9,showEma21,showVwap,showTradeMarkers,levelVersion])
 
   useEffect(()=>{
     if(!wrap.current)return
@@ -150,6 +188,7 @@ export default function CandleChart({
       wickUpColor:'#11c7a3',wickDownColor:'#ef394f',
       priceLineVisible:false,lastValueVisible:true,
     })
+    const markerPrimitive=createSeriesMarkers(candle,[])
     const volume=chart.addSeries(HistogramSeries,{
       priceScaleId:'',priceFormat:{type:'volume'},lastValueVisible:false,priceLineVisible:false
     })
@@ -166,6 +205,7 @@ export default function CandleChart({
 
     chartRef.current=chart
     candleRef.current=candle
+    tradeMarkersRef.current=markerPrimitive
     volumeRef.current=volume
     ema9Ref.current=ema9Series
     ema21Ref.current=ema21Series
@@ -180,6 +220,7 @@ export default function CandleChart({
       vwapRef.current=null
       priceLineRef.current=null
       costLineRef.current=null
+      tradeMarkersRef.current=null
       userPriceLines.current=[]
     }
   },[])
@@ -264,6 +305,52 @@ export default function CandleChart({
     document.addEventListener('visibilitychange',visible)
     return()=>{alive=false;clearInterval(id);document.removeEventListener('visibilitychange',visible)}
   },[poolAddress,tf])
+
+  useEffect(()=>{
+    if(!supabase||!tokenId){setTrades([]);return}
+    let alive=true
+    const loadTrades=async()=>{
+      if(document.hidden)return
+      try{
+        const {data,error}=await supabase.from('paper_trades')
+          .select('id,action,simulated_fill_price_usd,simulated_fill_mc_usd,ts')
+          .eq('token_id',tokenId).order('ts',{ascending:true}).limit(120)
+        if(error)throw error
+        if(alive)setTrades((data||[]) as PaperTradeMarker[])
+      }catch{if(alive)setTrades([])}
+    }
+    void loadTrades()
+    const id=window.setInterval(()=>void loadTrades(),8000)
+    const changed=()=>void loadTrades()
+    window.addEventListener('paper:account-changed',changed)
+    return()=>{alive=false;clearInterval(id);window.removeEventListener('paper:account-changed',changed)}
+  },[supabase,tokenId])
+
+  useEffect(()=>{
+    const primitive=tradeMarkersRef.current
+    if(!primitive)return
+    if(!showTradeMarkers||!candles.length||!trades.length){primitive.setMarkers([]);return}
+    const first=candles[0].time,last=candles[candles.length-1].time
+    const nearest=(value:number)=>{
+      let best=candles[0].time,bestDelta=Math.abs(best-value)
+      for(let i=1;i<candles.length;i++){const delta=Math.abs(candles[i].time-value);if(delta<bestDelta){best=candles[i].time;bestDelta=delta}}
+      return best
+    }
+    const markers=trades.map(trade=>{
+      const timestamp=Math.floor(new Date(trade.ts).getTime()/1000)
+      if(!Number.isFinite(timestamp)||timestamp<first-86400||timestamp>last+86400)return null
+      const isBuy=trade.action==='buy'
+      return{
+        time:nearest(timestamp) as UTCTimestamp,
+        position:isBuy?'belowBar':'aboveBar',
+        color:isBuy?'#17d7aa':'#ff4d77',
+        shape:isBuy?'arrowUp':'arrowDown',
+        text:isBuy?'BUY':'SELL',
+        size:1.15,
+      }
+    }).filter(Boolean)
+    primitive.setMarkers(markers as any)
+  },[candles,trades,showTradeMarkers])
 
   const multiplier=useMemo(()=>{
     const base=mode==='marketCap'&&mcAvailable?impliedSupply:1
@@ -350,6 +437,17 @@ export default function CandleChart({
   },[averageDisplayValue])
 
   useEffect(()=>{
+    const series=candleRef.current
+    if(!series)return
+    for(const line of userPriceLines.current){try{series.removePriceLine(line)}catch{}}
+    userPriceLines.current=[]
+    for(const level of userLevels.current.filter(l=>l.mode===mode&&l.quote===quote)){
+      const line=series.createPriceLine({price:level.price,color:level.color,lineWidth:1,lineStyle:1,axisLabelVisible:true,title:''})
+      userPriceLines.current.push(line)
+    }
+  },[mode,quote,levelVersion])
+
+  useEffect(()=>{
     if(!expanded)return
     const old=document.body.style.overflow
     document.body.style.overflow='hidden'
@@ -406,7 +504,7 @@ export default function CandleChart({
     const series=candleRef.current
     const value=(hover||displayCandles[displayCandles.length-1])?.close
     if(!series||!value)return
-    const level:UserLevel={price:value,color:'#8ea66a',title:'Level'}
+    const level:UserLevel={price:value,color:'#8ea66a',title:'Level',mode,quote}
     const line=series.createPriceLine({price:value,color:level.color,lineWidth:1,lineStyle:1,axisLabelVisible:true,title:''})
     userPriceLines.current.push(line)
     userLevels.current.push(level)
@@ -425,8 +523,6 @@ export default function CandleChart({
     const series=candleRef.current
     const level=redoLevels.current.pop()
     if(!series||!level)return
-    const line=series.createPriceLine({price:level.price,color:level.color,lineWidth:1,lineStyle:1,axisLabelVisible:true,title:''})
-    userPriceLines.current.push(line)
     userLevels.current.push(level)
     setLevelVersion(v=>v+1)
   }
@@ -470,6 +566,7 @@ export default function CandleChart({
           <label><input type="checkbox" checked={showVolume} onChange={e=>setShowVolume(e.target.checked)}/>Volume</label>
           <label><input type="checkbox" checked={showGrid} onChange={e=>setShowGrid(e.target.checked)}/>Grid</label>
           <label><input type="checkbox" checked={showCrosshair} onChange={e=>setShowCrosshair(e.target.checked)}/>Crosshair</label>
+          <label><input type="checkbox" checked={showTradeMarkers} onChange={e=>setShowTradeMarkers(e.target.checked)}/>PAPER trade markers</label>
         </div>}
       </div>
 
@@ -489,9 +586,14 @@ export default function CandleChart({
 
     <div className="axiom-chart-body">
       <div className="axiom-draw-rail">
-        <button className="active" title="Crosshair"><Crosshair size={16}/></button>
-        <button title="Pointer"><MousePointer2 size={16}/></button>
+        <button className={drawingTool==='none'?'active':''} title="Crosshair" onClick={()=>setDrawingTool('none')}><Crosshair size={16}/></button>
+        <button title="Pointer" onClick={()=>setDrawingTool('none')}><MousePointer2 size={16}/></button>
+        <button className={drawingTool==='trend'?'active':''} title="Trend line" onClick={()=>setDrawingTool('trend')}><TrendingUp size={16}/></button>
+        <button className={drawingTool==='ray'?'active':''} title="Ray" onClick={()=>setDrawingTool('ray')}><MoveRight size={16}/></button>
+        <button className={drawingTool==='rectangle'?'active':''} title="Rectangle" onClick={()=>setDrawingTool('rectangle')}><Square size={15}/></button>
+        <button className={drawingTool==='fib'?'active':''} title="Fibonacci retracement" onClick={()=>setDrawingTool('fib')}><span className="fib-tool">Fib</span></button>
         <button title="Add horizontal level" onClick={addLevel}><Minus size={16}/></button>
+        <button title="Clear drawings" onClick={()=>setDrawingClearSignal(v=>v+1)}><Trash2 size={15}/></button>
         <button title="Zoom in" onClick={()=>zoom(.72)}><Plus size={16}/></button>
         <button title="Zoom out" onClick={()=>zoom(1.38)}><Minus size={16}/></button>
         <button title="Fit chart" onClick={()=>chartRef.current?.timeScale().fitContent()}><RotateCcw size={15}/></button>
@@ -517,7 +619,7 @@ export default function CandleChart({
           <span>{compact(summary.volume)} vol</span>
         </div>
 
-        <div className="lw-chart-wrap axiom-lw-wrap">
+        <div className="lw-chart-wrap axiom-lw-wrap"><ChartDrawingOverlay chartRef={chartRef} seriesRef={candleRef} mode={mode} quote={quote} tool={drawingTool} onToolChange={setDrawingTool} clearSignal={drawingClearSignal}/>
           {!poolAddress&&<div className="chart-state">Select a token to load its chart.</div>}
           {poolAddress&&!displayCandles.length&&!error&&<div className="chart-state"><span className="chart-loader"/>Loading {timeframeLabel(tf)} market data…</div>}
           {error&&!displayCandles.length&&<div className="chart-state">{isSecondTf(tf)?'No recent trades for this sub-minute view · retrying automatically.':'Chart feed unavailable · retrying automatically.'}</div>}
