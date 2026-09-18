@@ -331,7 +331,8 @@ begin
     where funded_account_id=a.id and token_address=o.token_address for update;
 
   if o.side='buy' then
-    v_cash:=a.cash_usd-p_notional_usd-v_fee-coalesce(p_network_fee_usd,0);
+    -- PAPER pays network fees; funded trader equity is charged only notional + protocol fee.
+    v_cash:=a.cash_usd-p_notional_usd-v_fee;
     if v_cash<0 then raise exception 'confirmed fill exceeds funded cash'; end if;
     v_new_qty:=coalesce(p.quantity_tokens,0)+p_quantity_tokens;
     v_new_cost:=coalesce(p.cost_basis_usd,0)+p_notional_usd+v_fee;
@@ -348,7 +349,8 @@ begin
     if p_quantity_tokens>p.quantity_tokens*(1+0.00000001) then raise exception 'sell exceeds funded position'; end if;
     v_cost_released:=case when p.quantity_tokens>0 then p.cost_basis_usd*(p_quantity_tokens/p.quantity_tokens) else 0 end;
     v_realized:=p_notional_usd-v_fee-v_cost_released;
-    v_cash:=a.cash_usd+p_notional_usd-v_fee-coalesce(p_network_fee_usd,0);
+    -- PAPER pays network fees; funded trader equity is charged only the protocol fee.
+    v_cash:=a.cash_usd+p_notional_usd-v_fee;
     v_new_qty:=greatest(p.quantity_tokens-p_quantity_tokens,0);
     v_new_cost:=greatest(p.cost_basis_usd-v_cost_released,0);
 
@@ -364,7 +366,7 @@ begin
   update public.paper_funded_accounts set cash_usd=v_cash,updated_at=now() where id=a.id;
   update public.paper_funded_orders set
     status='confirmed',tx_signature=p_tx_signature,confirmed_at=now(),confirmation_slot=p_confirmation_slot,
-    network_fee_lamports=network_fee_lamports,updated_at=now()
+    updated_at=now()
   where id=o.id;
 
   insert into public.paper_funded_fills(
