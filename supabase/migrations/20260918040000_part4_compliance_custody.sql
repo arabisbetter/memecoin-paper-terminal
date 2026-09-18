@@ -198,7 +198,7 @@ select
     pf.turnkey_signing_enabled and pf.custody_security_review_complete and
     pf.treasury_capital_available and pf.real_funded_activation and
     fp.kyc_status='verified' and fp.aml_status='clear' and fp.sanctions_status='clear' and
-    fp.jurisdiction_status='allowed' and fp.age_verified
+    fp.jurisdiction_status='allowed' and fp.age_verified and cw.status='active' and cw.wallet_account_address is not null
   ) as funded_ready
 from public.paper_funded_profiles fp
 join public.paper_platform_flags pf on pf.id=true
@@ -241,7 +241,7 @@ as $$
       pf.turnkey_signing_enabled and pf.custody_security_review_complete and
       pf.treasury_capital_available and pf.real_funded_activation and
       fp.kyc_status='verified' and fp.aml_status='clear' and fp.sanctions_status='clear' and
-      fp.jurisdiction_status='allowed' and fp.age_verified
+      fp.jurisdiction_status='allowed' and fp.age_verified and cw.status='active' and cw.wallet_account_address is not null
     ),
     'payout_ready',(
       pf.real_payouts_enabled and fp.payout_wallet_verified_at is not null and
@@ -256,6 +256,45 @@ as $$
 $$;
 revoke all on function public.paper_real_money_gate_snapshot_v1(uuid) from public,anon,authenticated;
 grant execute on function public.paper_real_money_gate_snapshot_v1(uuid) to service_role;
+
+create or replace function public.paper_admin_set_kyc_result(
+  target_user uuid,
+  verified boolean,
+  provider text,
+  provider_reference text
+) returns jsonb
+language plpgsql
+security definer
+set search_path=public,pg_temp
+as $
+declare
+  v_now timestamptz:=now();
+begin
+  if target_user is null then raise exception 'target user required'; end if;
+  if provider is null or provider='' then raise exception 'provider required'; end if;
+
+  insert into public.paper_funded_profiles(user_id,stage,kyc_status,kyc_provider,kyc_reference,kyc_verified_at,updated_at)
+  values(
+    target_user,
+    case when verified then 'compliance_review' else 'rejected' end,
+    case when verified then 'verified' else 'rejected' end,
+    provider,provider_reference,
+    case when verified then v_now else null end,
+    v_now
+  )
+  on conflict(user_id) do update set
+    stage=excluded.stage,kyc_status=excluded.kyc_status,kyc_provider=excluded.kyc_provider,
+    kyc_reference=excluded.kyc_reference,kyc_verified_at=excluded.kyc_verified_at,updated_at=v_now;
+
+  insert into public.paper_compliance_checks(user_id,check_type,status,provider,provider_reference,details,checked_at)
+  values(target_user,'kyc',case when verified then 'clear' else 'blocked' end,provider,provider_reference,
+         jsonb_build_object('manual_admin_decision',true),v_now);
+
+  return jsonb_build_object('user_id',target_user,'kyc_status',case when verified then 'verified' else 'rejected' end);
+end;
+$;
+revoke all on function public.paper_admin_set_kyc_result(uuid,boolean,text,text) from public,anon,authenticated;
+grant execute on function public.paper_admin_set_kyc_result(uuid,boolean,text,text) to service_role;
 
 -- All launch gates remain off after schema installation.
 update public.paper_platform_flags set
