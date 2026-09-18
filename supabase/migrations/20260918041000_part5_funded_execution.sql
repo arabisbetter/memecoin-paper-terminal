@@ -38,6 +38,50 @@ update public.paper_funded_accounts set
   daily_anchor_equity_usd=case when daily_anchor_equity_usd=0 then greatest(capital_usd,current_equity_usd) else daily_anchor_equity_usd end
 where capital_usd>0;
 
+alter table public.paper_funded_accounts enable row level security;
+drop policy if exists paper_funded_accounts_read_own on public.paper_funded_accounts;
+create policy paper_funded_accounts_read_own on public.paper_funded_accounts
+  for select to authenticated using ((select auth.uid())=user_id);
+revoke all on public.paper_funded_accounts from public,anon,authenticated;
+grant select(
+  id,user_id,status,capital_usd,cash_usd,current_equity_usd,high_water_mark_usd,
+  peak_equity_usd,trailing_floor_usd,daily_loss_usd,current_drawdown_pct,
+  max_daily_loss_pct,max_total_drawdown_pct,max_position_pct,max_single_trade_pct,
+  max_open_positions,default_slippage_bps,max_slippage_bps,protocol_fee_bps,
+  trading_wallet_address,data_status,breach_reason,activated_at,last_mark_at,closed_at,updated_at
+) on public.paper_funded_accounts to authenticated;
+
+alter table public.paper_funded_orders enable row level security;
+drop policy if exists paper_funded_orders_read_own on public.paper_funded_orders;
+create policy paper_funded_orders_read_own on public.paper_funded_orders
+  for select to authenticated using ((select auth.uid())=user_id);
+revoke all on public.paper_funded_orders from public,anon,authenticated;
+grant select(
+  id,funded_account_id,user_id,token_address,side,requested_notional_usd,status,idempotency_key,
+  tx_signature,rejection_reason,created_at,updated_at,slippage_bps,protocol_fee_bps,
+  quote_provider,route_labels,price_impact_pct,expected_out_amount_atomic,actual_out_amount_atomic,
+  signed_at,broadcast_at,confirmed_at,confirmation_slot,last_error
+) on public.paper_funded_orders to authenticated;
+
+alter table public.paper_funded_fills enable row level security;
+drop policy if exists paper_funded_fills_read_own on public.paper_funded_fills;
+create policy paper_funded_fills_read_own on public.paper_funded_fills
+  for select to authenticated using ((select auth.uid())=user_id);
+revoke all on public.paper_funded_fills from public,anon,authenticated;
+grant select on public.paper_funded_fills to authenticated;
+
+alter table public.paper_funded_settlements enable row level security;
+drop policy if exists paper_funded_settlements_read_own on public.paper_funded_settlements;
+create policy paper_funded_settlements_read_own on public.paper_funded_settlements
+  for select to authenticated using ((select auth.uid())=user_id);
+revoke all on public.paper_funded_settlements from public,anon,authenticated;
+grant select(
+  id,funded_account_id,user_id,week_start,week_end,opening_high_water_mark_usd,closing_equity_usd,
+  eligible_profit_usd,trader_share_usd,paper_share_usd,status,payout_wallet_snapshot,
+  payout_asset,payout_asset_amount,payout_tx_signature,created_at,approved_at,
+  payout_broadcast_at,payout_confirmation_slot,payout_error,paid_at,reset_capital_usd,reset_completed_at
+) on public.paper_funded_settlements to authenticated;
+
 create table if not exists public.paper_funded_positions (
   id uuid primary key default gen_random_uuid(),
   funded_account_id uuid not null references public.paper_funded_accounts(id) on delete cascade,
