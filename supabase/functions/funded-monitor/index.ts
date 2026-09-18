@@ -6,6 +6,21 @@ const finite=(v:unknown,fallback=0)=>{const n=Number(v);return Number.isFinite(n
 const chunks=<T,>(items:T[],size:number)=>Array.from({length:Math.ceil(items.length/size)},(_,i)=>items.slice(i*size,(i+1)*size))
 const reply=(body:unknown,status=200)=>new Response(JSON.stringify(body),{status,headers:{'Content-Type':'application/json'}})
 
+async function heartbeat(admin:any,component:string,status:'healthy'|'degraded'|'failed'|'unknown',startedMs:number,details:Record<string,unknown>={},error?:string){
+  const now=new Date().toISOString()
+  const {data:current}=await admin.from('paper_operational_heartbeats').select('consecutive_failures').eq('component',component).maybeSingle()
+  await admin.from('paper_operational_heartbeats').upsert({
+    component,status,
+    last_started_at:new Date(startedMs).toISOString(),
+    last_success_at:status==='healthy'||status==='degraded'?now:undefined,
+    last_failure_at:status==='failed'?now:undefined,
+    consecutive_failures:status==='failed'?Number(current?.consecutive_failures||0)+1:0,
+    latency_ms:Math.max(0,Date.now()-startedMs),
+    details:error?{...details,error:String(error).slice(0,500)}:details,
+    updated_at:now,
+  },{onConflict:'component'})
+}
+
 function envKeys(){
   const url=Deno.env.get('SUPABASE_URL')
   const secretKeys=JSON.parse(Deno.env.get('SUPABASE_SECRET_KEYS')||'{}')
@@ -68,9 +83,11 @@ async function geckoMarks(mints:string[],marks:Map<string,Mark>){
 
 Deno.serve(async(req:Request)=>{
   if(req.method!=='POST')return reply({error:'method not allowed'},405)
+  const startedMs=Date.now()
+  let admin:any=null
   try{
     const {url,secret}=envKeys()
-    const admin=createClient(url,secret,{auth:{persistSession:false,autoRefreshToken:false}})
+    admin=createClient(url,secret,{auth:{persistSession:false,autoRefreshToken:false}})
     const token=req.headers.get('x-paper-internal-token')||''
     const {data:valid}=await admin.rpc('paper_verify_internal_token',{p_token:token})
     if(valid!==true)return reply({error:'unauthorized'},401)
@@ -79,7 +96,10 @@ Deno.serve(async(req:Request)=>{
       .select('id,user_id,status,cash_usd,current_equity_usd,last_mark_at')
       .eq('status','active').order('last_mark_at',{ascending:true,nullsFirst:true}).limit(250)
     if(accountError)throw new Error(accountError.message)
-    if(!accounts?.length)return reply({ok:true,activeAccounts:0,markedLive:0,markedUnavailable:0,breaches:0})
+    if(!accounts?.length){
+      await heartbeat(admin,'funded_monitor','healthy',startedMs,{idle:true,activeAccounts:0})
+      return reply({ok:true,activeAccounts:0,markedLive:0,markedUnavailable:0,breaches:0})
+    }
 
     const accountIds=accounts.map((a:any)=>a.id)
     const {data:positions,error:positionError}=await admin.from('paper_funded_positions')
@@ -120,8 +140,14 @@ Deno.serve(async(req:Request)=>{
 
     // Keep the leaderboard's funded P&L current without exposing privileged writes to clients.
     try{await admin.rpc('paper_refresh_leaderboards_v2')}catch{}
+    const errorCount=Object.keys(errors).length
+    await heartbeat(admin,'funded_monitor',errorCount||markedUnavailable?'degraded':'healthy',startedMs,{
+      activeAccounts:accounts.length,markedLive,markedUnavailable,breaches,markCount:marks.size,errorCount
+    })
     return reply({ok:true,activeAccounts:accounts.length,markedLive,markedUnavailable,breaches,markCount:marks.size,errors})
   }catch(error){
-    return reply({error:error instanceof Error?error.message:'funded monitor failed'},500)
+    const message=error instanceof Error?error.message:'funded monitor failed'
+    if(admin)try{await heartbeat(admin,'funded_monitor','failed',startedMs,{},message)}catch{}
+    return reply({error:message},500)
   }
 })
