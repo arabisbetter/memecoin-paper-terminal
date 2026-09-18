@@ -72,9 +72,9 @@ jobs:
           const fs=require('fs')
           const body=JSON.parse(fs.readFileSync('/tmp/paper-market.json','utf8'))
           if(!Array.isArray(body.tokens) || body.tokens.length===0) throw new Error('live market feed returned zero tokens')
-          const active=t=>t && t.mint && t.pairAddress && Number(t.priceUsd)>0 && (Number(t.buys5m||0)+Number(t.sells5m||0)>0)
-          const first=body.tokens.find(active)||body.tokens.find(t=>t && t.mint && t.pairAddress && Number(t.priceUsd)>0)
-          if(!first) throw new Error('live market feed has no usable priced token with a pool')
+          const active=t=>t && t.mint && t.pairAddress && Number(t.priceUsd)>0 && Number(t.marketCap)>0 && (Number(t.buys5m||0)+Number(t.sells5m||0)>0)
+          const first=body.tokens.find(active)||body.tokens.find(t=>t && t.mint && t.pairAddress && Number(t.priceUsd)>0 && Number(t.marketCap)>0)
+          if(!first) throw new Error('live market feed has no usable priced token with market cap and a pool')
           fs.writeFileSync('/tmp/paper-mint.txt', String(first.mint))
           fs.writeFileSync('/tmp/paper-pool.txt', String(first.pairAddress))
           console.log(`market source=${body.source || 'unknown'} tokens=${body.tokens.length} sample=${first.symbol || first.mint}`)
@@ -89,8 +89,8 @@ jobs:
           node - <<'NODE'
           const fs=require('fs')
           const body=JSON.parse(fs.readFileSync('/tmp/paper-token.json','utf8'))
-          if(!body.token || !body.token.mint || Number(body.token.priceUsd)<=0) throw new Error('direct token lookup did not return a usable live token')
-          console.log(`Solana CA lookup ok mint=${body.token.mint} price=${body.token.priceUsd}`)
+          if(!body.token || !body.token.mint || Number(body.token.priceUsd)<=0 || Number(body.token.marketCap)<=0) throw new Error('direct token lookup did not return usable price + market cap data')
+          console.log(`Solana CA lookup ok mint=${body.token.mint} price=${body.token.priceUsd} mc=${body.token.marketCap}`)
           NODE
 
       - name: Verify Base and Ethereum live feeds
