@@ -30,6 +30,7 @@
 .chart-mode-switch button:disabled{opacity:.3;cursor:not-allowed}
 .chart-mode-note{height:25px;display:flex;align-items:center;padding:0 11px;border-bottom:1px solid #171f2a;background:#091019;color:#69768c;font-size:8px}
 .chart-v2 .lw-chart-wrap{height:430px!important;background:linear-gradient(180deg,#070a0f,#06090d)!important}
+.chart-v2.expanded .lw-chart-wrap{height:calc(100vh - 122px)!important}
 .chart-v2 .lw-chart-canvas{will-change:transform}
 .chart-v2 .chart-foot{min-height:27px!important;height:auto!important;padding:6px 10px!important;background:#070a0f!important;border-top:1px solid #151d27!important}
 .chart-v2 .tf-picker-button,.chart-v2 .chart-tools button{transition:background .12s ease,border-color .12s ease,color .12s ease,transform .12s ease}
