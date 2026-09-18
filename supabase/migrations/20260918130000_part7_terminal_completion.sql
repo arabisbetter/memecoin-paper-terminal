@@ -116,7 +116,8 @@ create table if not exists public.paper_alert_events (
 );
 alter table public.paper_alert_events enable row level security;
 revoke all on public.paper_alert_events from public,anon,authenticated;
-grant select,update on public.paper_alert_events to authenticated;
+grant select on public.paper_alert_events to authenticated;
+grant update(status,read_at) on public.paper_alert_events to authenticated;
 grant select,insert,update,delete on public.paper_alert_events to service_role;
 
 drop policy if exists paper_alert_events_read_own on public.paper_alert_events;
@@ -178,3 +179,58 @@ begin
   );
 end
 $schedule$;
+
+
+-- Include Part 7 monitors in the operational health snapshot.
+create or replace function public.paper_ops_health_snapshot_v1()
+returns jsonb
+language sql
+stable
+security definer
+set search_path=public,cron,pg_temp
+as $paper_part7_health_refresh$
+with monitored_jobs as (
+  select j.jobid,j.jobname,j.schedule,j.active,
+    (
+      select jsonb_build_object(
+        'status',r.status,'start_time',r.start_time,'end_time',r.end_time,
+        'return_message',left(coalesce(r.return_message,''),240)
+      )
+      from cron.job_run_details r
+      where r.jobid=j.jobid
+      order by r.runid desc limit 1
+    ) as last_run
+  from cron.job j
+  where j.jobname like 'paper-%'
+)
+select jsonb_build_object(
+  'checked_at',now(),
+  'evaluation_monitor',(
+    select jsonb_build_object(
+      'completed_at',m.completed_at,'active_evaluations',m.active_evaluations,
+      'marked_live',m.marked_live,'marked_degraded',m.marked_degraded,
+      'failed',m.failed,'expired',m.expired,'error_summary',m.error_summary
+    )
+    from public.paper_evaluation_monitor_runs m order by m.id desc limit 1
+  ),
+  'heartbeats',coalesce((select jsonb_agg(to_jsonb(h) order by h.component) from public.paper_operational_heartbeats h),'[]'::jsonb),
+  'cron',coalesce((select jsonb_agg(to_jsonb(j) order by j.jobname) from monitored_jobs j),'[]'::jsonb),
+  'provider_health',coalesce((
+    select jsonb_agg(jsonb_build_object(
+      'provider',p.provider,'status',p.status,'updated_at',p.updated_at,
+      'consecutive_failures',p.consecutive_failures
+    ) order by p.provider)
+    from public.paper_market_provider_health p
+  ),'[]'::jsonb),
+  'real_money',(
+    select jsonb_build_object(
+      'activation',f.real_funded_activation,'payouts',f.real_payouts_enabled,
+      'legal_review',f.legal_review_complete,'kyc',f.kyc_provider_configured,
+      'turnkey',f.turnkey_signing_enabled,'treasury',f.treasury_capital_available
+    )
+    from public.paper_platform_flags f where f.id=true
+  )
+);
+$paper_part7_health_refresh$;
+revoke all on function public.paper_ops_health_snapshot_v1() from public,anon,authenticated;
+grant execute on function public.paper_ops_health_snapshot_v1() to service_role;
