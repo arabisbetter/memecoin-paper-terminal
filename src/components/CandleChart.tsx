@@ -50,6 +50,8 @@ export default function CandleChart({poolAddress,currentPrice,currentMarketCap,s
 
   useEffect(()=>{chartRef.current?.timeScale().applyOptions({timeVisible:true,secondsVisible:isSecondTf(tf),rightOffset:isSecondTf(tf)?3:5,barSpacing:isSecondTf(tf)?10:8})},[tf])
 
+  useEffect(()=>{const series=candleRef.current;if(!series)return;if(mode==='marketCap')series.applyOptions({priceFormat:{type:'volume'}});else series.applyOptions({priceFormat:{type:'price',precision:10,minMove:0.0000000001}})},[mode])
+
   useEffect(()=>{
     if(!tfOpen)return
     const onPointer=(event:PointerEvent)=>{if(pickerRef.current&&!pickerRef.current.contains(event.target as Node))setTfOpen(false)}
@@ -75,23 +77,25 @@ export default function CandleChart({poolAddress,currentPrice,currentMarketCap,s
     return()=>{alive=false;clearInterval(id);document.removeEventListener('visibilitychange',visible)}
   },[poolAddress,tf])
 
+  const displayCandles=useMemo(()=>mode==='price'||!mcAvailable?candles:candles.map(c=>({...c,open:c.open*impliedSupply,high:c.high*impliedSupply,low:c.low*impliedSupply,close:c.close*impliedSupply})),[candles,mode,mcAvailable,impliedSupply])
+
   useEffect(()=>{
     const cs=candleRef.current,vs=volumeRef.current
-    if(!cs||!vs||!candles.length)return
-    const first=candles[0].time,last=candles[candles.length-1].time,previous=renderedRef.current
+    if(!cs||!vs||!displayCandles.length)return
+    const first=displayCandles[0].time,last=displayCandles[displayCandles.length-1].time,previous=renderedRef.current
     const candlePoint=(c:Candle)=>({time:c.time as UTCTimestamp,open:c.open,high:c.high,low:c.low,close:c.close})
     const volumePoint=(c:Candle)=>({time:c.time as UTCTimestamp,value:c.volume,color:c.close>=c.open?'rgba(45,224,176,.24)':'rgba(255,63,128,.24)'})
     let fit=false
-    if(!previous||previous.first!==first){
-      cs.setData(candles.map(candlePoint));vs.setData(candles.map(volumePoint));fit=!previous
+    if(!previous||previous.first!==first||previous.mode!==mode){
+      cs.setData(displayCandles.map(candlePoint));vs.setData(displayCandles.map(volumePoint));fit=true
     }else{
-      const start=candles.findIndex(c=>c.time===previous.last)
-      if(start<0){cs.setData(candles.map(candlePoint));vs.setData(candles.map(volumePoint))}
-      else for(let i=start;i<candles.length;i++){cs.update(candlePoint(candles[i]));vs.update(volumePoint(candles[i]))}
+      const start=displayCandles.findIndex(c=>c.time===previous.last)
+      if(start<0){cs.setData(displayCandles.map(candlePoint));vs.setData(displayCandles.map(volumePoint))}
+      else for(let i=start;i<displayCandles.length;i++){cs.update(candlePoint(displayCandles[i]));vs.update(volumePoint(displayCandles[i]))}
     }
-    renderedRef.current={first,last};hasDataRef.current=true
+    renderedRef.current={first,last,mode};hasDataRef.current=true
     if(fit)requestAnimationFrame(()=>chartRef.current?.timeScale().fitContent())
-  },[candles])
+  },[displayCandles,mode])
 
   useEffect(()=>{
     const series=candleRef.current
