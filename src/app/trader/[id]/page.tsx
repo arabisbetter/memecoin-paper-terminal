@@ -25,7 +25,7 @@ export default function TraderPage(){
     try{
       const user=await ensurePaperUser(supabase);setMe(user.id)
       const [{data:p,error:pe},{data:v,error:ve},{data:s},{data:c},{data:a},{count:followersCount},{count:followingTotal}]=await Promise.all([
-        supabase.from('profiles').select('username,display_name,bio,x_handle,avatar_url,avatar_emoji,accent').eq('id',params.id).single(),
+        supabase.from('paper_public_profiles').select('username,display_name,bio,x_handle,avatar_url,avatar_emoji,accent').eq('id',params.id).single(),
         supabase.from('paper_profile_visibility').select('public_profile,activity_public,share_pnl').eq('user_id',params.id).maybeSingle(),
         supabase.from('paper_leaderboard_v2').select('evaluation_pnl_usd,evaluation_roi_pct,win_rate_pct,trades_count,funded_pnl_usd,funded_capital_usd,evaluation_status').eq('period_key','all_time').eq('user_id',params.id).maybeSingle(),
         supabase.from('paper_trade_cards').select('trade_id,token_symbol,action,notional_usd,fee_usd,execution_quality,verified,created_at').eq('user_id',params.id).order('created_at',{ascending:false}).limit(12),
