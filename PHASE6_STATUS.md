@@ -16,9 +16,12 @@
 - Daily operational retention cleanup is scheduled.
 - Security headers include HSTS, no-sniff, frame denial, strict referrer policy, permissions policy and no-store rules for admin/funded surfaces.
 - Top-level application dependencies are exact-version pinned.
-- GitHub Actions checkout/setup-node/upload-artifact actions are pinned to commit SHAs.
-- CI scans for accidental NEXT_PUBLIC secret names and audits production dependencies.
-- Parts 2–6 are recorded in staging migration history.
+- `package-lock.json` is committed and CI installs with deterministic `npm ci`.
+- GitHub Actions checkout/setup-node actions are pinned to commit SHAs.
+- CI scans for accidental NEXT_PUBLIC secret names and fails on high/critical production dependency advisories.
+- The legacy `@solana/spl-token` client was removed after CI exposed its high-severity `bigint-buffer` dependency path. Standard USDC ATA + TransferChecked instructions are constructed directly with the Solana program interfaces instead.
+- Remaining legacy `@solana/web3.js` audit findings are moderate and remain visible; migration to Solana Kit is a future dependency-hardening task rather than an audit suppression.
+- Parts 2–6 plus the Part 6 performance cleanup are recorded in staging migration history.
 
 ## Verified controls
 
