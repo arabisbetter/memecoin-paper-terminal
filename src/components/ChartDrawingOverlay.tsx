@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
+import type { PointerEvent as ReactPointerEvent } from 'react'
 import type { IChartApi, ISeriesApi, UTCTimestamp } from 'lightweight-charts'
 
 export type DrawingTool='none'|'trend'|'ray'|'rectangle'|'fib'
@@ -62,7 +63,7 @@ export default function ChartDrawingOverlay({
     return()=>window.removeEventListener('keydown',key)
   },[onToolChange])
 
-  const pointFromEvent=(event:React.PointerEvent<SVGSVGElement>):Point|null=>{
+  const pointFromEvent=(event:ReactPointerEvent<SVGSVGElement>):Point|null=>{
     const svg=svgRef.current,chart=chartRef.current,series=seriesRef.current
     if(!svg||!chart||!series)return null
     const rect=svg.getBoundingClientRect()
@@ -82,19 +83,19 @@ export default function ChartDrawingOverlay({
     return{x:Number(x),y:Number(y)}
   }
 
-  function down(event:React.PointerEvent<SVGSVGElement>){
+  function down(event:ReactPointerEvent<SVGSVGElement>){
     if(tool==='none')return
     const point=pointFromEvent(event)
     if(!point)return
     event.currentTarget.setPointerCapture(event.pointerId)
     setDraftStart(point);setDraftEnd(point)
   }
-  function move(event:React.PointerEvent<SVGSVGElement>){
+  function move(event:ReactPointerEvent<SVGSVGElement>){
     if(tool==='none'||!draftStart)return
     const point=pointFromEvent(event)
     if(point)setDraftEnd(point)
   }
-  function up(event:React.PointerEvent<SVGSVGElement>){
+  function up(event:ReactPointerEvent<SVGSVGElement>){
     if(tool==='none'||!draftStart)return
     const point=pointFromEvent(event)||draftEnd
     if(point&&Math.abs(point.time-draftStart.time)+Math.abs(point.price-draftStart.price)>0){
