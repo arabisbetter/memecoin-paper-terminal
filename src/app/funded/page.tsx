@@ -127,7 +127,7 @@ export default function FundedPage(){
   ] as [string,boolean][]:[]
 
   return <div className="ax-app"><AppHeader active="funded"/><main className="terminal-page funded-page"><div className="terminal-page-inner">
-    <section className="funded-hero"><div><div className="terminal-eyebrow">PAPER FUNDED</div><h1>Qualification → verification → funded account.</h1><p className="terminal-lead">Real-funded capital stays locked until every legal, KYC/AML, jurisdiction, custody, and treasury gate is complete. PAPER evaluation remains separate.</p></div><div className={'funded-master-state '+(realEnabled?'ready':'locked')}><LockKeyhole size={16}/><b>{realEnabled?'REAL FUNDED ENABLED':'REAL FUNDED LOCKED'}</b></div></section>
+    <section className="funded-hero"><div><div className="terminal-eyebrow">PAPER FUNDED</div><h1>Qualification → verification → funded account.</h1></div><div className={'funded-master-state '+(realEnabled?'ready':'locked')}><LockKeyhole size={16}/><b>{realEnabled?'REAL FUNDED ENABLED':'REAL FUNDED LOCKED'}</b></div></section>
     {message&&<div className="terminal-error"><span>{message}</span><button onClick={()=>setMessage('')}>Dismiss</button></div>}
 
     {!passed?<section className="funded-not-qualified"><ShieldCheck/><div><h2>Pass the evaluation first.</h2><p>Your funded profile is created automatically only after the rule-based PAPER evaluation passes.</p><Link className="eval-primary link" href="/evaluation">Open evaluation</Link></div></section>:<>
