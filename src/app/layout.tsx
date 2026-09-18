@@ -22,6 +22,7 @@ import "./chart-discover-polish.css";
 import "./performance-charity-polish.css";
 import "./evaluation.css";
 import "./phase23-control.css";
+import "./funded.css";
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://memecoin-paper-terminal.vercel.app"),
