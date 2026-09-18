@@ -54,6 +54,7 @@ Apply only the PR delta, in this order:
 7. `20260918040000_part4_compliance_custody.sql`
 8. `20260918041000_part5_funded_execution.sql`
 9. `20260918050000_part6_production_hardening.sql`
+10. `20260918051000_part6_performance_cleanup.sql`
 
 After each migration, verify success before moving to the next. Do not enable any real-money flag during migration.
 
