@@ -44,3 +44,29 @@ test('Pulse workspace and Watchlist alert center render',async({page})=>{
   await page.goto('/watchlist',{waitUntil:'domcontentloaded'})
   await expect(page.getByText('ALERT EVENTS')).toBeVisible()
 })
+
+
+test('Part 8 research tools and command palette render',async({page})=>{
+  await page.goto('/scanner',{waitUntil:'domcontentloaded'})
+  await expect(page.getByRole('heading',{name:/Find velocity/})).toBeVisible()
+
+  await page.goto('/heatmap',{waitUntil:'domcontentloaded'})
+  await expect(page.getByRole('heading',{name:/Where attention is moving/})).toBeVisible()
+
+  await page.goto('/compare',{waitUntil:'domcontentloaded'})
+  await expect(page.getByRole('heading',{name:/Compare up to four markets/})).toBeVisible()
+
+  await page.goto('/workspaces',{waitUntil:'domcontentloaded'})
+  await expect(page.getByRole('heading',{name:/Watch the market your way/})).toBeVisible()
+
+  await page.goto('/journal',{waitUntil:'domcontentloaded'})
+  await expect(page.getByRole('heading',{name:/Record why you took the trade/})).toBeVisible()
+
+  await page.goto('/replay',{waitUntil:'domcontentloaded'})
+  await expect(page.getByRole('heading',{name:'Trade Replay'})).toBeVisible()
+
+  await page.keyboard.press('Control+k')
+  await expect(page.getByPlaceholder(/Search token, CA, scanner/)).toBeVisible()
+  await expect(page.getByText('Launch scanner',{exact:true})).toBeVisible()
+  await expect(page.getByText('Trading journal',{exact:true})).toBeVisible()
+})
