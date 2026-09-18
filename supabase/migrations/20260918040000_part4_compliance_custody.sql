@@ -144,7 +144,8 @@ alter table public.paper_funded_profiles
     check (tax_status in ('not_started','required','collecting','complete','review')),
   add column if not exists preferred_payout_asset text not null default 'USDC'
     check (preferred_payout_asset in ('USDC','SOL')),
-  add column if not exists compliance_checked_at timestamptz;
+  add column if not exists compliance_checked_at timestamptz,
+  add column if not exists requalify_after timestamptz;
 
 alter table public.paper_funded_profiles enable row level security;
 drop policy if exists paper_funded_profiles_read_own on public.paper_funded_profiles;
