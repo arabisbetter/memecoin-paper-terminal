@@ -58,7 +58,8 @@ export default function AdvancedOrderPanel({
     if(side==='buy'&&mode!=='limit')setMode('limit')
   },[side,mode])
   useEffect(()=>{
-    if(token?.priceUsd>0)setTrigger(String(token.priceUsd))
+    const price=Number(token?.priceUsd||0)
+    if(price>0)setTrigger(String(price))
   },[token?.mint])
 
   async function load(){
