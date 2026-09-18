@@ -74,7 +74,7 @@ async function authorize(req:Request,admin:any,url:string,pub:string){
 async function bestDexPair(mint:string){
   const {body,latencyMs}=await fetchJson(`https://api.dexscreener.com/token-pairs/v1/solana/${encodeURIComponent(mint)}`)
   const pairs=(Array.isArray(body)?body:[]) as DexPair[]
-  const valid=pairs.filter(p=>p.chainId==='solana'&&finite(p.priceUsd)>0)
+  const valid=pairs.filter(p=>p.chainId==='solana'&&String(p.baseToken?.address||'')===mint&&finite(p.priceUsd)>0)
   valid.sort((a,b)=>finite(b.liquidity?.usd)-finite(a.liquidity?.usd))
   if(!valid.length)throw new Error('No active Solana market found')
   return{pair:valid[0],latencyMs}
