@@ -1,5 +1,8 @@
 import type { Metadata, Viewport } from "next";
 import RecoveryNudge from "@/components/RecoveryNudge";
+import CommandPalette from "@/components/CommandPalette";
+import NetworkStatus from "@/components/NetworkStatus";
+import TerminalPreferences from "@/components/TerminalPreferences";
 import "./globals.css";
 import "./product-polish.css";
 import "./spot-polish.css";
@@ -26,6 +29,7 @@ import "./funded.css";
 import "./terminal-v2.css";
 import "./axiom-chart.css";
 import "./part7.css";
+import "./part8.css";
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://memecoin-paper-terminal.vercel.app"),
@@ -57,7 +61,7 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en">
-      <body>{children}<RecoveryNudge/></body>
+      <body>{children}<TerminalPreferences/><CommandPalette/><NetworkStatus/><RecoveryNudge/></body>
     </html>
   );
 }

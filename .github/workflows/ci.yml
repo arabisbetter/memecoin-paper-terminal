@@ -178,7 +178,7 @@ jobs:
 
       - name: Verify public PAPER routes and brand assets
         run: |
-          for route in / /discover /spot /pulse /portfolio /chains /wallets /watchlist /rewards /leaderboards /profile /coin /legal /opengraph-image /twitter-image /icon.svg /robots.txt /sitemap.xml /manifest.webmanifest; do
+          for route in / /discover /spot /pulse /portfolio /chains /wallets /watchlist /scanner /heatmap /compare /workspaces /journal /replay /rewards /leaderboards /profile /coin /legal /opengraph-image /twitter-image /icon.svg /robots.txt /sitemap.xml /manifest.webmanifest; do
             curl -fsS "http://127.0.0.1:3000$route" >/dev/null
           done
 

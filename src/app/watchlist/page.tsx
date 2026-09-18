@@ -20,6 +20,14 @@ type Item={
   image_url:string|null
   alert_above_usd:number|null
   alert_below_usd:number|null
+  list_name:string
+  notes:string|null
+  alert_volume_5m_usd:number|null
+  alert_move_5m_pct:number|null
+  alert_dev_sell:boolean
+  alert_liquidity_below_usd:number|null
+  alert_holder_growth_pct:number|null
+  alert_migration:boolean
   push_enabled:boolean
   alert_above_triggered:boolean
   alert_below_triggered:boolean
@@ -37,6 +45,8 @@ type AlertEvent={
   trigger_price_usd:number
   observed_price_usd:number
   status:'unread'|'read'
+  alert_type:'price'|'volume_5m'|'move_5m'|'dev_sell'|'liquidity_below'|'holder_growth'|'migration'
+  details:Record<string,unknown>
   created_at:string
 }
 
@@ -49,7 +59,7 @@ export default function WatchlistPage(){
   const supabase=useMemo(()=>{try{return createClient()}catch{return null}},[])
   const [items,setItems]=useState<Item[]>([])
   const [live,setLive]=useState<Record<string,MarketToken>>({})
-  const [drafts,setDrafts]=useState<Record<string,{above:string;below:string}>>({})
+  const [drafts,setDrafts]=useState<Record<string,{above:string;below:string;volume:string;move:string;liquidity:string;holders:string;list:string;notes:string}>>({})
   const [alerts,setAlerts]=useState<AlertEvent[]>([])
   const [error,setError]=useState('')
   const [loading,setLoading]=useState(true)
@@ -64,7 +74,7 @@ export default function WatchlistPage(){
     try{
       const user=await ensurePaperUser(supabase)
       const result=await supabase.from('token_watchlist')
-        .select('id,user_id,chain_id,address,symbol,name,image_url,alert_above_usd,alert_below_usd,push_enabled,alert_above_triggered,alert_below_triggered,alert_last_price_usd,alert_last_checked_at,created_at')
+        .select('id,user_id,chain_id,address,symbol,name,image_url,list_name,notes,alert_above_usd,alert_below_usd,alert_volume_5m_usd,alert_move_5m_pct,alert_dev_sell,alert_liquidity_below_usd,alert_holder_growth_pct,alert_migration,push_enabled,alert_above_triggered,alert_below_triggered,alert_last_price_usd,alert_last_checked_at,created_at')
         .eq('user_id',user.id)
         .order('created_at',{ascending:false})
       if(result.error)throw result.error
@@ -76,7 +86,13 @@ export default function WatchlistPage(){
           if(!next[row.id]){
             next[row.id]={
               above:row.alert_above_usd==null?'':String(row.alert_above_usd),
-              below:row.alert_below_usd==null?'':String(row.alert_below_usd)
+              below:row.alert_below_usd==null?'':String(row.alert_below_usd),
+              volume:row.alert_volume_5m_usd==null?'':String(row.alert_volume_5m_usd),
+              move:row.alert_move_5m_pct==null?'':String(row.alert_move_5m_pct),
+              liquidity:row.alert_liquidity_below_usd==null?'':String(row.alert_liquidity_below_usd),
+              holders:row.alert_holder_growth_pct==null?'':String(row.alert_holder_growth_pct),
+              list:row.list_name||'Main',
+              notes:row.notes||''
             }
           }
         }
@@ -110,7 +126,7 @@ export default function WatchlistPage(){
     try{
       const user=await ensurePaperUser(supabase)
       const result=await supabase.from('paper_alert_events')
-        .select('id,watchlist_id,chain_id,token_address,token_symbol,direction,trigger_price_usd,observed_price_usd,status,created_at')
+        .select('id,watchlist_id,chain_id,token_address,token_symbol,direction,trigger_price_usd,observed_price_usd,status,alert_type,details,created_at')
         .eq('user_id',user.id)
         .order('created_at',{ascending:false})
         .limit(40)
@@ -139,8 +155,9 @@ export default function WatchlistPage(){
       const watch=items.find(row=>row.id===event.watchlist_id)
       if(!watch?.push_enabled)continue
       notified.add(event.id)
-      const body='$'+(event.token_symbol||'TOKEN')+' moved '+event.direction+' '+money(Number(event.trigger_price_usd))+' · now '+money(Number(event.observed_price_usd))
-      new Notification('PAPER price alert',{body,tag:'paper-alert-'+event.id})
+      const label=event.alert_type==='price'?'price':event.alert_type.replaceAll('_',' ')
+      const body='$'+(event.token_symbol||'TOKEN')+' · '+label+' alert triggered'
+      new Notification('PAPER '+label+' alert',{body,tag:'paper-alert-'+event.id})
     }
   },[alerts,items,notificationPermission,notified])
 
@@ -183,16 +200,26 @@ export default function WatchlistPage(){
 
   async function save(row:Item){
     if(!supabase)return
-    const draft=drafts[row.id]||{above:'',below:''}
+    const draft=drafts[row.id]||{above:'',below:'',volume:'',move:'',liquidity:'',holders:'',list:'Main',notes:''}
     const above=draft.above.trim()===''?null:Number(draft.above)
     const below=draft.below.trim()===''?null:Number(draft.below)
-    if((above!==null&&!Number.isFinite(above))||(below!==null&&!Number.isFinite(below))){
-      setError('Alert prices must be valid numbers.')
+    const volume=draft.volume.trim()===''?null:Number(draft.volume)
+    const move=draft.move.trim()===''?null:Number(draft.move)
+    const liquidity=draft.liquidity.trim()===''?null:Number(draft.liquidity)
+    const holders=draft.holders.trim()===''?null:Number(draft.holders)
+    if([above,below,volume,move,liquidity,holders].some(v=>v!==null&&!Number.isFinite(v))){
+      setError('Alert thresholds must be valid numbers.')
       return
     }
     const result=await supabase.from('token_watchlist').update({
       alert_above_usd:above,
       alert_below_usd:below,
+      alert_volume_5m_usd:volume,
+      alert_move_5m_pct:move,
+      alert_liquidity_below_usd:liquidity,
+      alert_holder_growth_pct:holders,
+      list_name:draft.list.trim()||'Main',
+      notes:draft.notes.trim()||null,
       alert_above_triggered:false,
       alert_below_triggered:false,
       updated_at:new Date().toISOString()
@@ -284,8 +311,8 @@ export default function WatchlistPage(){
             ?<div className="watch-alert-empty">No triggered server alerts yet.</div>
             :<div className="watch-alert-event-list">
               {alerts.slice(0,8).map(event=><button className={'watch-alert-event '+(event.status==='unread'?'unread':'')} key={event.id} onClick={()=>void markAlertRead(event.id)}>
-                <span><b>{'$'+(event.token_symbol||'TOKEN')}</b><small>{event.direction.toUpperCase()} {money(Number(event.trigger_price_usd))}</small></span>
-                <strong>{money(Number(event.observed_price_usd))}</strong>
+                <span><b>{'$'+(event.token_symbol||'TOKEN')}</b><small>{event.alert_type.replaceAll('_',' ').toUpperCase()}</small></span>
+                <strong>{event.alert_type==='price'?money(Number(event.observed_price_usd)):Number(event.observed_price_usd).toLocaleString(undefined,{maximumFractionDigits:2})}</strong>
                 <time>{new Date(event.created_at).toLocaleString()}</time>
               </button>)}
             </div>}
@@ -302,7 +329,7 @@ export default function WatchlistPage(){
             const above=row.alert_above_usd==null?null:Number(row.alert_above_usd)
             const below=row.alert_below_usd==null?null:Number(row.alert_below_usd)
             const trigger=Boolean(row.alert_above_triggered||row.alert_below_triggered||(price>0&&((above!==null&&price>=above)||(below!==null&&price<=below))))
-            const draft=drafts[row.id]||{above:'',below:''}
+            const draft=drafts[row.id]||{above:'',below:'',volume:'',move:'',liquidity:'',holders:'',list:'Main',notes:''}
             const href=row.chain_id==='solana'?'/spot?mint='+row.address:token?.pairUrl||token?.buyUrl||'#'
             return <div className={'watchlist-row '+(trigger?'triggered':'')} key={row.id}>
               <Link href={href} target={row.chain_id==='solana'?undefined:'_blank'} className="watch-token">
@@ -321,11 +348,21 @@ export default function WatchlistPage(){
                 <button onClick={()=>void save(row)} title="Save alert"><Save size={13}/></button>
                 <button onClick={()=>void remove(row)} title="Remove"><Trash2 size={13}/></button>
               </span>
+              <div className="watch-advanced-alerts">
+                <label>List<input value={draft.list} onChange={e=>setDrafts(cur=>({...cur,[row.id]:{...draft,list:e.target.value}}))}/></label>
+                <label>5m volume ≥ $<input type="number" value={draft.volume} onChange={e=>setDrafts(cur=>({...cur,[row.id]:{...draft,volume:e.target.value}}))}/></label>
+                <label>5m move ≥ %<input type="number" value={draft.move} onChange={e=>setDrafts(cur=>({...cur,[row.id]:{...draft,move:e.target.value}}))}/></label>
+                <label>Liquidity ≤ $<input type="number" value={draft.liquidity} onChange={e=>setDrafts(cur=>({...cur,[row.id]:{...draft,liquidity:e.target.value}}))}/></label>
+                <label>Holder growth ≥ %<input type="number" value={draft.holders} onChange={e=>setDrafts(cur=>({...cur,[row.id]:{...draft,holders:e.target.value}}))}/></label>
+                <label>Notes<input value={draft.notes} maxLength={160} onChange={e=>setDrafts(cur=>({...cur,[row.id]:{...draft,notes:e.target.value}}))}/></label>
+                <button className={row.alert_dev_sell?'active':''} onClick={async()=>{if(!supabase)return;await supabase.from('token_watchlist').update({alert_dev_sell:!row.alert_dev_sell,updated_at:new Date().toISOString()}).eq('id',row.id);void load()}}>DEV SELL</button>
+                <button className={row.alert_migration?'active':''} onClick={async()=>{if(!supabase)return;await supabase.from('token_watchlist').update({alert_migration:!row.alert_migration,updated_at:new Date().toISOString()}).eq('id',row.id);void load()}}>MIGRATION</button>
+              </div>
             </div>
           })}
         </section>
 
-        <div className="chain-paper-note"><b>Alert behavior:</b> thresholds are stored in your PAPER account and evaluated by the server monitor. Browser notifications require permission and can appear while the browser keeps PAPER active in the background. Email, SMS, and true closed-browser Web Push still require an external notification provider/VAPID setup.</div>
+        <div className="chain-paper-note"><b>Alert behavior:</b> price, volume, move, liquidity, holder-growth, dev-sell and migration thresholds are stored in your PAPER account and evaluated by the server monitor. Browser notifications require permission and can appear while the browser keeps PAPER active in the background. Email, SMS, and true closed-browser Web Push still require an external notification provider/VAPID setup.</div>
       </div>
     </main>
     <BottomDock active="watchlist"/>
