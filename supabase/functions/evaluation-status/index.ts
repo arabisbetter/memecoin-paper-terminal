@@ -7,6 +7,24 @@ const corsHeaders={
 }
 const reply=(body:unknown,status=200)=>new Response(JSON.stringify(body),{status,headers:{...corsHeaders,'Content-Type':'application/json'}})
 const finite=(v:unknown,fallback=0)=>{const n=Number(v);return Number.isFinite(n)?n:fallback}
+function jwtSessionId(authHeader:string){
+  try{
+    const token=authHeader.slice(7),payload=token.split('.')[1]
+    if(!payload)return null
+    const normalized=payload.replace(/-/g,'+').replace(/_/g,'/')
+    const padded=normalized+'='.repeat((4-normalized.length%4)%4)
+    const claims=JSON.parse(atob(padded))
+    const sid=String(claims?.session_id||'')
+    return /^[0-9a-f]{8}-[0-9a-f-]{27}$/i.test(sid)?sid:null
+  }catch{return null}
+}
+async function consumeRate(admin:any,scope:string,subject:string,limit:number,windowSeconds:number){
+  const {data,error}=await admin.rpc('paper_consume_server_rate_limit_v1',{
+    p_scope:scope,p_subject:subject,p_limit:limit,p_window_seconds:windowSeconds
+  })
+  if(error)throw new Error(error.message)
+  return data as {allowed?:boolean;remaining?:number;retry_after_seconds?:number}
+}
 type Pair={chainId?:string;pairAddress?:string;priceUsd?:string;liquidity?:{usd?:number}}
 
 async function fetchJson(url:string,timeoutMs=6500){
@@ -86,12 +104,21 @@ Deno.serve(async(req:Request)=>{
     const {data:{user},error:userError}=await userClient.auth.getUser()
     if(userError||!user)return reply({error:'invalid session'},401)
     const admin=createClient(url,secret,{auth:{persistSession:false,autoRefreshToken:false}})
+    const sessionId=jwtSessionId(authHeader)
+    if(!sessionId)return reply({error:'invalid session'},401)
+    const {data:sessionValid,error:sessionError}=await admin.rpc('paper_validate_server_session_v1',{
+      p_user_id:user.id,p_session_id:sessionId,p_require_aal2:false
+    })
+    if(sessionError)throw new Error(sessionError.message)
+    if(sessionValid!==true)return reply({error:'session revoked or expired'},401)
     const body=await req.json().catch(()=>({})),action=String(body?.action||'status')
 
     if(action==='start'){
+      const rate=await consumeRate(admin,'evaluation_start',user.id,5,3600)
+      if(rate?.allowed===false)return reply({error:'Too many evaluation-start attempts. Try again later.',code:'RATE_LIMITED',retryAfterSeconds:rate.retry_after_seconds||3600},429)
       const {data:control}=await admin.from('paper_control_plane').select('emergency_pause,evaluation_entries_enabled,maintenance_message').eq('id',true).maybeSingle()
       if(control?.emergency_pause||control?.evaluation_entries_enabled===false)return reply({error:control?.maintenance_message||'New evaluations are temporarily paused.',code:'PLATFORM_PAUSED'},503)
-      const {data,error}=await userClient.rpc('paper_start_evaluation_v1')
+      const {data,error}=await admin.rpc('paper_start_evaluation_v2',{p_user_id:user.id})
       if(error){
         const message=error.message||'Could not start evaluation'
         const status=/RECOVERABLE_LOGIN_REQUIRED|LEGAL_ACCEPTANCE_REQUIRED/.test(message)?403:/COOLDOWN/.test(message)?409:400
