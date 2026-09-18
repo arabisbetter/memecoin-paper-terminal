@@ -55,6 +55,10 @@ Apply only the PR delta, in this order:
 8. `20260918041000_part5_funded_execution.sql`
 9. `20260918050000_part6_production_hardening.sql`
 10. `20260918051000_part6_performance_cleanup.sql`
+11. `20260918052000_production_compatibility.sql`
+12. `20260918053000_funded_order_compatibility.sql`
+13. `20260918054000_funded_settlement_compatibility.sql`
+14. `20260918055000_funded_activation_compatibility.sql`
 
 After each migration, verify success before moving to the next. Do not enable any real-money flag during migration.
 
@@ -122,3 +126,8 @@ If data integrity is in doubt:
 6. reconcile every funded order/payout signature before resuming.
 
 Never solve a production incident by deleting/recreating funded rows or manually editing balances without an auditable reconciliation.
+
+
+## Production compatibility dry-run
+
+On September 18, 2026, the complete migration stack above was executed against the current production database inside a single transaction with short lock/statement timeouts and then rolled back. The final dry-run completed successfully. It also verified that evaluation v2, funded preflight, Part 6 operational tables, and the real-money platform flags are present after migration, with real-funded activation, payouts, KYC-provider, and Turnkey-signing flags all false.
