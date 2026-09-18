@@ -631,7 +631,42 @@ $$;
 revoke all on function public.paper_finalize_funded_payout_v1(uuid,text,bigint,numeric) from public,anon,authenticated;
 grant execute on function public.paper_finalize_funded_payout_v1(uuid,text,bigint,numeric) to service_role;
 
-do $$
+create or replace function paper_private.invoke_funded_monitor()
+returns bigint
+language plpgsql
+security definer
+set search_path=paper_private,public,net,pg_temp
+as $
+declare
+  cfg paper_private.runtime_config%rowtype;
+  tok text;
+  req_id bigint;
+begin
+  select * into cfg from paper_private.runtime_config where id=true;
+  if not coalesce(cfg.monitor_enabled,false) or cfg.project_url is null then return null; end if;
+  select internal_monitor_token into tok from paper_private.runtime_secrets where id=true;
+
+  select net.http_post(
+    url:=rtrim(cfg.project_url,'/')||'/functions/v1/funded-monitor',
+    headers:=jsonb_build_object('Content-Type','application/json','x-paper-internal-token',tok),
+    body:='{"source":"pg_cron"}'::jsonb,
+    timeout_milliseconds:=20000
+  ) into req_id;
+  return req_id;
+end;
+$;
+revoke all on function paper_private.invoke_funded_monitor() from public,anon,authenticated;
+grant execute on function paper_private.invoke_funded_monitor() to service_role;
+
+do $
+declare existing_id bigint;
+begin
+  select jobid into existing_id from cron.job where jobname='paper-funded-monitor-v1';
+  if existing_id is not null then perform cron.unschedule(existing_id); end if;
+  perform cron.schedule('paper-funded-monitor-v1','30 seconds','select paper_private.invoke_funded_monitor();');
+end $;
+
+do $
 declare existing_id bigint;
 begin
   select jobid into existing_id from cron.job where jobname='paper-funded-settlement-v1';
