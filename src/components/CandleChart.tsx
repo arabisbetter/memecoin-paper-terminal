@@ -64,12 +64,14 @@ const vwap=(rows:Candle[])=>{
 }
 
 export default function CandleChart({
-  poolAddress,currentPrice,currentMarketCap,currentSolUsd,symbol,venue
+  poolAddress,currentPrice,currentMarketCap,currentSolUsd,averageEntryPrice,averageEntryMarketCap,symbol,venue
 }:{
   poolAddress?:string
   currentPrice?:number
   currentMarketCap?:number
   currentSolUsd?:number
+  averageEntryPrice?:number
+  averageEntryMarketCap?:number
   symbol?:string
   venue?:string
 }){
@@ -82,6 +84,7 @@ export default function CandleChart({
   const ema21Ref=useRef<ISeriesApi<'Line'>|null>(null)
   const vwapRef=useRef<ISeriesApi<'Line'>|null>(null)
   const priceLineRef=useRef<any>(null)
+  const costLineRef=useRef<any>(null)
   const userPriceLines=useRef<any[]>([])
   const userLevels=useRef<UserLevel[]>([])
   const redoLevels=useRef<UserLevel[]>([])
@@ -176,6 +179,7 @@ export default function CandleChart({
       ema21Ref.current=null
       vwapRef.current=null
       priceLineRef.current=null
+      costLineRef.current=null
       userPriceLines.current=[]
     }
   },[])
@@ -312,6 +316,11 @@ export default function CandleChart({
     return quote==='sol'&&solAvailable?raw/solUsd:raw
   },[mode,currentMarketCap,currentPrice,quote,solAvailable,solUsd])
 
+  const averageDisplayValue=useMemo(()=>{
+    const raw=mode==='marketCap'?Number(averageEntryMarketCap||0):Number(averageEntryPrice||0)
+    return quote==='sol'&&solAvailable?raw/solUsd:raw
+  },[mode,averageEntryMarketCap,averageEntryPrice,quote,solAvailable,solUsd])
+
   useEffect(()=>{
     const series=candleRef.current
     if(!series||!currentDisplayValue||!Number.isFinite(currentDisplayValue))return
@@ -323,6 +332,22 @@ export default function CandleChart({
       priceLineRef.current.applyOptions({price:currentDisplayValue,color:'#18c5a3'})
     }
   },[currentDisplayValue])
+
+  useEffect(()=>{
+    const series=candleRef.current
+    if(!series)return
+    if(!averageDisplayValue||!Number.isFinite(averageDisplayValue)){
+      if(costLineRef.current){series.removePriceLine(costLineRef.current);costLineRef.current=null}
+      return
+    }
+    if(!costLineRef.current){
+      costLineRef.current=series.createPriceLine({
+        price:averageDisplayValue,color:'#6e9f49',lineWidth:2,lineStyle:1,axisLabelVisible:true,title:'AVG COST'
+      })
+    }else{
+      costLineRef.current.applyOptions({price:averageDisplayValue,color:'#6e9f49',title:'AVG COST'})
+    }
+  },[averageDisplayValue])
 
   useEffect(()=>{
     if(!expanded)return
