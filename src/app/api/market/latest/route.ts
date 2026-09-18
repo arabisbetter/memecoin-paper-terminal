@@ -37,6 +37,7 @@ async function fetchJson<T>(url:string,timeoutMs=8_000):Promise<T>{
 
 const chunks=<T,>(items:T[],size:number)=>Array.from({length:Math.ceil(items.length/size)},(_,i)=>items.slice(i*size,(i+1)*size))
 const lower=(v:unknown)=>String(v||'').toLowerCase()
+const firstPositive=(...values:unknown[])=>{for(const value of values){const n=Number(value);if(Number.isFinite(n)&&n>0)return n}return 0}
 
 function applyObservedMinute(tokens:MarketToken[],now:number){
   for(const token of tokens){
@@ -132,7 +133,7 @@ async function geckoTerminalFeed():Promise<MarketToken[]>{
     tokens.push({
       mint,pairAddress:a.address,name:meta?.name||pairName,symbol:meta?.symbol||pairName.replace(/^\$/,'').slice(0,16)||'???',image:meta?.image_url,
       pairUrl:marketUrl,buyUrl:marketUrl,
-      priceUsd,priceNative:Number(a.base_token_price_native_currency||0),marketCap:Number(a.market_cap_usd||a.fdv_usd||0),liquidityUsd:Number(a.reserve_in_usd||0),
+      priceUsd,priceNative:Number(a.base_token_price_native_currency||0),marketCap:firstPositive(a.market_cap_usd,a.fdv_usd),liquidityUsd:Number(a.reserve_in_usd||0),
       volume5m:Number(a.volume_usd?.m5||0),volume1h:Number(a.volume_usd?.h1||0),volume6h:Number(a.volume_usd?.h6||0),volume24h:Number(a.volume_usd?.h24||0),
       priceChange5m:Number(a.price_change_percentage?.m5||0),priceChange1h:Number(a.price_change_percentage?.h1||0),priceChange6h:Number(a.price_change_percentage?.h6||0),priceChange24h:Number(a.price_change_percentage?.h24||0),
       buys5m:Number(a.transactions?.m5?.buys||0),sells5m:Number(a.transactions?.m5?.sells||0),buys1h:Number(a.transactions?.h1?.buys||0),sells1h:Number(a.transactions?.h1?.sells||0),buys6h:Number(a.transactions?.h6?.buys||0),sells6h:Number(a.transactions?.h6?.sells||0),buys24h:Number(a.transactions?.h24?.buys||0),sells24h:Number(a.transactions?.h24?.sells||0),
