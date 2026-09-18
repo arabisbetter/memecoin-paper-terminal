@@ -266,12 +266,22 @@ Deno.serve(async(req:Request)=>{
       const {data:pending,error:pe}=await admin.from('paper_admin_action_approvals').select('*').eq('id',approvalId).eq('status','pending').single()
       if(pe)throw new Error(pe.message)
       if(pending.requested_by===ctx.user.id)return reply({error:'SECOND_ADMIN_REQUIRED'},409)
+      const decidedAt=new Date().toISOString()
       const {data:after,error}=await admin.from('paper_admin_action_approvals').update({
-        status:'approved',approved_by:ctx.user.id,decided_at:new Date().toISOString()
+        status:'approved',approved_by:ctx.user.id,decided_at:decidedAt
       }).eq('id',approvalId).select('*').single()
       if(error)throw new Error(error.message)
-      await audit(admin,ctx,'approve_action','admin_approval',approvalId,pending,after,requestId)
-      return reply({ok:true,approval:after})
+      let settlement=null
+      if(pending.action_type==='payout'){
+        const {data:s,error:settlementError}=await admin.from('paper_funded_settlements').update({
+          status:'approved',approved_by:pending.requested_by,approved_at:pending.requested_at,
+          second_approved_by:ctx.user.id,second_approved_at:decidedAt
+        }).eq('id',pending.target_id).select('*').single()
+        if(settlementError)throw new Error(settlementError.message)
+        settlement=s
+      }
+      await audit(admin,ctx,'approve_action','admin_approval',approvalId,pending,{approval:after,settlement},requestId)
+      return reply({ok:true,approval:after,settlement})
     }
 
     if(action==='approve_payout'){
@@ -284,19 +294,28 @@ Deno.serve(async(req:Request)=>{
       const amount=finite(settlement.trader_share_usd)
       if(amount>2000){
         const {data:approved}=await admin.from('paper_admin_action_approvals').select('*')
-          .eq('action_type','payout').eq('target_id',settlementId).eq('status','approved').maybeSingle()
-        if(!approved){
-          const {data:pending}=await admin.from('paper_admin_action_approvals').insert({
-            action_type:'payout',target_id:settlementId,amount_usd:amount,requested_by:ctx.user.id,
-            details:{settlement_id:settlementId}
-          }).select('*').single()
-          return reply({error:'SECOND_ADMIN_REQUIRED',approval:pending},409)
+          .eq('action_type','payout').eq('target_id',settlementId).eq('status','approved').order('decided_at',{ascending:false}).limit(1).maybeSingle()
+        if(approved){
+          const {data:current}=await admin.from('paper_funded_settlements').select('*').eq('id',settlementId).single()
+          return reply({ok:true,settlement:current,approval:approved,signing:'AWAITING_PAYOUT_SIGNER'})
         }
+        const {data:pending}=await admin.from('paper_admin_action_approvals').select('*')
+          .eq('action_type','payout').eq('target_id',settlementId).eq('status','pending').maybeSingle()
+        if(pending)return reply({error:'SECOND_ADMIN_REQUIRED',approval:pending},409)
+        const {data:created,error:approvalError}=await admin.from('paper_admin_action_approvals').insert({
+          action_type:'payout',target_id:settlementId,amount_usd:amount,requested_by:ctx.user.id,
+          details:{settlement_id:settlementId}
+        }).select('*').single()
+        if(approvalError)throw new Error(approvalError.message)
+        return reply({error:'SECOND_ADMIN_REQUIRED',approval:created},409)
       }
-      const {data:after,error}=await admin.from('paper_funded_settlements').update({status:'approved'}).eq('id',settlementId).select('*').single()
+      const approvedAt=new Date().toISOString()
+      const {data:after,error}=await admin.from('paper_funded_settlements').update({
+        status:'approved',approved_by:ctx.user.id,approved_at:approvedAt
+      }).eq('id',settlementId).select('*').single()
       if(error)throw new Error(error.message)
       await audit(admin,ctx,'approve_payout','settlement',settlementId,settlement,after,requestId)
-      return reply({ok:true,settlement:after,signing:'NOT_EXECUTED_BY_THIS_ENDPOINT'})
+      return reply({ok:true,settlement:after,signing:'AWAITING_PAYOUT_SIGNER'})
     }
 
     return reply({error:'unknown action'},400)
