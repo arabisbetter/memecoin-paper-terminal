@@ -15,7 +15,7 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 18
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
@@ -38,6 +38,12 @@ jobs:
         env:
           NEXT_PUBLIC_SUPABASE_URL: https://bpnhybmptjenrjntvmsz.supabase.co
           NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: placeholder
+
+      - name: Install pinned browser test runner
+        run: npm install --no-save --package-lock=false @playwright/test@1.55.0
+
+      - name: Install Chromium for E2E
+        run: npx playwright install --with-deps chromium
 
       - name: Start production build
         run: |
@@ -175,6 +181,9 @@ jobs:
           for route in / /discover /spot /pulse /portfolio /chains /wallets /watchlist /rewards /leaderboards /profile /coin /legal /opengraph-image /twitter-image /icon.svg /robots.txt /sitemap.xml /manifest.webmanifest; do
             curl -fsS "http://127.0.0.1:3000$route" >/dev/null
           done
+
+      - name: Run Chromium terminal E2E
+        run: npx playwright test
 
       - name: Print server log on failure
         if: failure()
