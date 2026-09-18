@@ -109,7 +109,8 @@ export default function Terminal(){
     if(action==='buy'&&totalDebit>cash){setMessage('Not enough PAPER buying power for this order and estimated fee.');return}
     if(action==='sell'&&(!selectedPosition||target.mint!==selected?.mint)){setMessage('No open PAPER position for this token.');return}
     if(target.mint===selected?.mint&&dataStatus==='STALE'){setMessage('Live pricing is stale. New PAPER orders are temporarily paused.');return}
-    if(confirmOrders&&!instantMode&&!window.confirm('Confirm PAPER '+action.toUpperCase()+' for 
+    if(confirmOrders&&!instantMode&&!window.confirm('Confirm PAPER '+action.toUpperCase()+' for '+target.symbol+'? This is simulated only.'))return
+    setBusy(true);setMessage('');setReceipt(null)
     try{
       const idempotencyKey=crypto.randomUUID(),body=action==='buy'?{mint:target.mint,side:'buy',amountSol:buySol,idempotencyKey}:{mint:target.mint,side:'sell',sellPct,idempotencyKey}
       const {data,error}=await supabase.functions.invoke('paper-trade',{body});if(error)throw error;if(data?.error)throw new Error(data.error)
