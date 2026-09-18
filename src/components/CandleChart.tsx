@@ -97,18 +97,20 @@ export default function CandleChart({poolAddress,currentPrice,currentMarketCap,s
     if(fit)requestAnimationFrame(()=>chartRef.current?.timeScale().fitContent())
   },[displayCandles,mode])
 
+  const currentDisplayValue=mode==='marketCap'?Number(currentMarketCap||0):Number(currentPrice||0)
   useEffect(()=>{
     const series=candleRef.current
-    if(!series||!currentPrice||!Number.isFinite(currentPrice))return
-    if(!priceLineRef.current)priceLineRef.current=series.createPriceLine({price:currentPrice,color:'#6179ff',lineWidth:1,lineStyle:2,axisLabelVisible:true,title:'LIVE'})
-    else priceLineRef.current.applyOptions({price:currentPrice})
-  },[currentPrice])
+    if(!series||!currentDisplayValue||!Number.isFinite(currentDisplayValue))return
+    if(!priceLineRef.current)priceLineRef.current=series.createPriceLine({price:currentDisplayValue,color:'#6179ff',lineWidth:1,lineStyle:2,axisLabelVisible:true,title:mode==='marketCap'?'LIVE MC':'LIVE'})
+    else priceLineRef.current.applyOptions({price:currentDisplayValue,title:mode==='marketCap'?'LIVE MC':'LIVE'})
+  },[currentDisplayValue,mode])
 
   useEffect(()=>{if(!expanded)return;const old=document.body.style.overflow;document.body.style.overflow='hidden';const key=(e:KeyboardEvent)=>{if(e.key==='Escape')setExpanded(false)};window.addEventListener('keydown',key);return()=>{document.body.style.overflow=old;window.removeEventListener('keydown',key)}},[expanded])
   useEffect(()=>{requestAnimationFrame(()=>chartRef.current?.timeScale().fitContent())},[expanded])
 
-  const latest=hover||candles[candles.length-1]
-  const summary=useMemo(()=>{if(candles.length<2)return{change:0,volume:candles.reduce((s,c)=>s+Number(c.volume||0),0)};const first=candles[0],last=candles[candles.length-1];return{change:first.open>0?(last.close/first.open-1)*100:0,volume:candles.reduce((s,c)=>s+Number(c.volume||0),0)}},[candles])
+  const latest=hover||displayCandles[displayCandles.length-1]
+  const summary=useMemo(()=>{if(displayCandles.length<2)return{change:0,volume:displayCandles.reduce((s,c)=>s+Number(c.volume||0),0)};const first=displayCandles[0],last=displayCandles[displayCandles.length-1];return{change:first.open>0?(last.close/first.open-1)*100:0,volume:displayCandles.reduce((s,c)=>s+Number(c.volume||0),0)}},[displayCandles])
+  const formatDisplay=(value:number)=>mode==='marketCap'?compact(value):formatPrice(value)
 
   function chooseTimeframe(value:Timeframe){setTf(value);setTfOpen(false)}
 
