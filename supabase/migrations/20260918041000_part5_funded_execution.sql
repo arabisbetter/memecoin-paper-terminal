@@ -593,7 +593,13 @@ as $$
 declare
   created_count integer:=0;
 begin
-  if not coalesce((select real_payouts_enabled from public.paper_platform_flags where id=true),false) then
+  if not coalesce((
+    select legal_review_complete and legal_entity_ready and kyc_provider_configured and
+           aml_sanctions_controls_ready and jurisdiction_allowlist_ready and
+           turnkey_signing_enabled and custody_security_review_complete and
+           treasury_capital_available and real_funded_activation and real_payouts_enabled
+    from public.paper_platform_flags where id=true
+  ),false) then
     return 0;
   end if;
 
@@ -652,7 +658,13 @@ begin
   if s.trader_share_usd>2000 and (
     s.second_approved_by is null or s.second_approved_at is null or s.second_approved_by=s.approved_by
   ) then raise exception 'SECOND_ADMIN_APPROVAL_REQUIRED'; end if;
-  if not coalesce((select real_payouts_enabled from public.paper_platform_flags where id=true),false) then
+  if not coalesce((
+    select legal_review_complete and legal_entity_ready and kyc_provider_configured and
+           aml_sanctions_controls_ready and jurisdiction_allowlist_ready and
+           turnkey_signing_enabled and custody_security_review_complete and
+           treasury_capital_available and real_funded_activation and real_payouts_enabled
+    from public.paper_platform_flags where id=true
+  ),false) then
     raise exception 'REAL_PAYOUTS_DISABLED';
   end if;
 
