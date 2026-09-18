@@ -101,6 +101,14 @@ create policy paper_tax_status_read_own on public.paper_tax_status
 revoke all on public.paper_tax_status from public,anon,authenticated;
 grant select on public.paper_tax_status to authenticated;
 
+alter table public.account_security enable row level security;
+drop policy if exists account_security_read_own on public.account_security;
+create policy account_security_read_own on public.account_security
+  for select to authenticated using ((select auth.uid())=user_id);
+revoke all on public.account_security from public,anon,authenticated;
+grant select(user_id,payout_wallet_address,flagged_for_review,risk_reasons,payout_linked_at,last_seen_at,updated_at)
+  on public.account_security to authenticated;
+
 create table if not exists public.paper_custody_wallets (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null unique references public.profiles(id) on delete cascade,
