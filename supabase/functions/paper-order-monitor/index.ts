@@ -207,10 +207,18 @@ Deno.serve(async(req:Request)=>{
         stats.filled++
       }catch(error){
         const message=error instanceof Error?error.message:'conditional execution failed'
-        await admin.from('paper_conditional_orders').update({
-          status:'rejected',rejection_reason:message.slice(0,500),updated_at:new Date().toISOString()
-        }).eq('id',raw.id)
-        stats.rejected++
+        const transient=/market data unavailable|no live Solana market|SOL\/USD unavailable|stale market|fetch|abort|timed out|timeout/i.test(message)
+        if(transient){
+          await admin.from('paper_conditional_orders').update({
+            status:'pending',processing_started_at:null,rejection_reason:'Live market data unavailable; retrying automatically.',updated_at:new Date().toISOString()
+          }).eq('id',raw.id)
+          stats.waiting++;stats.errors=(stats as any).errors?Number((stats as any).errors)+1:1
+        }else{
+          await admin.from('paper_conditional_orders').update({
+            status:'rejected',rejection_reason:message.slice(0,500),updated_at:new Date().toISOString()
+          }).eq('id',raw.id)
+          stats.rejected++
+        }
       }
     }
 
