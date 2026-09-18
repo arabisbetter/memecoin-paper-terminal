@@ -266,7 +266,7 @@ create or replace function public.paper_admin_set_kyc_result(
 language plpgsql
 security definer
 set search_path=public,pg_temp
-as $
+as $$
 declare
   v_now timestamptz:=now();
 begin
@@ -292,7 +292,7 @@ begin
 
   return jsonb_build_object('user_id',target_user,'kyc_status',case when verified then 'verified' else 'rejected' end);
 end;
-$;
+$$;
 revoke all on function public.paper_admin_set_kyc_result(uuid,boolean,text,text) from public,anon,authenticated;
 grant execute on function public.paper_admin_set_kyc_result(uuid,boolean,text,text) to service_role;
 
