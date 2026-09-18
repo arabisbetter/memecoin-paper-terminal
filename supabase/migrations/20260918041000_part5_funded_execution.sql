@@ -356,7 +356,7 @@ create or replace function public.paper_admin_activate_funded_account(
   target_user uuid,
   trading_wallet text,
   provider_ref text,
-  capital numeric
+  capital numeric default null
 ) returns jsonb
 language plpgsql
 security definer
