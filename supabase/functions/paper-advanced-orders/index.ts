@@ -121,6 +121,16 @@ Deno.serve(async(req:Request)=>{
       if(!position)return json({error:'no open PAPER position'},422)
     }
 
+    const fingerprint=[side,mint,orderType,triggerPriceUsd.toPrecision(15),side==='buy'?amountSol.toPrecision(15):sellPct.toPrecision(12),expiresInHours].join('|')
+    const {data:existing,error:existingError}=await admin.from('paper_conditional_orders')
+      .select('*').eq('user_id',uid).eq('idempotency_key',idempotencyKey).maybeSingle()
+    if(existingError)throw new Error(existingError.message)
+    if(existing){
+      const existingFingerprint=String(existing.metadata?.request_fingerprint||'')
+      if(existingFingerprint&&existingFingerprint!==fingerprint)return json({error:'Idempotency key was already used for a different conditional order.',code:'IDEMPOTENCY_CONFLICT'},409)
+      return json({ok:true,paper:true,replayed:true,order:existing})
+    }
+
     const row={
       user_id:uid,
       idempotency_key:idempotencyKey,
@@ -133,15 +143,25 @@ Deno.serve(async(req:Request)=>{
       sell_pct:side==='sell'?sellPct:null,
       status:'pending',
       expires_at:new Date(Date.now()+expiresInHours*3600_000).toISOString(),
-      metadata:{source:'terminal',created_price_usd:finite(body?.currentPriceUsd)||null},
+      metadata:{source:'terminal',created_price_usd:finite(body?.currentPriceUsd)||null,request_fingerprint:fingerprint},
       updated_at:new Date().toISOString(),
     }
 
-    const {data,error}=await admin.from('paper_conditional_orders')
-      .upsert(row,{onConflict:'user_id,idempotency_key',ignoreDuplicates:false})
-      .select('*').single()
-    if(error)throw new Error(error.message)
-    return json({ok:true,paper:true,order:data})
+    const {data,error}=await admin.from('paper_conditional_orders').insert(row).select('*').single()
+    if(error){
+      if(String((error as any).code||'')==='23505'){
+        const {data:replay,error:replayError}=await admin.from('paper_conditional_orders')
+          .select('*').eq('user_id',uid).eq('idempotency_key',idempotencyKey).maybeSingle()
+        if(replayError)throw new Error(replayError.message)
+        if(replay){
+          const replayFingerprint=String(replay.metadata?.request_fingerprint||'')
+          if(replayFingerprint&&replayFingerprint!==fingerprint)return json({error:'Idempotency key was already used for a different conditional order.',code:'IDEMPOTENCY_CONFLICT'},409)
+          return json({ok:true,paper:true,replayed:true,order:replay})
+        }
+      }
+      throw new Error(error.message)
+    }
+    return json({ok:true,paper:true,replayed:false,order:data})
   }catch(error){
     return json({error:error instanceof Error?error.message:'conditional order failed'},500)
   }
