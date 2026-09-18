@@ -275,7 +275,7 @@ export async function POST(req:NextRequest){
       const sourceAta=getAssociatedTokenAddressSync(mint,wallet)
       const destinationAta=getAssociatedTokenAddressSync(mint,destination)
       const raw=BigInt(Math.floor(traderUsd*1_000_000+0.000001))
-      if(raw<=0n)return out({error:'INVALID_PAYOUT_AMOUNT'},400)
+      if(raw<=BigInt(0))return out({error:'INVALID_PAYOUT_AMOUNT'},400)
       const balance=await connection.getTokenAccountBalance(sourceAta,'confirmed').catch(()=>null)
       if(!balance||BigInt(balance.value.amount)<raw)return out({error:'PAYOUT_TREASURY_USDC_INSUFFICIENT'},409)
       instructions.push(createAssociatedTokenAccountIdempotentInstruction(wallet,destinationAta,destination,mint))
@@ -284,7 +284,7 @@ export async function POST(req:NextRequest){
     }else{
       solUsdPrice=await freshSolUsd(admin)
       const lamports=BigInt(Math.floor((traderUsd/solUsdPrice)*1e9))
-      if(lamports<=0n)return out({error:'INVALID_PAYOUT_AMOUNT'},400)
+      if(lamports<=BigInt(0))return out({error:'INVALID_PAYOUT_AMOUNT'},400)
       const needed=Number(lamports)+reserveLamports
       if(!Number.isSafeInteger(needed)||treasurySol<needed)return out({error:'PAYOUT_TREASURY_SOL_INSUFFICIENT'},409)
       instructions.push(SystemProgram.transfer({fromPubkey:wallet,toPubkey:destination,lamports}))
