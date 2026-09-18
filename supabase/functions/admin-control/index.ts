@@ -108,6 +108,32 @@ Deno.serve(async(req:Request)=>{
       })
     }
 
+    if(action==='traders'){
+      const limit=Math.max(1,Math.min(100,Math.round(finite(body?.limit,50))))
+      const search=String(body?.search||'').trim()
+      let profileQuery=admin.from('profiles').select('id,username,display_name,avatar_url,avatar_emoji,created_at').order('created_at',{ascending:false}).limit(limit)
+      if(search)profileQuery=profileQuery.or(`username.ilike.%${search.replace(/[%_,]/g,'')}%,display_name.ilike.%${search.replace(/[%_,]/g,'')}%`)
+      const {data:profiles,error:profileError}=await profileQuery
+      if(profileError)throw new Error(profileError.message)
+      const ids=(profiles||[]).map((p:any)=>p.id)
+      if(!ids.length)return reply({ok:true,traders:[]})
+      const [evalRes,fundedRes,waitRes,securityRes,scaleRes]=await Promise.all([
+        admin.from('paper_evaluations').select('user_id,status,attempt_no,last_equity_usd,peak_equity_usd,trades_count,failure_reason,passed_at,ended_at,updated_at').in('user_id',ids).order('attempt_no',{ascending:false}),
+        admin.from('paper_funded_profiles').select('user_id,stage,kyc_status,payout_wallet_verified_at,updated_at').in('user_id',ids),
+        admin.from('paper_funded_waitlist').select('user_id,status,priority,qualified_at,hold_reason,updated_at').in('user_id',ids),
+        admin.from('account_security').select('user_id,flagged_for_review,risk_reasons,last_seen_at').in('user_id',ids),
+        admin.from('paper_funded_scale_state').select('user_id,scale_level,capital_usd,consecutive_profitable_cycles,next_capital_usd,updated_at').in('user_id',ids),
+      ])
+      const latestEval=new Map<string,any>()
+      for(const e of evalRes.data||[])if(!latestEval.has(String(e.user_id)))latestEval.set(String(e.user_id),e)
+      const byUser=(rows:any[]|null|undefined)=>new Map((rows||[]).map((r:any)=>[String(r.user_id),r]))
+      const funded=byUser(fundedRes.data),waitlist=byUser(waitRes.data),security=byUser(securityRes.data),scale=byUser(scaleRes.data)
+      return reply({ok:true,traders:(profiles||[]).map((p:any)=>({
+        profile:p,evaluation:latestEval.get(String(p.id))||null,funded:funded.get(String(p.id))||null,
+        waitlist:waitlist.get(String(p.id))||null,security:security.get(String(p.id))||null,scale:scale.get(String(p.id))||null
+      }))})
+    }
+
     if(ctx.internal&&action==='run_abuse_scan'){
       const {data,error}=await admin.rpc('paper_scan_abuse_v1')
       if(error)throw new Error(error.message)
