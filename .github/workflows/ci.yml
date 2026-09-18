@@ -1,4 +1,11 @@
 name: CI
+permissions:
+  contents: read
+
+concurrency:
+  group: paper-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 on:
   push:
     branches: [main]
@@ -10,11 +17,23 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 18
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 22
-      - run: npm install --no-audit --no-fund
+      - name: Install locked dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Reject public secret names
+        run: |
+          if grep -RInE 'NEXT_PUBLIC_[A-Z0-9_]*(SECRET|PRIVATE|SERVICE_ROLE|TURNKEY_API_PRIVATE)' src .env.example; then
+            echo "Server secret appears to use a NEXT_PUBLIC_ name."
+            exit 1
+          fi
+
+      - name: Audit production dependencies
+        run: npm audit --omit=dev --audit-level=high
+
       - run: npm run build
         env:
           NEXT_PUBLIC_SUPABASE_URL: https://bpnhybmptjenrjntvmsz.supabase.co

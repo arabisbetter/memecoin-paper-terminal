@@ -20,18 +20,21 @@ import "./errors.css";
 import "./landing.css";
 import "./chart-discover-polish.css";
 import "./performance-charity-polish.css";
+import "./evaluation.css";
+import "./phase23-control.css";
+import "./funded.css";
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://memecoin-paper-terminal.vercel.app"),
   applicationName: "PAPER",
   title: "PAPER — Trade PAPER. Earn real.",
-  description: "Start with $1,000 PAPER and trade real memecoin market conditions with simulated execution. No wallet. No deposits.",
+  description: "Start with $1,000 PAPER, trade real Solana memecoin market conditions with simulated execution, and prove your trading discipline in a free evaluation.",
   keywords: ["memecoin paper trading", "Solana paper trading", "crypto trading simulator", "memecoin simulator", "paper trading", "Solana memecoins"],
   category: "finance",
   alternates: { canonical: "/" },
   openGraph: {
     title: "PAPER — Trade PAPER. Earn real.",
-    description: "$1,000 PAPER. Real memecoin markets. Simulated execution. No wallet.",
+    description: "$1,000 PAPER. Real memecoin markets. Simulated execution. Free evaluation.",
     siteName: "PAPER",
     type: "website",
     url: "/",
@@ -39,7 +42,7 @@ export const metadata: Metadata = {
   twitter: {
     card: "summary_large_image",
     title: "PAPER — Trade PAPER. Earn real.",
-    description: "$1,000 PAPER. Real memecoin markets. Simulated execution. No wallet.",
+    description: "$1,000 PAPER. Real memecoin markets. Simulated execution. Free evaluation.",
   },
 };
 
