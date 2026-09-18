@@ -201,6 +201,41 @@ alter table public.paper_funded_settlements
 create unique index if not exists paper_funded_settlement_account_week_idx
   on public.paper_funded_settlements(funded_account_id,week_start);
 
+alter table public.paper_funded_settlements
+  add column if not exists payout_network_fee_lamports bigint,
+  add column if not exists payout_network_fee_usd numeric(20,8),
+  add column if not exists payout_attempts integer not null default 0,
+  add column if not exists payout_last_checked_at timestamptz;
+
+-- Signed payout transactions are private server artifacts. Persisting the exact
+-- signed bytes before broadcast makes retries idempotent: the same signature can
+-- be checked/rebroadcast instead of constructing a second payment.
+create schema if not exists paper_private;
+revoke all on schema paper_private from public,anon,authenticated;
+grant usage on schema paper_private to service_role;
+
+create table if not exists paper_private.payout_broadcast_artifacts (
+  settlement_id uuid primary key references public.paper_funded_settlements(id) on delete cascade,
+  attempt_no integer not null default 1 check (attempt_no>=1),
+  signature text not null unique,
+  signed_transaction_base64 text not null,
+  blockhash text not null,
+  last_valid_block_height bigint not null,
+  destination_address text not null,
+  payout_asset text not null check (payout_asset in ('USDC','SOL')),
+  payout_asset_amount numeric(40,16) not null check (payout_asset_amount>0),
+  status text not null default 'signed'
+    check (status in ('signed','broadcast','confirmed','failed','expired')),
+  broadcast_at timestamptz,
+  confirmed_at timestamptz,
+  last_checked_at timestamptz,
+  last_error text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+revoke all on paper_private.payout_broadcast_artifacts from public,anon,authenticated;
+grant select,insert,update,delete on paper_private.payout_broadcast_artifacts to service_role;
+
 create or replace function public.paper_admin_activate_funded_account(
   target_user uuid,
   trading_wallet text,
