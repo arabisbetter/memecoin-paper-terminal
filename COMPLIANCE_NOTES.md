@@ -134,3 +134,52 @@ The current database intentionally defaults real-funded activation, real payouts
 ## 12. Required professional review before real launch
 
 Because the planned operator is in Texas, intends all 50 states plus international users, and plans custody-controlled real trading plus performance-based payouts, PAPER should retain U.S. counsel with crypto/fintech, commodities/securities, payments/MSB, and state-regulatory experience **before any real funded wallet is activated or any real payout is promised**. International rollout should be limited to jurisdictions affirmatively approved by counsel.
+
+
+## 13. Part 4 implementation state — Sumsub and Turnkey
+
+Engineering now has a provider-neutral compliance data model plus a Sumsub adapter. The adapter generates short-lived applicant WebSDK tokens server-side and accepts only HMAC-verified Sumsub webhook payloads. PAPER stores the provider applicant/reference ID, review state, reject labels, country/region needed for jurisdiction screening, and an age-18-or-older boolean. PAPER does **not** copy identity-document images, document numbers, selfie media, raw DOB, or other KYC source files into the application database.
+
+An approved KYC result does not activate a funded account. Separate AML/sanctions, age, jurisdiction, custody, treasury, legal, and server feature gates must also pass. Jurisdictions fail closed: a country/region is not real-funded eligible unless a rule has been affirmatively approved by counsel and is effective.
+
+The Turnkey adapter provisions one Solana wallet per eligible funded user only after the legal/KYC/AML/jurisdiction/custody-review gates are open. PAPER stores only the Turnkey organization/wallet identifiers, public Solana address, and approved policy reference. Database constraints prohibit marking a custody wallet as exportable, arbitrary-transfer capable, or principal-withdrawable.
+
+The staging environment intentionally has no Sumsub or Turnkey production credentials configured, and all real-money database gates remain false.
+
+## 14. Part 5 implementation state — funded risk and settlement
+
+The funded-account engine is installed in isolated staging with real execution disabled. Server/database controls now encode:
+- $1,000 initial funded capital, followed by $2,500 / $5,000 / $10,000 / $25,000 scale tiers;
+- 15% continuously trailing funded drawdown;
+- 5% funded-capital UTC daily-loss limit;
+- immediate account closure and a 14-day requalification cooldown on breach;
+- 25% funded-entry and token concentration limits and five open positions maximum;
+- 1% PAPER protocol fee;
+- 3% default / 5% hard maximum slippage;
+- fresh risk data required before a future funded buy;
+- future funded buys blocked by the risk engine while PAPER simulation remains separate;
+- Friday 17:00 UTC settlement;
+- flat positions before settlement;
+- high-water-mark profit calculation;
+- $25 minimum trader payout;
+- 90% trader / 10% PAPER split;
+- USDC default or SOL payout preference;
+- PAPER network fees recorded separately and not deducted from trader equity;
+- post-payout reset to the funded scale amount rather than compounding;
+- first admin approval for every payout and a distinct second admin above $2,000;
+- server-side confirmation/finalization records.
+
+Continuous funded risk monitoring is active in staging. Breaches queue any remaining open funded positions for controlled liquidation processing. The real transaction-signing/broadcast adapter is implemented in the branch but is not deployed or enabled while launch gates and the independent server kill switch remain off.
+
+## 15. Secret/data handling rules
+
+The following values are server-only secrets and must never be exposed through browser bundles, `NEXT_PUBLIC_*` variables, analytics, logs, screenshots, or repository commits:
+- Sumsub app token, API secret, and webhook secret;
+- Turnkey API private key and signing configuration;
+- Supabase service-role key;
+- private Solana RPC credentials;
+- any future payout-treasury signing material.
+
+Provider API public identifiers may still be operationally sensitive and should be kept in the same secret manager unless a provider explicitly requires client exposure.
+
+The application-level `PAPER_REAL_MONEY_SERVER_ENABLED` switch defaults to false. Even when that switch is eventually enabled, all database launch gates in Section 10 must independently be true before real-money execution can proceed.
