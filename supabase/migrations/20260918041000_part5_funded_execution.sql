@@ -236,6 +236,64 @@ create table if not exists paper_private.payout_broadcast_artifacts (
 revoke all on paper_private.payout_broadcast_artifacts from public,anon,authenticated;
 grant select,insert,update,delete on paper_private.payout_broadcast_artifacts to service_role;
 
+create or replace function public.paper_payout_artifact_get_v1(p_settlement_id uuid)
+returns jsonb
+language sql
+stable
+security definer
+set search_path=paper_private,pg_temp
+as $
+  select to_jsonb(a) from payout_broadcast_artifacts a where a.settlement_id=p_settlement_id;
+$;
+revoke all on function public.paper_payout_artifact_get_v1(uuid) from public,anon,authenticated;
+grant execute on function public.paper_payout_artifact_get_v1(uuid) to service_role;
+
+create or replace function public.paper_payout_artifact_upsert_v1(
+  p_settlement_id uuid,
+  p_attempt_no integer,
+  p_signature text,
+  p_signed_transaction_base64 text,
+  p_blockhash text,
+  p_last_valid_block_height bigint,
+  p_destination_address text,
+  p_payout_asset text,
+  p_payout_asset_amount numeric,
+  p_status text,
+  p_broadcast_at timestamptz,
+  p_confirmed_at timestamptz,
+  p_last_error text
+) returns jsonb
+language plpgsql
+security definer
+set search_path=paper_private,pg_temp
+as $
+declare a payout_broadcast_artifacts%rowtype;
+begin
+  insert into payout_broadcast_artifacts(
+    settlement_id,attempt_no,signature,signed_transaction_base64,blockhash,last_valid_block_height,
+    destination_address,payout_asset,payout_asset_amount,status,broadcast_at,confirmed_at,
+    last_checked_at,last_error,updated_at
+  ) values(
+    p_settlement_id,p_attempt_no,p_signature,p_signed_transaction_base64,p_blockhash,p_last_valid_block_height,
+    p_destination_address,p_payout_asset,p_payout_asset_amount,p_status,p_broadcast_at,p_confirmed_at,
+    now(),p_last_error,now()
+  )
+  on conflict(settlement_id) do update set
+    attempt_no=excluded.attempt_no,signature=excluded.signature,
+    signed_transaction_base64=excluded.signed_transaction_base64,blockhash=excluded.blockhash,
+    last_valid_block_height=excluded.last_valid_block_height,destination_address=excluded.destination_address,
+    payout_asset=excluded.payout_asset,payout_asset_amount=excluded.payout_asset_amount,
+    status=excluded.status,broadcast_at=excluded.broadcast_at,confirmed_at=excluded.confirmed_at,
+    last_checked_at=now(),last_error=excluded.last_error,updated_at=now()
+  returning * into a;
+  return to_jsonb(a);
+end;
+$;
+revoke all on function public.paper_payout_artifact_upsert_v1(uuid,integer,text,text,text,bigint,text,text,numeric,text,timestamptz,timestamptz,text)
+  from public,anon,authenticated;
+grant execute on function public.paper_payout_artifact_upsert_v1(uuid,integer,text,text,text,bigint,text,text,numeric,text,timestamptz,timestamptz,text)
+  to service_role;
+
 create or replace function public.paper_admin_activate_funded_account(
   target_user uuid,
   trading_wallet text,
