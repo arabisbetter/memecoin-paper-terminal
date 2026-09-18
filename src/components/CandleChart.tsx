@@ -186,6 +186,7 @@ export default function CandleChart({
       wickUpColor:'#11c7a3',wickDownColor:'#ef394f',
       priceLineVisible:false,lastValueVisible:true,
     })
+    const markerPrimitive=createSeriesMarkers(candle,[])
     const volume=chart.addSeries(HistogramSeries,{
       priceScaleId:'',priceFormat:{type:'volume'},lastValueVisible:false,priceLineVisible:false
     })
@@ -202,6 +203,7 @@ export default function CandleChart({
 
     chartRef.current=chart
     candleRef.current=candle
+    tradeMarkersRef.current=markerPrimitive
     volumeRef.current=volume
     ema9Ref.current=ema9Series
     ema21Ref.current=ema21Series
@@ -302,6 +304,52 @@ export default function CandleChart({
     return()=>{alive=false;clearInterval(id);document.removeEventListener('visibilitychange',visible)}
   },[poolAddress,tf])
 
+  useEffect(()=>{
+    if(!supabase||!tokenId){setTrades([]);return}
+    let alive=true
+    const loadTrades=async()=>{
+      if(document.hidden)return
+      try{
+        const {data,error}=await supabase.from('paper_trades')
+          .select('id,action,simulated_fill_price_usd,simulated_fill_mc_usd,ts')
+          .eq('token_id',tokenId).order('ts',{ascending:true}).limit(120)
+        if(error)throw error
+        if(alive)setTrades((data||[]) as PaperTradeMarker[])
+      }catch{if(alive)setTrades([])}
+    }
+    void loadTrades()
+    const id=window.setInterval(()=>void loadTrades(),8000)
+    const changed=()=>void loadTrades()
+    window.addEventListener('paper:account-changed',changed)
+    return()=>{alive=false;clearInterval(id);window.removeEventListener('paper:account-changed',changed)}
+  },[supabase,tokenId])
+
+  useEffect(()=>{
+    const primitive=tradeMarkersRef.current
+    if(!primitive)return
+    if(!showTradeMarkers||!candles.length||!trades.length){primitive.setMarkers([]);return}
+    const first=candles[0].time,last=candles[candles.length-1].time
+    const nearest=(value:number)=>{
+      let best=candles[0].time,bestDelta=Math.abs(best-value)
+      for(let i=1;i<candles.length;i++){const delta=Math.abs(candles[i].time-value);if(delta<bestDelta){best=candles[i].time;bestDelta=delta}}
+      return best
+    }
+    const markers=trades.map(trade=>{
+      const timestamp=Math.floor(new Date(trade.ts).getTime()/1000)
+      if(!Number.isFinite(timestamp)||timestamp<first-86400||timestamp>last+86400)return null
+      const isBuy=trade.action==='buy'
+      return{
+        time:nearest(timestamp) as UTCTimestamp,
+        position:isBuy?'belowBar':'aboveBar',
+        color:isBuy?'#17d7aa':'#ff4d77',
+        shape:isBuy?'arrowUp':'arrowDown',
+        text:isBuy?'BUY':'SELL',
+        size:1.15,
+      }
+    }).filter(Boolean)
+    primitive.setMarkers(markers as any)
+  },[candles,trades,showTradeMarkers])
+
   const multiplier=useMemo(()=>{
     const base=mode==='marketCap'&&mcAvailable?impliedSupply:1
     const quoteFactor=quote==='sol'&&solAvailable?1/solUsd:1
@@ -387,6 +435,17 @@ export default function CandleChart({
   },[averageDisplayValue])
 
   useEffect(()=>{
+    const series=candleRef.current
+    if(!series)return
+    for(const line of userPriceLines.current){try{series.removePriceLine(line)}catch{}}
+    userPriceLines.current=[]
+    for(const level of userLevels.current.filter(l=>l.mode===mode&&l.quote===quote)){
+      const line=series.createPriceLine({price:level.price,color:level.color,lineWidth:1,lineStyle:1,axisLabelVisible:true,title:''})
+      userPriceLines.current.push(line)
+    }
+  },[mode,quote,levelVersion])
+
+  useEffect(()=>{
     if(!expanded)return
     const old=document.body.style.overflow
     document.body.style.overflow='hidden'
@@ -443,7 +502,7 @@ export default function CandleChart({
     const series=candleRef.current
     const value=(hover||displayCandles[displayCandles.length-1])?.close
     if(!series||!value)return
-    const level:UserLevel={price:value,color:'#8ea66a',title:'Level'}
+    const level:UserLevel={price:value,color:'#8ea66a',title:'Level',mode,quote}
     const line=series.createPriceLine({price:value,color:level.color,lineWidth:1,lineStyle:1,axisLabelVisible:true,title:''})
     userPriceLines.current.push(line)
     userLevels.current.push(level)
@@ -462,8 +521,6 @@ export default function CandleChart({
     const series=candleRef.current
     const level=redoLevels.current.pop()
     if(!series||!level)return
-    const line=series.createPriceLine({price:level.price,color:level.color,lineWidth:1,lineStyle:1,axisLabelVisible:true,title:''})
-    userPriceLines.current.push(line)
     userLevels.current.push(level)
     setLevelVersion(v=>v+1)
   }
@@ -507,6 +564,7 @@ export default function CandleChart({
           <label><input type="checkbox" checked={showVolume} onChange={e=>setShowVolume(e.target.checked)}/>Volume</label>
           <label><input type="checkbox" checked={showGrid} onChange={e=>setShowGrid(e.target.checked)}/>Grid</label>
           <label><input type="checkbox" checked={showCrosshair} onChange={e=>setShowCrosshair(e.target.checked)}/>Crosshair</label>
+          <label><input type="checkbox" checked={showTradeMarkers} onChange={e=>setShowTradeMarkers(e.target.checked)}/>PAPER trade markers</label>
         </div>}
       </div>
 
