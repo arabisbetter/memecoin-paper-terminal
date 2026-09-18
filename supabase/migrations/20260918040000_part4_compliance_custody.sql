@@ -275,7 +275,7 @@ create or replace function public.paper_admin_set_kyc_result(
   target_user uuid,
   verified boolean,
   provider text,
-  provider_reference text
+  provider_reference text default null
 ) returns jsonb
 language plpgsql
 security definer
