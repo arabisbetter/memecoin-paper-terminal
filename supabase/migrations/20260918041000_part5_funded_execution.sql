@@ -131,7 +131,7 @@ create or replace function public.paper_admin_activate_funded_account(
 language plpgsql
 security definer
 set search_path=public,pg_temp
-as $
+as $$
 declare
   pf public.paper_platform_flags%rowtype;
   fp public.paper_funded_profiles%rowtype;
@@ -222,7 +222,7 @@ begin
     'trading_wallet',cw.wallet_account_address,'status','active'
   );
 end;
-$;
+$$;
 revoke all on function public.paper_admin_activate_funded_account(uuid,text,text,numeric) from public,anon,authenticated;
 grant execute on function public.paper_admin_activate_funded_account(uuid,text,text,numeric) to service_role;
 
