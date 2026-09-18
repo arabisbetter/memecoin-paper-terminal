@@ -8,17 +8,17 @@ type GeckoTradesResponse={data?:GeckoTrade[]}
 type Config={unit:'minute'|'hour'|'day';aggregate:string;limit:number;bucketSeconds?:number;cacheMs:number;cdnSeconds:number}
 
 const configs:Record<string,Config>={
-  '1m':{unit:'minute',aggregate:'1',limit:180,cacheMs:10_000,cdnSeconds:8},
+  '1m':{unit:'minute',aggregate:'1',limit:300,cacheMs:10_000,cdnSeconds:8},
   '3m':{unit:'minute',aggregate:'1',limit:540,bucketSeconds:180,cacheMs:12_000,cdnSeconds:9},
-  '5m':{unit:'minute',aggregate:'5',limit:180,cacheMs:14_000,cdnSeconds:10},
-  '15m':{unit:'minute',aggregate:'15',limit:180,cacheMs:20_000,cdnSeconds:15},
+  '5m':{unit:'minute',aggregate:'5',limit:300,cacheMs:14_000,cdnSeconds:10},
+  '15m':{unit:'minute',aggregate:'15',limit:300,cacheMs:20_000,cdnSeconds:15},
   '30m':{unit:'minute',aggregate:'15',limit:360,bucketSeconds:1800,cacheMs:25_000,cdnSeconds:20},
-  '1h':{unit:'hour',aggregate:'1',limit:180,cacheMs:30_000,cdnSeconds:25},
-  '4h':{unit:'hour',aggregate:'4',limit:180,cacheMs:60_000,cdnSeconds:45},
+  '1h':{unit:'hour',aggregate:'1',limit:300,cacheMs:30_000,cdnSeconds:25},
+  '4h':{unit:'hour',aggregate:'4',limit:300,cacheMs:60_000,cdnSeconds:45},
   '6h':{unit:'hour',aggregate:'1',limit:720,bucketSeconds:21600,cacheMs:60_000,cdnSeconds:45},
   '12h':{unit:'hour',aggregate:'1',limit:720,bucketSeconds:43200,cacheMs:90_000,cdnSeconds:60},
-  '24h':{unit:'day',aggregate:'1',limit:180,cacheMs:120_000,cdnSeconds:60},
-  '1d':{unit:'day',aggregate:'1',limit:180,cacheMs:120_000,cdnSeconds:60},
+  '24h':{unit:'day',aggregate:'1',limit:300,cacheMs:120_000,cdnSeconds:60},
+  '1d':{unit:'day',aggregate:'1',limit:300,cacheMs:120_000,cdnSeconds:60},
   '1M':{unit:'day',aggregate:'1',limit:35,cacheMs:120_000,cdnSeconds:60},
 }
 const secondBuckets:Record<string,{seconds:number;cacheMs:number}>={
@@ -44,7 +44,7 @@ async function fetchTradeCandles(pool:string,bucketSeconds:number,signal:AbortSi
   const prints=(json.data||[]).map(item=>{const a=item.attributes||{},ms=Date.parse(String(a.block_timestamp||'')),price=firstPositive(a.price_usd,a.price_to_in_usd,a.price_from_in_usd),volume=firstPositive(a.volume_in_usd);return{time:Number.isFinite(ms)?Math.floor(ms/1000):0,price,volume}}).filter(p=>p.time>0&&p.price>0).sort((a,b)=>a.time-b.time)
   const groups=new Map<number,typeof prints>()
   for(const print of prints){const bucket=Math.floor(print.time/bucketSeconds)*bucketSeconds,list=groups.get(bucket)||[];list.push(print);groups.set(bucket,list)}
-  return [...groups.entries()].sort((a,b)=>a[0]-b[0]).map(([time,list])=>({time,open:list[0].price,high:Math.max(...list.map(x=>x.price)),low:Math.min(...list.map(x=>x.price)),close:list[list.length-1].price,volume:list.reduce((sum,x)=>sum+x.volume,0)})).slice(-180)
+  return [...groups.entries()].sort((a,b)=>a[0]-b[0]).map(([time,list])=>({time,open:list[0].price,high:Math.max(...list.map(x=>x.price)),low:Math.min(...list.map(x=>x.price)),close:list[list.length-1].price,volume:list.reduce((sum,x)=>sum+x.volume,0)})).slice(-300)
 }
 
 export async function GET(req:NextRequest,ctx:{params:Promise<{pool:string}>}){
@@ -81,7 +81,7 @@ export async function GET(req:NextRequest,ctx:{params:Promise<{pool:string}>}){
     const json=await response.json() as GeckoResponse
     let candles=(json.data?.attributes?.ohlcv_list||[]).map(([time,open,high,low,close,volume])=>({time,open,high,low,close,volume})).filter(c=>[c.time,c.open,c.high,c.low,c.close].every(Number.isFinite)).sort((a,b)=>a.time-b.time)
     if(config.bucketSeconds)candles=aggregateCandles(candles,config.bucketSeconds).slice(-180)
-    if(tf==='1M')candles=candles.slice(-30)
+    if(tf==='1M')candles=candles.slice(-45)
     if(!candles.length)throw new Error('OHLCV returned no candles')
     const at=Date.now();cache.set(key,{at,candles})
     return NextResponse.json({candles,timeframe:tf,source:'geckoterminal',live:true,asOf:at},{headers:{'Cache-Control':`public, s-maxage=${config.cdnSeconds}, stale-while-revalidate=${Math.max(config.cdnSeconds*4,30)}`}})
