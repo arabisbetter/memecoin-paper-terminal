@@ -177,7 +177,6 @@ begin
     status=v_status,
     current_equity_usd=p_equity_usd,
     peak_equity_usd=v_peak,
-    high_water_mark_usd=greatest(high_water_mark_usd,p_equity_usd),
     trailing_floor_usd=v_floor,
     daily_anchor_date=v_date,
     daily_anchor_equity_usd=v_anchor,
