@@ -238,3 +238,7 @@
 .chart-drawing-overlay.drawing-active{pointer-events:auto;cursor:crosshair}
 .fib-tool{font-size:7px;font-weight:900;letter-spacing:-.02em}
 .axiom-draw-rail button.active .fib-tool{color:#e6e9ed}
+
+.confirm-toggle{height:24px;padding:0 7px;border:1px solid #283142;border-radius:5px;background:#0b1017;color:#6d788c;font-size:7px;font-weight:850;cursor:pointer}
+.confirm-toggle.on{border-color:#4d60a7;background:#17203a;color:#aab9ff}
+.confirm-toggle:hover{color:#e1e6ef}
