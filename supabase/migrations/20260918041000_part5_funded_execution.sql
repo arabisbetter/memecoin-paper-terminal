@@ -242,9 +242,9 @@ language sql
 stable
 security definer
 set search_path=paper_private,pg_temp
-as $
+as $payout_get$
   select to_jsonb(a) from payout_broadcast_artifacts a where a.settlement_id=p_settlement_id;
-$;
+$payout_get$;
 revoke all on function public.paper_payout_artifact_get_v1(uuid) from public,anon,authenticated;
 grant execute on function public.paper_payout_artifact_get_v1(uuid) to service_role;
 
@@ -266,7 +266,7 @@ create or replace function public.paper_payout_artifact_upsert_v1(
 language plpgsql
 security definer
 set search_path=paper_private,pg_temp
-as $
+as $payout_upsert$
 declare a payout_broadcast_artifacts%rowtype;
 begin
   insert into payout_broadcast_artifacts(
@@ -288,7 +288,7 @@ begin
   returning * into a;
   return to_jsonb(a);
 end;
-$;
+$payout_upsert$;
 revoke all on function public.paper_payout_artifact_upsert_v1(uuid,integer,text,text,text,bigint,text,text,numeric,text,timestamptz,timestamptz,text)
   from public,anon,authenticated;
 grant execute on function public.paper_payout_artifact_upsert_v1(uuid,integer,text,text,text,bigint,text,text,numeric,text,timestamptz,timestamptz,text)
