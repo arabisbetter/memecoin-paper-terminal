@@ -21,7 +21,8 @@
     "@solana/web3.js": "1.99.0",
     "@sumsub/websdk-react": "2.9.0",
     "@turnkey/sdk-server": "8.4.0",
-    "@turnkey/solana": "1.1.40"
+    "@turnkey/solana": "1.1.40",
+    "@solana/spl-token": "0.4.15"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",
