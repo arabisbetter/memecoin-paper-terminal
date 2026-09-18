@@ -225,3 +225,16 @@
 .watch-alert-event strong{color:#b9c4d6;font-size:9px}
 .watch-alert-event time{color:#596579;font-size:7px;white-space:nowrap}
 .watch-actions button.active{background:#14253a!important;color:#78a8ff!important;border-color:#36567f!important}
+
+.chart-drawing-overlay{
+  position:absolute;
+  inset:0;
+  z-index:5;
+  width:100%;
+  height:100%;
+  pointer-events:none;
+  overflow:visible;
+}
+.chart-drawing-overlay.drawing-active{pointer-events:auto;cursor:crosshair}
+.fib-tool{font-size:7px;font-weight:900;letter-spacing:-.02em}
+.axiom-draw-rail button.active .fib-tool{color:#e6e9ed}
