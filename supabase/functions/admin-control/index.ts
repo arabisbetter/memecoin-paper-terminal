@@ -148,8 +148,8 @@ Deno.serve(async(req:Request)=>{
       const {data:before}=await admin.from('paper_control_plane').select('*').eq('id',true).single()
       const {data:after,error}=await admin.from('paper_control_plane').update({
         emergency_pause:value,
-        paper_trading_enabled:value?false:Boolean(body?.paperTradingEnabled??before?.paper_trading_enabled),
-        evaluation_entries_enabled:value?false:Boolean(body?.evaluationEntriesEnabled??before?.evaluation_entries_enabled),
+        paper_trading_enabled:value?false:Boolean(body?.paperTradingEnabled??true),
+        evaluation_entries_enabled:value?false:Boolean(body?.evaluationEntriesEnabled??true),
         maintenance_message:value?String(body?.message||'PAPER is temporarily paused by operations.'):null,
         updated_at:new Date().toISOString()
       }).eq('id',true).select('*').single()
