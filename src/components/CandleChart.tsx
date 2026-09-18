@@ -3,13 +3,14 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   Activity, Camera, Check, ChevronDown, Crosshair, Eye, Maximize2, Minimize2,
-  Minus, MousePointer2, Plus, Redo2, RotateCcw, Settings2, SlidersHorizontal, Undo2
+  Minus, MousePointer2, Plus, Redo2, RotateCcw, Settings2, SlidersHorizontal, Undo2, TrendingUp, Square, MoveRight, Trash2
 } from 'lucide-react'
 import {
   CandlestickSeries, ColorType, CrosshairMode, HistogramSeries, LineSeries, PriceScaleMode,
   createChart, createSeriesMarkers, type IChartApi, type ISeriesApi, type UTCTimestamp
 } from 'lightweight-charts'
 import { createClient } from '@/lib/supabase/client'
+import ChartDrawingOverlay, { type DrawingTool } from '@/components/ChartDrawingOverlay'
 
 type Candle={time:number;open:number;high:number;low:number;close:number;volume:number}
 type Timeframe='1s'|'5s'|'15s'|'30s'|'1m'|'3m'|'5m'|'15m'|'30m'|'1h'|'4h'|'6h'|'12h'|'24h'|'1M'
@@ -120,6 +121,7 @@ export default function CandleChart({
   const [showVwap,setShowVwap]=useState(false)
   const [showTradeMarkers,setShowTradeMarkers]=useState(true)
   const [trades,setTrades]=useState<PaperTradeMarker[]>([])
+  const [drawingTool,setDrawingTool]=useState<DrawingTool>('none'),[drawingClearSignal,setDrawingClearSignal]=useState(0)
   const [levelVersion,setLevelVersion]=useState(0)
 
   const impliedSupply=useMemo(()=>{
@@ -584,9 +586,14 @@ export default function CandleChart({
 
     <div className="axiom-chart-body">
       <div className="axiom-draw-rail">
-        <button className="active" title="Crosshair"><Crosshair size={16}/></button>
-        <button title="Pointer"><MousePointer2 size={16}/></button>
+        <button className={drawingTool==='none'?'active':''} title="Crosshair" onClick={()=>setDrawingTool('none')}><Crosshair size={16}/></button>
+        <button title="Pointer" onClick={()=>setDrawingTool('none')}><MousePointer2 size={16}/></button>
+        <button className={drawingTool==='trend'?'active':''} title="Trend line" onClick={()=>setDrawingTool('trend')}><TrendingUp size={16}/></button>
+        <button className={drawingTool==='ray'?'active':''} title="Ray" onClick={()=>setDrawingTool('ray')}><MoveRight size={16}/></button>
+        <button className={drawingTool==='rectangle'?'active':''} title="Rectangle" onClick={()=>setDrawingTool('rectangle')}><Square size={15}/></button>
+        <button className={drawingTool==='fib'?'active':''} title="Fibonacci retracement" onClick={()=>setDrawingTool('fib')}><span className="fib-tool">Fib</span></button>
         <button title="Add horizontal level" onClick={addLevel}><Minus size={16}/></button>
+        <button title="Clear drawings" onClick={()=>setDrawingClearSignal(v=>v+1)}><Trash2 size={15}/></button>
         <button title="Zoom in" onClick={()=>zoom(.72)}><Plus size={16}/></button>
         <button title="Zoom out" onClick={()=>zoom(1.38)}><Minus size={16}/></button>
         <button title="Fit chart" onClick={()=>chartRef.current?.timeScale().fitContent()}><RotateCcw size={15}/></button>
@@ -612,7 +619,7 @@ export default function CandleChart({
           <span>{compact(summary.volume)} vol</span>
         </div>
 
-        <div className="lw-chart-wrap axiom-lw-wrap">
+        <div className="lw-chart-wrap axiom-lw-wrap"><ChartDrawingOverlay chartRef={chartRef} seriesRef={candleRef} mode={mode} quote={quote} tool={drawingTool} onToolChange={setDrawingTool} clearSignal={drawingClearSignal}/>
           {!poolAddress&&<div className="chart-state">Select a token to load its chart.</div>}
           {poolAddress&&!displayCandles.length&&!error&&<div className="chart-state"><span className="chart-loader"/>Loading {timeframeLabel(tf)} market data…</div>}
           {error&&!displayCandles.length&&<div className="chart-state">{isSecondTf(tf)?'No recent trades for this sub-minute view · retrying automatically.':'Chart feed unavailable · retrying automatically.'}</div>}
