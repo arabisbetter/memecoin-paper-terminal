@@ -35,16 +35,17 @@ export async function GET(){
     const cronHealthy=requiredCron.every(name=>cron.some((j:any)=>j.jobname===name&&j.active===true))
     const evalFresh=evalBeat?ageMs(evalBeat.last_success_at)<120_000:ageMs(data?.evaluation_monitor?.completed_at)<120_000
     const fundedFresh=fundedBeat?ageMs(fundedBeat.last_success_at)<120_000:true
-    const monitorFailed=evalBeat?.status==='failed'||fundedBeat?.status==='failed'
-    const status=cronHealthy&&evalFresh&&fundedFresh&&!monitorFailed?'ok':'degraded'
+    const evalFailed=evalBeat?.status==='failed'
+    const fundedFailed=fundedBeat?.status==='failed'
+    const status=cronHealthy&&evalFresh&&fundedFresh&&!evalFailed&&!fundedFailed?'ok':'degraded'
 
     return NextResponse.json({
       status,checkedAt,commit,
       checks:{
         database:'ok',
         cron:cronHealthy?'ok':'degraded',
-        evaluationMonitor:evalFresh&&!monitorFailed?'ok':'degraded',
-        fundedMonitor:fundedFresh&&fundedBeat?.status!=='failed'?'ok':'degraded'
+        evaluationMonitor:evalFresh&&!evalFailed?'ok':'degraded',
+        fundedMonitor:fundedFresh&&!fundedFailed?'ok':'degraded'
       }
     },{
       status:status==='ok'?200:503,
