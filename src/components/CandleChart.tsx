@@ -99,7 +99,7 @@ export default function CandleChart({
   const userPickedMode=useRef(false)
   const workspaceLoaded=useRef(false)
 
-  const [tf,setTf]=useState<Timeframe>('1s')
+  const [tf,setTf]=useState<Timeframe>('1m')
   const [tfOpen,setTfOpen]=useState(false)
   const [mode,setMode]=useState<ChartMode>('price')
   const [quote,setQuote]=useState<QuoteMode>('usd')
@@ -142,7 +142,7 @@ export default function CandleChart({
   useEffect(()=>{
     try{
       const saved=JSON.parse(localStorage.getItem('paper.chart.workspace.v2')||'{}')
-      if(saved.tf&&timeframeGroups.flatMap(g=>g.items).some(i=>i.value===saved.tf))setTf(saved.tf)
+      if(saved.tf&&timeframeGroups.flatMap(g=>g.items).some(i=>i.value===saved.tf)){const savedTf=saved.tf as Timeframe;setTf(savedTf==='1s'?'1m':savedTf)}
       if(saved.mode==='price'||saved.mode==='marketCap'){setMode(saved.mode);userPickedMode.current=true}
       if(saved.quote==='usd'||saved.quote==='sol')setQuote(saved.quote)
       if(saved.scaleMode==='normal'||saved.scaleMode==='percent'||saved.scaleMode==='log')setScaleMode(saved.scaleMode)
