@@ -135,6 +135,8 @@ with check ((select auth.uid())=user_id);
 
 create index if not exists paper_alert_events_user_created_idx
   on public.paper_alert_events(user_id,created_at desc);
+create index if not exists paper_alert_events_watchlist_idx
+  on public.paper_alert_events(watchlist_id,created_at desc);
 create index if not exists token_watchlist_alert_scan_idx
   on public.token_watchlist(updated_at)
   where alert_above_usd is not null or alert_below_usd is not null;
