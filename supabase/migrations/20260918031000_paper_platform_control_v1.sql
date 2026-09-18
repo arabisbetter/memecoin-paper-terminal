@@ -629,4 +629,16 @@ begin
   end if;
 end $$;
 
+-- Cover Part 3 foreign-key access paths used by admin and social queries.
+create index if not exists paper_abuse_related_user_idx on public.paper_abuse_signals(related_user_id) where related_user_id is not null;
+create index if not exists paper_abuse_reviewed_by_idx on public.paper_abuse_signals(reviewed_by) where reviewed_by is not null;
+create index if not exists paper_activity_evaluation_idx on public.paper_activity_events(evaluation_id) where evaluation_id is not null;
+create index if not exists paper_activity_trade_idx on public.paper_activity_events(trade_id) where trade_id is not null;
+create index if not exists paper_admin_approvals_requested_idx on public.paper_admin_action_approvals(requested_by,requested_at desc);
+create index if not exists paper_admin_approvals_approved_idx on public.paper_admin_action_approvals(approved_by) where approved_by is not null;
+create index if not exists paper_admin_audit_actor_idx on public.paper_admin_audit_log(actor_user_id,created_at desc) where actor_user_id is not null;
+create index if not exists paper_admin_overrides_actor_idx on public.paper_admin_overrides(actor_user_id,created_at desc);
+create index if not exists paper_funded_waitlist_evaluation_idx on public.paper_funded_waitlist(evaluation_id) where evaluation_id is not null;
+create index if not exists paper_leaderboard_v2_user_idx on public.paper_leaderboard_v2(user_id,captured_at desc);
+
 select public.paper_refresh_leaderboards_v2();
