@@ -19,6 +19,7 @@ type DexPair = {
 }
 
 const n=(value:unknown)=>{const parsed=Number(value??0);return Number.isFinite(parsed)?parsed:0}
+const firstPositive=(...values:unknown[])=>{for(const value of values){const parsed=Number(value);if(Number.isFinite(parsed)&&parsed>0)return parsed}return 0}
 
 export function normalizePair(pair: DexPair): MarketToken | null {
   if (pair.chainId !== 'solana' || !pair.baseToken?.address) return null
@@ -43,7 +44,7 @@ export function normalizePair(pair: DexPair): MarketToken | null {
     buyUrl:pair.url,
     priceUsd: n(pair.priceUsd),
     priceNative: n(pair.priceNative),
-    marketCap: n(pair.marketCap ?? pair.fdv),
+    marketCap: firstPositive(pair.marketCap,pair.fdv),
     liquidityUsd: n(pair.liquidity?.usd),
     volume5m:n(pair.volume?.m5),
     volume1h:n(pair.volume?.h1),
