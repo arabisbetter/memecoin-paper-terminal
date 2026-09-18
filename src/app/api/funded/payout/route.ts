@@ -17,6 +17,7 @@ import {
 import { Turnkey } from '@turnkey/sdk-server'
 import { TurnkeySigner } from '@turnkey/solana'
 import bs58 from 'bs58'
+import { consumeServerRateLimit, validateActiveSession } from '@/lib/server/security'
 
 export const runtime='nodejs'
 
@@ -162,11 +163,13 @@ export async function POST(req:NextRequest){
       .select('role,enabled,requires_strong_auth').eq('user_id',user.id).maybeSingle()
     if(adminError)throw new Error(adminError.message)
     if(!adminRow?.enabled||!['owner','admin'].includes(String(adminRow.role)))return out({error:'admin access required'},403)
-    if(adminRow.requires_strong_auth!==false){
-      const {data:aal}=await userClient.auth.mfa.getAuthenticatorAssuranceLevel()
-      if(aal?.currentLevel!=='aal2')return out({error:'STRONG_AUTH_REQUIRED'},403)
+    const requireAal2=adminRow.requires_strong_auth!==false
+    if(!(await validateActiveSession(admin,user.id,auth,requireAal2))){
+      return out({error:requireAal2?'STRONG_AUTH_REQUIRED':'session revoked or expired'},403)
     }
 
+    const contentLength=Number(req.headers.get('content-length')||0)
+    if(contentLength>8192)return out({error:'request body too large'},413)
     const body=await req.json().catch(()=>({}))
     settlementId=String(body?.settlementId||'').trim()
     if(!/^[0-9a-f-]{36}$/i.test(settlementId))return out({error:'valid settlementId required'},400)
@@ -184,6 +187,8 @@ export async function POST(req:NextRequest){
     if(!settlement)return out({error:'SETTLEMENT_NOT_FOUND'},404)
     if(settlement.status==='paid')return out({ok:true,idempotent:true,status:'paid',txSignature:settlement.payout_tx_signature,asset:settlement.payout_asset,amount:settlement.payout_asset_amount})
     if(settlement.status!=='approved'||!settlement.approved_by||!settlement.approved_at)return out({error:'ADMIN_APPROVAL_REQUIRED'},409)
+    const payoutRate=await consumeServerRateLimit(admin,'funded_payout',user.id,5,300)
+    if(payoutRate?.allowed===false)return out({error:'RATE_LIMITED',retryAfterSeconds:payoutRate.retry_after_seconds||300},429)
     if(finite(settlement.trader_share_usd)<25)return out({error:'PAYOUT_BELOW_MINIMUM'},409)
     if(finite(settlement.trader_share_usd)>2000&&(!settlement.second_approved_by||!settlement.second_approved_at||settlement.second_approved_by===settlement.approved_by)){
       return out({error:'SECOND_ADMIN_APPROVAL_REQUIRED'},409)
