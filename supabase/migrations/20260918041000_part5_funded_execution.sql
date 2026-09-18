@@ -636,7 +636,7 @@ returns bigint
 language plpgsql
 security definer
 set search_path=paper_private,public,net,pg_temp
-as $
+as $$
 declare
   cfg paper_private.runtime_config%rowtype;
   tok text;
@@ -654,7 +654,7 @@ begin
   ) into req_id;
   return req_id;
 end;
-$;
+$$;
 revoke all on function paper_private.invoke_funded_monitor() from public,anon,authenticated;
 grant execute on function paper_private.invoke_funded_monitor() to service_role;
 
