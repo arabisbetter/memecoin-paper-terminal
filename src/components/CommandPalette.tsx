@@ -2,10 +2,10 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { BarChart3, Command, Crosshair, History, Search, Star, WalletCards, Zap } from 'lucide-react'
+import { Activity, BarChart3, BookOpen, Command, Crosshair, GitCompareArrows, History, LayoutGrid, Radar, Search, Star, WalletCards, Zap } from 'lucide-react'
 import type { MarketToken } from '@/lib/types'
 
-type Action={id:string;label:string;hint:string;href:string;icon:'trade'|'pulse'|'portfolio'|'wallets'|'watchlist'|'replay'}
+type Action={id:string;label:string;hint:string;href:string;icon:'trade'|'pulse'|'portfolio'|'wallets'|'watchlist'|'replay'|'scanner'|'heatmap'|'compare'|'workspace'|'journal'}
 const actions:Action[]=[
   {id:'trade',label:'Trade terminal',hint:'Open Spot',href:'/spot',icon:'trade'},
   {id:'pulse',label:'Pulse',hint:'New pairs · trending · migrated',href:'/pulse',icon:'pulse'},
@@ -13,8 +13,13 @@ const actions:Action[]=[
   {id:'wallets',label:'Wallet intelligence',hint:'Track a Solana wallet',href:'/wallets',icon:'wallets'},
   {id:'watchlist',label:'Watchlists & alerts',hint:'Price alerts',href:'/watchlist',icon:'watchlist'},
   {id:'replay',label:'Trade replay',hint:'Practice historical launches',href:'/replay',icon:'replay'},
+  {id:'scanner',label:'Launch scanner',hint:'Velocity · buy pressure · new pairs',href:'/scanner',icon:'scanner'},
+  {id:'heatmap',label:'Market heatmap',hint:'Movement · volume · buys',href:'/heatmap',icon:'heatmap'},
+  {id:'compare',label:'Token compare',hint:'Compare up to four markets',href:'/compare',icon:'compare'},
+  {id:'workspace',label:'Multi-chart workspaces',hint:'2 or 4 saved charts',href:'/workspaces',icon:'workspace'},
+  {id:'journal',label:'Trading journal',hint:'Strategy notes · self review',href:'/journal',icon:'journal'},
 ]
-const icon=(kind:Action['icon'])=>kind==='pulse'?<Zap size={15}/>:kind==='portfolio'?<BarChart3 size={15}/>:kind==='wallets'?<WalletCards size={15}/>:kind==='watchlist'?<Star size={15}/>:kind==='replay'?<History size={15}/>:<Crosshair size={15}/>
+const icon=(kind:Action['icon'])=>kind==='pulse'?<Zap size={15}/>:kind==='portfolio'?<BarChart3 size={15}/>:kind==='wallets'?<WalletCards size={15}/>:kind==='watchlist'?<Star size={15}/>:kind==='replay'?<History size={15}/>:kind==='scanner'?<Radar size={15}/>:kind==='heatmap'?<Activity size={15}/>:kind==='compare'?<GitCompareArrows size={15}/>:kind==='workspace'?<LayoutGrid size={15}/>:kind==='journal'?<BookOpen size={15}/>:<Crosshair size={15}/>
 const isMint=(s:string)=>/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(s.trim())
 
 export default function CommandPalette(){
@@ -26,10 +31,17 @@ export default function CommandPalette(){
     const key=(event:KeyboardEvent)=>{
       if((event.metaKey||event.ctrlKey)&&event.key.toLowerCase()==='k'){event.preventDefault();setOpen(v=>!v)}
       if(event.key==='Escape')setOpen(false)
+      const target=event.target as HTMLElement|null
+      const typing=target?.tagName==='INPUT'||target?.tagName==='TEXTAREA'||target?.tagName==='SELECT'||target?.isContentEditable
+      if(!typing&&event.shiftKey&&!event.metaKey&&!event.ctrlKey&&!event.altKey){
+        const hot:{[key:string]:string}={s:'/scanner',h:'/heatmap',c:'/compare',w:'/workspaces',j:'/journal',r:'/replay'}
+        const href=hot[event.key.toLowerCase()]
+        if(href){event.preventDefault();router.push(href)}
+      }
     }
     window.addEventListener('keydown',key)
     return()=>window.removeEventListener('keydown',key)
-  },[])
+  },[router])
   useEffect(()=>{if(open){setActive(0);requestAnimationFrame(()=>inputRef.current?.focus());void fetch('/api/market/latest',{cache:'no-store'}).then(r=>r.json()).then(j=>setTokens((j.tokens||[]).slice(0,80))).catch(()=>{})}},[open])
   useEffect(()=>{if(!open){setQuery('');setActive(0)}},[open])
 
@@ -56,9 +68,9 @@ export default function CommandPalette(){
     <button className="paper-command-trigger" onClick={()=>setOpen(true)} title="Command palette"><Command size={13}/><span>Search</span><kbd>⌘K</kbd></button>
     {open&&<div className="paper-command-backdrop" onMouseDown={e=>{if(e.target===e.currentTarget)setOpen(false)}}>
       <div className="paper-command-palette">
-        <div className="paper-command-input"><Search size={16}/><input ref={inputRef} value={query} onChange={e=>{setQuery(e.target.value);setActive(0)}} onKeyDown={onKey} placeholder="Search token, CA, wallet tools, replay…"/><kbd>ESC</kbd></div>
+        <div className="paper-command-input"><Search size={16}/><input ref={inputRef} value={query} onChange={e=>{setQuery(e.target.value);setActive(0)}} onKeyDown={onKey} placeholder="Search token, CA, scanner, journal, workspace…"/><kbd>ESC</kbd></div>
         <div className="paper-command-results">{results.length?results.map((row,index)=><button key={row.id} className={index===active?'active':''} onMouseEnter={()=>setActive(index)} onClick={()=>go(row.href)}><span>{row.icon}</span><div><b>{row.label}</b><small>{row.hint}</small></div><em>↵</em></button>):<div className="paper-command-empty">No match. Paste a Solana contract address to open it directly.</div>}</div>
-        <div className="paper-command-foot"><span>↑↓ navigate</span><span>↵ open</span><span>⌘K toggle</span></div>
+        <div className="paper-command-foot"><span>↑↓ navigate</span><span>↵ open</span><span>⌘K toggle</span><span>⇧S scanner · ⇧J journal · ⇧W workspace</span></div>
       </div>
     </div>}
   </>
