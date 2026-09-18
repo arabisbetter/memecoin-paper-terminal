@@ -91,6 +91,8 @@ Deno.serve(async(req:Request)=>{
     const {url,pub,secret}=envKeys()
     const admin=createClient(url,secret,{auth:{persistSession:false,autoRefreshToken:false}})
     await authorize(req,admin,url,pub)
+    const {data:control}=await admin.from('paper_control_plane').select('risk_engine_enabled').eq('id',true).maybeSingle()
+    if(control?.risk_engine_enabled===false)return reply({error:'Risk engine is temporarily disabled.',code:'RISK_ENGINE_PAUSED'},503)
     const body=await req.json().catch(()=>({}))
     const mint=String(body?.mint||'').trim()
     if(!isMint(mint))return reply({error:'invalid Solana mint'},400)
