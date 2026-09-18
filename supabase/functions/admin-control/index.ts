@@ -4,6 +4,24 @@ const reply=(body:unknown,status=200)=>new Response(JSON.stringify(body),{
   status,headers:{'Content-Type':'application/json','Access-Control-Allow-Origin':'*','Access-Control-Allow-Headers':'authorization, x-client-info, apikey, content-type, x-paper-internal-token'}
 })
 const finite=(v:unknown,fallback=0)=>{const n=Number(v);return Number.isFinite(n)?n:fallback}
+function jwtSessionId(authHeader:string){
+  try{
+    const token=authHeader.slice(7),payload=token.split('.')[1]
+    if(!payload)return null
+    const normalized=payload.replace(/-/g,'+').replace(/_/g,'/')
+    const padded=normalized+'='.repeat((4-normalized.length%4)%4)
+    const claims=JSON.parse(atob(padded))
+    const sid=String(claims?.session_id||'')
+    return /^[0-9a-f]{8}-[0-9a-f-]{27}$/i.test(sid)?sid:null
+  }catch{return null}
+}
+async function consumeRate(admin:any,scope:string,subject:string,limit:number,windowSeconds:number){
+  const {data,error}=await admin.rpc('paper_consume_server_rate_limit_v1',{
+    p_scope:scope,p_subject:subject,p_limit:limit,p_window_seconds:windowSeconds
+  })
+  if(error)throw new Error(error.message)
+  return data as {allowed?:boolean;retry_after_seconds?:number}
+}
 
 function envKeys(){
   const url=Deno.env.get('SUPABASE_URL')
@@ -32,15 +50,25 @@ async function authContext(req:Request,admin:any,url:string,pub:string){
   if(adminError)throw new Error(adminError.message)
   if(!adminRow?.enabled)throw new Error('ADMIN_REQUIRED')
 
-  let strong=false
-  try{
-    const {data}=await client.auth.mfa.getAuthenticatorAssuranceLevel()
-    strong=data?.currentLevel==='aal2'
-  }catch{/* mutation paths will require AAL2 if configured */}
+  const sessionId=jwtSessionId(auth)
+  if(!sessionId)throw new Error('AUTH_REQUIRED')
+  const {data:activeSession,error:sessionError}=await admin.rpc('paper_validate_server_session_v1',{
+    p_user_id:user.id,p_session_id:sessionId,p_require_aal2:false
+  })
+  if(sessionError)throw new Error(sessionError.message)
+  if(activeSession!==true)throw new Error('AUTH_REQUIRED')
+
+  let strong=adminRow.requires_strong_auth===false
+  if(!strong){
+    const {data:aal2,error:aalError}=await admin.rpc('paper_validate_server_session_v1',{
+      p_user_id:user.id,p_session_id:sessionId,p_require_aal2:true
+    })
+    if(aalError)throw new Error(aalError.message)
+    strong=aal2===true
+  }
 
   return{
-    internal:false,user,role:String(adminRow.role),
-    strong:adminRow.requires_strong_auth===false?true:strong
+    internal:false,user,sessionId,role:String(adminRow.role),strong
   }
 }
 
@@ -145,6 +173,8 @@ Deno.serve(async(req:Request)=>{
     }
 
     if(!ctx.strong)return reply({error:'STRONG_AUTH_REQUIRED',message:'Admin mutations require an AAL2 MFA/passkey session.'},403)
+    const adminRate=await consumeRate(admin,'admin_mutation',String(ctx.user?.id||'unknown'),30,60)
+    if(adminRate?.allowed===false)return reply({error:'RATE_LIMITED',retryAfterSeconds:adminRate.retry_after_seconds||60},429)
 
     if(action==='set_emergency_pause'){
       if(!allowed(ctx.role,['owner','admin','ops']))return reply({error:'FORBIDDEN'},403)
