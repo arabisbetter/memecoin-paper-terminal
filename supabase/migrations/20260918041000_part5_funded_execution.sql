@@ -75,6 +75,41 @@ create table if not exists public.paper_funded_execution_events (
   details jsonb not null default '{}'::jsonb,
   created_at timestamptz not null default now()
 );
+alter table public.paper_treasury_state
+  add column if not exists cumulative_network_fees_usd numeric(24,8) not null default 0;
+
+create table if not exists public.paper_funded_fee_ledger (
+  id bigint generated always as identity primary key,
+  order_id uuid not null unique references public.paper_funded_orders(id) on delete cascade,
+  funded_account_id uuid not null references public.paper_funded_accounts(id) on delete cascade,
+  user_id uuid not null references public.profiles(id) on delete cascade,
+  protocol_fee_usd numeric(20,8) not null default 0 check (protocol_fee_usd>=0),
+  network_fee_usd numeric(20,8) not null default 0 check (network_fee_usd>=0),
+  created_at timestamptz not null default now()
+);
+alter table public.paper_funded_fee_ledger enable row level security;
+revoke all on public.paper_funded_fee_ledger from public,anon,authenticated;
+create index if not exists paper_funded_fee_account_idx on public.paper_funded_fee_ledger(funded_account_id,created_at desc);
+
+create table if not exists public.paper_funded_liquidation_queue (
+  id uuid primary key default gen_random_uuid(),
+  funded_account_id uuid not null references public.paper_funded_accounts(id) on delete cascade,
+  user_id uuid not null references public.profiles(id) on delete cascade,
+  position_id uuid not null references public.paper_funded_positions(id) on delete cascade,
+  token_address text not null,
+  reason text not null,
+  status text not null default 'queued' check (status in ('queued','processing','confirmed','failed','cancelled')),
+  attempts integer not null default 0,
+  last_error text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  confirmed_at timestamptz,
+  unique(position_id,status)
+);
+alter table public.paper_funded_liquidation_queue enable row level security;
+revoke all on public.paper_funded_liquidation_queue from public,anon,authenticated;
+create index if not exists paper_funded_liquidation_status_idx on public.paper_funded_liquidation_queue(status,created_at);
+
 alter table public.paper_funded_execution_events enable row level security;
 revoke all on public.paper_funded_execution_events from public,anon,authenticated;
 create index if not exists paper_funded_execution_order_idx
@@ -304,6 +339,12 @@ begin
       'reason',v_reason,'equity_usd',p_equity_usd,'peak_equity_usd',v_peak,
       'trailing_floor_usd',v_floor,'daily_loss_usd',v_daily_loss,'daily_limit_usd',v_limit
     ));
+
+    insert into public.paper_funded_liquidation_queue(funded_account_id,user_id,position_id,token_address,reason)
+    select a.id,a.user_id,p.id,p.token_address,v_reason
+    from public.paper_funded_positions p
+    where p.funded_account_id=a.id and p.status='open' and p.quantity_tokens>0
+    on conflict do nothing;
   end if;
 
   return jsonb_build_object(
@@ -361,7 +402,7 @@ begin
   if a.id is null or a.status<>'active' then raise exception 'FUNDED_ACCOUNT_NOT_ACTIVE'; end if;
   if cw.status<>'active' or cw.wallet_account_address is null then raise exception 'CUSTODY_WALLET_NOT_ACTIVE'; end if;
   if p_slippage_bps<1 or p_slippage_bps>a.max_slippage_bps then raise exception 'SLIPPAGE_LIMIT'; end if;
-  if p_notional_usd>a.current_equity_usd*(a.max_single_trade_pct/100.0) then raise exception 'SINGLE_TRADE_LIMIT'; end if;
+  if p_side='buy' and p_notional_usd>a.current_equity_usd*(a.max_single_trade_pct/100.0) then raise exception 'SINGLE_TRADE_LIMIT'; end if;
 
   select * into pos from public.paper_funded_positions
     where funded_account_id=a.id and token_address=p_token_address;
@@ -482,6 +523,16 @@ begin
   insert into public.paper_funded_execution_events(order_id,funded_account_id,user_id,event_type,provider,tx_signature,confirmation_slot,details)
   values(o.id,a.id,o.user_id,'confirmed_fill','jupiter',p_tx_signature,p_confirmation_slot,
          jsonb_build_object('side',o.side,'notional_usd',p_notional_usd,'protocol_fee_usd',v_fee,'network_fee_usd',coalesce(p_network_fee_usd,0)));
+
+  insert into public.paper_funded_fee_ledger(order_id,funded_account_id,user_id,protocol_fee_usd,network_fee_usd)
+  values(o.id,a.id,o.user_id,v_fee,coalesce(p_network_fee_usd,0))
+  on conflict(order_id) do nothing;
+
+  update public.paper_treasury_state set
+    cumulative_protocol_revenue_usd=cumulative_protocol_revenue_usd+v_fee,
+    cumulative_network_fees_usd=cumulative_network_fees_usd+coalesce(p_network_fee_usd,0),
+    updated_at=now()
+  where id=true;
 
   return jsonb_build_object('ok',true,'order_id',o.id,'cash_usd',v_cash,'protocol_fee_usd',v_fee,'realized_pnl_usd',v_realized);
 end;
