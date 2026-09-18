@@ -169,7 +169,7 @@ The funded-account engine is installed in isolated staging with real execution d
 - first admin approval for every payout and a distinct second admin above $2,000;
 - server-side confirmation/finalization records.
 
-Continuous funded risk monitoring is active in staging. Breaches queue any remaining open funded positions for controlled liquidation processing. The real transaction-signing/broadcast adapter is implemented in the branch but is not deployed or enabled while launch gates and the independent server kill switch remain off.
+Continuous funded risk monitoring is active in staging. Breaches queue any remaining open funded positions for controlled liquidation processing. Real funded trade signing/broadcast and the dedicated Turnkey payout-treasury signer are implemented in the branch but remain unreachable while launch gates and the independent server kill switch are off. The payout signer persists the exact signed transaction and expected signature before broadcast, reuses that artifact for reconciliation/rebroadcast, and will not silently construct a second payment while the earlier signed transaction can still land.
 
 ## 15. Secret/data handling rules
 
