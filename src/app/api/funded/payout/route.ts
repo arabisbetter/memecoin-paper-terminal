@@ -9,11 +9,6 @@ import {
   TransactionMessage,
   VersionedTransaction,
 } from '@solana/web3.js'
-import {
-  createAssociatedTokenAccountIdempotentInstruction,
-  createTransferCheckedInstruction,
-  getAssociatedTokenAddressSync,
-} from '@solana/spl-token'
 import { Turnkey } from '@turnkey/sdk-server'
 import { TurnkeySigner } from '@turnkey/solana'
 import bs58 from 'bs58'
@@ -24,6 +19,9 @@ export const runtime='nodejs'
 const DEFAULT_USDC='EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v'
 const WSOL='So11111111111111111111111111111111111111112'
 const MEMO_PROGRAM=new PublicKey('MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr')
+const TOKEN_PROGRAM=new PublicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA')
+const ASSOCIATED_TOKEN_PROGRAM=new PublicKey('ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL')
+const SYSTEM_PROGRAM=SystemProgram.programId
 const out=(body:unknown,status=200)=>NextResponse.json(body,{status})
 const finite=(v:unknown,fallback=0)=>{const n=Number(v);return Number.isFinite(n)?n:fallback}
 
@@ -51,6 +49,49 @@ function payoutSigner(){
   const wallet=new PublicKey(walletAddress)
   const turnkey=new Turnkey({apiBaseUrl:'https://api.turnkey.com',apiPublicKey,apiPrivateKey,defaultOrganizationId:organizationId})
   return{organizationId,policyId,wallet,signer:new TurnkeySigner({organizationId,client:turnkey.apiClient()})}
+}
+function associatedTokenAddress(mint:PublicKey,owner:PublicKey){
+  return PublicKey.findProgramAddressSync(
+    [owner.toBuffer(),TOKEN_PROGRAM.toBuffer(),mint.toBuffer()],
+    ASSOCIATED_TOKEN_PROGRAM
+  )[0]
+}
+function createAtaIdempotentInstruction(payer:PublicKey,ata:PublicKey,owner:PublicKey,mint:PublicKey){
+  return new TransactionInstruction({
+    programId:ASSOCIATED_TOKEN_PROGRAM,
+    keys:[
+      {pubkey:payer,isSigner:true,isWritable:true},
+      {pubkey:ata,isSigner:false,isWritable:true},
+      {pubkey:owner,isSigner:false,isWritable:false},
+      {pubkey:mint,isSigner:false,isWritable:false},
+      {pubkey:SYSTEM_PROGRAM,isSigner:false,isWritable:false},
+      {pubkey:TOKEN_PROGRAM,isSigner:false,isWritable:false},
+    ],
+    data:Buffer.from([1]),
+  })
+}
+function createTransferChecked(
+  source:PublicKey,
+  mint:PublicKey,
+  destination:PublicKey,
+  owner:PublicKey,
+  amount:bigint,
+  decimals:number
+){
+  const data=Buffer.alloc(10)
+  data.writeUInt8(12,0)
+  data.writeBigUInt64LE(amount,1)
+  data.writeUInt8(decimals,9)
+  return new TransactionInstruction({
+    programId:TOKEN_PROGRAM,
+    keys:[
+      {pubkey:source,isSigner:false,isWritable:true},
+      {pubkey:mint,isSigner:false,isWritable:false},
+      {pubkey:destination,isSigner:false,isWritable:true},
+      {pubkey:owner,isSigner:true,isWritable:false},
+    ],
+    data,
+  })
 }
 function launchGatesOpen(f:any){
   return Boolean(
@@ -277,14 +318,14 @@ export async function POST(req:NextRequest){
 
     if(asset==='USDC'){
       const mint=new PublicKey(process.env.PAPER_USDC_MINT||DEFAULT_USDC)
-      const sourceAta=getAssociatedTokenAddressSync(mint,wallet)
-      const destinationAta=getAssociatedTokenAddressSync(mint,destination)
+      const sourceAta=associatedTokenAddress(mint,wallet)
+      const destinationAta=associatedTokenAddress(mint,destination)
       const raw=BigInt(Math.floor(traderUsd*1_000_000+0.000001))
       if(raw<=BigInt(0))return out({error:'INVALID_PAYOUT_AMOUNT'},400)
       const balance=await connection.getTokenAccountBalance(sourceAta,'confirmed').catch(()=>null)
       if(!balance||BigInt(balance.value.amount)<raw)return out({error:'PAYOUT_TREASURY_USDC_INSUFFICIENT'},409)
-      instructions.push(createAssociatedTokenAccountIdempotentInstruction(wallet,destinationAta,destination,mint))
-      instructions.push(createTransferCheckedInstruction(sourceAta,mint,destinationAta,wallet,raw,6))
+      instructions.push(createAtaIdempotentInstruction(wallet,destinationAta,destination,mint))
+      instructions.push(createTransferChecked(sourceAta,mint,destinationAta,wallet,raw,6))
       assetAmount=Number(raw)/1e6
     }else{
       solUsdPrice=await freshSolUsd(admin)
