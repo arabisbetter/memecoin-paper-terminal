@@ -90,3 +90,91 @@ begin
   );
 end
 $schedule$;
+
+
+-- Persistent watchlist alert events. These are server-evaluated so alerts survive page refreshes.
+alter table public.token_watchlist
+  add column if not exists push_enabled boolean not null default false,
+  add column if not exists alert_above_triggered boolean not null default false,
+  add column if not exists alert_below_triggered boolean not null default false,
+  add column if not exists alert_last_price_usd numeric(30,14),
+  add column if not exists alert_last_checked_at timestamptz;
+
+create table if not exists public.paper_alert_events (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  watchlist_id uuid not null references public.token_watchlist(id) on delete cascade,
+  chain_id text not null,
+  token_address text not null,
+  token_symbol text,
+  direction text not null check (direction in ('above','below')),
+  trigger_price_usd numeric(30,14) not null,
+  observed_price_usd numeric(30,14) not null,
+  status text not null default 'unread' check (status in ('unread','read')),
+  created_at timestamptz not null default now(),
+  read_at timestamptz
+);
+alter table public.paper_alert_events enable row level security;
+revoke all on public.paper_alert_events from public,anon,authenticated;
+grant select,update on public.paper_alert_events to authenticated;
+grant select,insert,update,delete on public.paper_alert_events to service_role;
+
+drop policy if exists paper_alert_events_read_own on public.paper_alert_events;
+create policy paper_alert_events_read_own
+on public.paper_alert_events for select
+to authenticated
+using ((select auth.uid())=user_id);
+
+drop policy if exists paper_alert_events_update_own on public.paper_alert_events;
+create policy paper_alert_events_update_own
+on public.paper_alert_events for update
+to authenticated
+using ((select auth.uid())=user_id)
+with check ((select auth.uid())=user_id);
+
+create index if not exists paper_alert_events_user_created_idx
+  on public.paper_alert_events(user_id,created_at desc);
+create index if not exists token_watchlist_alert_scan_idx
+  on public.token_watchlist(updated_at)
+  where alert_above_usd is not null or alert_below_usd is not null;
+
+create or replace function paper_private.invoke_watchlist_alert_monitor()
+returns bigint
+language plpgsql
+security definer
+set search_path=paper_private,public,net,pg_temp
+as $watch$
+declare
+  cfg paper_private.runtime_config%rowtype;
+  tok text;
+  req_id bigint;
+begin
+  select * into cfg from paper_private.runtime_config where id=true;
+  if not coalesce(cfg.monitor_enabled,false) or cfg.project_url is null then return null; end if;
+  select internal_monitor_token into tok from paper_private.runtime_secrets where id=true;
+
+  select net.http_post(
+    url:=rtrim(cfg.project_url,'/')||'/functions/v1/paper-watchlist-monitor',
+    headers:=jsonb_build_object('Content-Type','application/json','x-paper-internal-token',tok),
+    body:='{"source":"pg_cron"}'::jsonb,
+    timeout_milliseconds:=20000
+  ) into req_id;
+  return req_id;
+end;
+$watch$;
+
+revoke all on function paper_private.invoke_watchlist_alert_monitor() from public,anon,authenticated;
+grant execute on function paper_private.invoke_watchlist_alert_monitor() to service_role;
+
+do $schedule$
+declare existing_id bigint;
+begin
+  select jobid into existing_id from cron.job where jobname='paper-watchlist-alert-monitor-v1';
+  if existing_id is not null then perform cron.unschedule(existing_id); end if;
+  perform cron.schedule(
+    'paper-watchlist-alert-monitor-v1',
+    '* * * * *',
+    'select paper_private.invoke_watchlist_alert_monitor();'
+  );
+end
+$schedule$;
