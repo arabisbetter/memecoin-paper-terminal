@@ -96,6 +96,10 @@ Deno.serve(async(req:Request)=>{
         admin.from('paper_admin_action_approvals').select('id,action_type,target_id,amount_usd,requested_by,status,requested_at').eq('status','pending').order('requested_at',{ascending:false}).limit(25),
         admin.from('paper_admin_audit_log').select('id,actor_user_id,actor_role,action,target_type,target_id,created_at').order('id',{ascending:false}).limit(50)
       ])
+      const {data:settlements,error:settlementListError}=await admin.from('paper_funded_settlements')
+        .select('id,user_id,week_start,week_end,eligible_profit_usd,trader_share_usd,paper_share_usd,status,payout_asset,payout_wallet_snapshot,approved_by,approved_at,second_approved_by,second_approved_at,payout_tx_signature,payout_asset_amount,payout_error,payout_attempts,payout_broadcast_at,payout_confirmation_slot,created_at,paid_at')
+        .order('created_at',{ascending:false}).limit(50)
+      if(settlementListError)throw new Error(settlementListError.message)
       const countBy=(rows:any[]|null|undefined,key:string)=>Object.fromEntries(
         Object.entries((rows||[]).reduce((a:any,r:any)=>{const k=String(r?.[key]||'unknown');a[k]=(a[k]||0)+1;return a},{}))
       )
@@ -104,7 +108,7 @@ Deno.serve(async(req:Request)=>{
         flags:flagRes.data,control:controlRes.data,treasury:treasuryRes.data,riskPolicy:riskRes.data,
         providers:providerRes.data||[],monitor:monitorRes.data||null,activeEvaluations:activeEvalRes.count||0,
         waitlist:countBy(waitlistRes.data,'status'),funded:countBy(fundedRes.data,'stage'),
-        abuseSignals:abuseRes.data||[],pendingApprovals:approvalRes.data||[],audit:ctx.internal?[]:(auditRes.data||[])
+        abuseSignals:abuseRes.data||[],pendingApprovals:approvalRes.data||[],settlements:settlements||[],audit:ctx.internal?[]:(auditRes.data||[])
       })
     }
 
