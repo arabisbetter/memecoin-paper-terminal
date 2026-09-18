@@ -740,6 +740,8 @@ as $$
 declare
   s public.paper_funded_settlements%rowtype;
   a public.paper_funded_accounts%rowtype;
+  fp public.paper_funded_profiles%rowtype;
+  sec public.account_security%rowtype;
   scale jsonb;
   next_capital numeric;
 begin
@@ -765,7 +767,30 @@ begin
     raise exception 'REAL_PAYOUTS_DISABLED';
   end if;
 
+  select * into fp from public.paper_funded_profiles where user_id=s.user_id;
+  if fp.user_id is null or fp.kyc_status<>'verified' or fp.aml_status<>'clear' or
+     fp.sanctions_status<>'clear' or fp.jurisdiction_status<>'allowed' or not fp.age_verified then
+    raise exception 'COMPLIANCE_NOT_READY';
+  end if;
+  if fp.tax_status in ('required','collecting','review') then raise exception 'TAX_READINESS_REQUIRED'; end if;
+  if fp.payout_wallet_verified_at is null or fp.payout_wallet_address is distinct from s.payout_wallet_snapshot then
+    raise exception 'VERIFIED_PAYOUT_WALLET_REQUIRED';
+  end if;
+
+  select * into sec from public.account_security where user_id=s.user_id;
+  if sec.user_id is null or sec.payout_wallet_address is distinct from s.payout_wallet_snapshot or sec.flagged_for_review then
+    raise exception 'PAYOUT_ACCOUNT_REVIEW_REQUIRED';
+  end if;
+
   select * into a from public.paper_funded_accounts where id=s.funded_account_id for update;
+  if a.id is null or a.status<>'active' or a.breach_reason is not null then
+    raise exception 'FUNDED_ACCOUNT_NOT_PAYABLE';
+  end if;
+  if exists(
+    select 1 from public.paper_funded_positions p
+    where p.funded_account_id=a.id and p.status='open' and p.quantity_tokens>0
+  ) then raise exception 'POSITIONS_MUST_BE_FLAT'; end if;
+
   scale:=public.paper_apply_scale_cycle_v1(s.user_id,true);
   next_capital:=coalesce((scale->>'capital_usd')::numeric,a.capital_usd);
 
