@@ -8,6 +8,7 @@ type Candle={time:number;open:number;high:number;low:number;close:number;volume:
 type Timeframe='1s'|'5s'|'15s'|'30s'|'1m'|'3m'|'5m'|'15m'|'30m'|'1h'|'4h'|'6h'|'12h'|'24h'|'1M'
 type TimeframeOption={value:Timeframe;label:string}
 type TimeframeGroup={label:string;items:TimeframeOption[]}
+type ChartMode='price'|'marketCap'
 
 const timeframeGroups:TimeframeGroup[]=[
   {label:'SECONDS',items:[{value:'1s',label:'1 second'},{value:'5s',label:'5 seconds'},{value:'15s',label:'15 seconds'},{value:'30s',label:'30 seconds'}]},
@@ -21,16 +22,20 @@ const formatPrice=(n:number)=>!Number.isFinite(n)?'—':n>=1?`$${n.toFixed(4)}`:
 const compact=(n:number)=>!Number.isFinite(n)?'—':n>=1e9?`$${(n/1e9).toFixed(2)}B`:n>=1e6?`$${(n/1e6).toFixed(2)}M`:n>=1e3?`$${(n/1e3).toFixed(1)}K`:`$${n.toFixed(0)}`
 const refreshMs=(tf:Timeframe)=>tf==='1s'?1_150:tf==='5s'?1_700:tf==='15s'?2_500:tf==='30s'?3_500:tf==='1m'?12_000:tf==='3m'?13_000:tf==='5m'?15_000:tf==='15m'||tf==='30m'?25_000:tf==='1h'?35_000:tf==='4h'||tf==='6h'?60_000:tf==='12h'?90_000:120_000
 
-export default function CandleChart({poolAddress,currentPrice,symbol}:{poolAddress?:string;currentPrice?:number;symbol?:string}){
+export default function CandleChart({poolAddress,currentPrice,currentMarketCap,symbol}:{poolAddress?:string;currentPrice?:number;currentMarketCap?:number;symbol?:string}){
   const wrap=useRef<HTMLDivElement|null>(null)
   const pickerRef=useRef<HTMLDivElement|null>(null)
   const chartRef=useRef<IChartApi|null>(null)
   const candleRef=useRef<ISeriesApi<'Candlestick'>|null>(null)
   const volumeRef=useRef<ISeriesApi<'Histogram'>|null>(null)
   const priceLineRef=useRef<any>(null)
-  const renderedRef=useRef<{first:number;last:number}|null>(null)
+  const renderedRef=useRef<{first:number;last:number;mode:ChartMode}|null>(null)
   const hasDataRef=useRef(false)
-  const [tf,setTf]=useState<Timeframe>('1m'),[tfOpen,setTfOpen]=useState(false),[candles,setCandles]=useState<Candle[]>([]),[hover,setHover]=useState<Candle|null>(null),[error,setError]=useState(''),[loading,setLoading]=useState(false),[status,setStatus]=useState<'LIVE'|'DEGRADED'|'STALE'>('DEGRADED'),[asOf,setAsOf]=useState(0),[expanded,setExpanded]=useState(false)
+  const [tf,setTf]=useState<Timeframe>('1m'),[tfOpen,setTfOpen]=useState(false),[mode,setMode]=useState<ChartMode>('price'),[candles,setCandles]=useState<Candle[]>([]),[hover,setHover]=useState<Candle|null>(null),[error,setError]=useState(''),[loading,setLoading]=useState(false),[status,setStatus]=useState<'LIVE'|'DEGRADED'|'STALE'>('DEGRADED'),[asOf,setAsOf]=useState(0),[expanded,setExpanded]=useState(false)
+
+  const impliedSupply=useMemo(()=>{const price=Number(currentPrice||0),mc=Number(currentMarketCap||0);return price>0&&mc>0?mc/price:0},[currentPrice,currentMarketCap])
+  const mcAvailable=impliedSupply>0
+  useEffect(()=>{if(mode==='marketCap'&&!mcAvailable)setMode('price')},[mode,mcAvailable])
 
   useEffect(()=>{
     if(!wrap.current)return
