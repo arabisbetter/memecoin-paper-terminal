@@ -751,6 +751,10 @@ begin
   if s.trader_share_usd>2000 and (
     s.second_approved_by is null or s.second_approved_at is null or s.second_approved_by=s.approved_by
   ) then raise exception 'SECOND_ADMIN_APPROVAL_REQUIRED'; end if;
+  if s.payout_tx_signature is null or s.payout_tx_signature is distinct from p_tx_signature then
+    raise exception 'PAYOUT_SIGNATURE_MISMATCH';
+  end if;
+  if s.payout_broadcast_at is null then raise exception 'PAYOUT_NOT_BROADCAST'; end if;
   if not coalesce((
     select legal_review_complete and legal_entity_ready and kyc_provider_configured and
            aml_sanctions_controls_ready and jurisdiction_allowlist_ready and
