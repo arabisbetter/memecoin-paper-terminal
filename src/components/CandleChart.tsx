@@ -36,6 +36,7 @@ export default function CandleChart({poolAddress,currentPrice,currentMarketCap,s
   const impliedSupply=useMemo(()=>{const price=Number(currentPrice||0),mc=Number(currentMarketCap||0);return price>0&&mc>0?mc/price:0},[currentPrice,currentMarketCap])
   const mcAvailable=impliedSupply>0
   useEffect(()=>{if(mode==='marketCap'&&!mcAvailable)setMode('price')},[mode,mcAvailable])
+  useEffect(()=>{setHover(null)},[mode])
 
   useEffect(()=>{
     if(!wrap.current)return
@@ -86,8 +87,8 @@ export default function CandleChart({poolAddress,currentPrice,currentMarketCap,s
     const candlePoint=(c:Candle)=>({time:c.time as UTCTimestamp,open:c.open,high:c.high,low:c.low,close:c.close})
     const volumePoint=(c:Candle)=>({time:c.time as UTCTimestamp,value:c.volume,color:c.close>=c.open?'rgba(45,224,176,.24)':'rgba(255,63,128,.24)'})
     let fit=false
-    if(!previous||previous.first!==first||previous.mode!==mode){
-      cs.setData(displayCandles.map(candlePoint));vs.setData(displayCandles.map(volumePoint));fit=true
+    if(mode==='marketCap'||!previous||previous.first!==first||previous.mode!==mode){
+      cs.setData(displayCandles.map(candlePoint));vs.setData(displayCandles.map(volumePoint));fit=!previous||previous.mode!==mode
     }else{
       const start=displayCandles.findIndex(c=>c.time===previous.last)
       if(start<0){cs.setData(displayCandles.map(candlePoint));vs.setData(displayCandles.map(volumePoint))}
