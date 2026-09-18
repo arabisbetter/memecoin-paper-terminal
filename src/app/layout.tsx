@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import RecoveryNudge from "@/components/RecoveryNudge";
 import CommandPalette from "@/components/CommandPalette";
 import NetworkStatus from "@/components/NetworkStatus";
+import TerminalPreferences from "@/components/TerminalPreferences";
 import "./globals.css";
 import "./product-polish.css";
 import "./spot-polish.css";
@@ -60,7 +61,7 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en">
-      <body>{children}<CommandPalette/><NetworkStatus/><RecoveryNudge/></body>
+      <body>{children}<TerminalPreferences/><CommandPalette/><NetworkStatus/><RecoveryNudge/></body>
     </html>
   );
 }
