@@ -153,6 +153,8 @@ create table if not exists public.paper_funded_liquidation_queue (
 alter table public.paper_funded_liquidation_queue enable row level security;
 revoke all on public.paper_funded_liquidation_queue from public,anon,authenticated;
 create index if not exists paper_funded_liquidation_status_idx on public.paper_funded_liquidation_queue(status,created_at);
+create index if not exists paper_funded_liquidation_account_idx on public.paper_funded_liquidation_queue(funded_account_id,created_at);
+create index if not exists paper_funded_liquidation_user_idx on public.paper_funded_liquidation_queue(user_id,created_at);
 
 alter table public.paper_funded_execution_events enable row level security;
 revoke all on public.paper_funded_execution_events from public,anon,authenticated;
@@ -160,6 +162,18 @@ create index if not exists paper_funded_execution_order_idx
   on public.paper_funded_execution_events(order_id,created_at desc);
 create index if not exists paper_funded_execution_user_idx
   on public.paper_funded_execution_events(user_id,created_at desc);
+create index if not exists paper_funded_execution_account_idx
+  on public.paper_funded_execution_events(funded_account_id,created_at desc);
+create index if not exists paper_funded_fee_user_idx
+  on public.paper_funded_fee_ledger(user_id,created_at desc);
+create index if not exists paper_funded_fee_account_idx
+  on public.paper_funded_fee_ledger(funded_account_id,created_at desc);
+create index if not exists paper_funded_fills_account_idx
+  on public.paper_funded_fills(funded_account_id,filled_at desc);
+create index if not exists paper_funded_fills_user_idx
+  on public.paper_funded_fills(user_id,filled_at desc);
+create index if not exists paper_funded_accounts_application_idx
+  on public.paper_funded_accounts(application_id) where application_id is not null;
 
 alter table public.paper_funded_orders
   add column if not exists input_mint text,
@@ -200,6 +214,12 @@ alter table public.paper_funded_settlements
 
 create unique index if not exists paper_funded_settlement_account_week_idx
   on public.paper_funded_settlements(funded_account_id,week_start);
+create index if not exists paper_funded_settlement_user_idx
+  on public.paper_funded_settlements(user_id,created_at desc);
+create index if not exists paper_funded_settlement_approved_by_idx
+  on public.paper_funded_settlements(approved_by) where approved_by is not null;
+create index if not exists paper_funded_settlement_second_approved_by_idx
+  on public.paper_funded_settlements(second_approved_by) where second_approved_by is not null;
 
 alter table public.paper_funded_settlements
   add column if not exists payout_network_fee_lamports bigint,
