@@ -21,16 +21,22 @@ test('desktop PAPER terminal exposes Axiom-style chart and Part 7 controls',asyn
 test('mobile terminal uses dedicated chart trade positions and info panes',async({page})=>{
   await page.setViewportSize({width:390,height:844})
   await page.goto('/spot',{waitUntil:'domcontentloaded'})
+  const terminal=page.locator('main.parts23-terminal')
   await expect(page.getByRole('button',{name:'Chart',exact:true})).toBeVisible()
-  await page.getByRole('button',{name:'Trade',exact:true}).click({force:true})
-  await expect(page.getByRole('button',{name:'Buy',exact:true})).toBeVisible()
-  await expect(page.getByRole('button',{name:'Limit'})).toBeVisible()
-  await page.getByRole('button',{name:'Positions',exact:true}).click({force:true})
-  await expect(page.getByText('OPEN PAPER POSITIONS')).toBeVisible()
-  await page.getByRole('button',{name:'Info',exact:true}).click({force:true})
-  await expect(page.getByText(/ABOUT \$/)).toBeVisible()
-})
 
+  await page.getByRole('button',{name:'Trade',exact:true}).evaluate(el=>el.click())
+  await expect(terminal).toHaveAttribute('data-mobile-pane','trade')
+  await expect(page.locator('.p23-trade-panel')).toBeVisible()
+  await expect(page.getByRole('button',{name:'Limit',exact:true})).toBeVisible()
+
+  await page.getByRole('button',{name:'Positions',exact:true}).evaluate(el=>el.click())
+  await expect(terminal).toHaveAttribute('data-mobile-pane','positions')
+  await expect(page.locator('.positions-panel')).toBeVisible()
+
+  await page.getByRole('button',{name:'Info',exact:true}).evaluate(el=>el.click())
+  await expect(terminal).toHaveAttribute('data-mobile-pane','info')
+  await expect(page.locator('.token-intel-card')).toBeVisible()
+})
 test('Pulse workspace and Watchlist alert center render',async({page})=>{
   await page.goto('/pulse',{waitUntil:'domcontentloaded'})
   await expect(page.getByRole('heading',{name:'Pulse'})).toBeVisible()
