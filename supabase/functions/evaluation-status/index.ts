@@ -1,4 +1,4 @@
-import { createClient } from 'npm:@supabase/supabase-js@2'
+import { createClient } from 'npm:@supabase/supabase-js@2.116.0'
 
 const corsHeaders={
   'Access-Control-Allow-Origin':'*',
@@ -89,6 +89,8 @@ Deno.serve(async(req:Request)=>{
     const body=await req.json().catch(()=>({})),action=String(body?.action||'status')
 
     if(action==='start'){
+      const {data:control}=await admin.from('paper_control_plane').select('emergency_pause,evaluation_entries_enabled,maintenance_message').eq('id',true).maybeSingle()
+      if(control?.emergency_pause||control?.evaluation_entries_enabled===false)return reply({error:control?.maintenance_message||'New evaluations are temporarily paused.',code:'PLATFORM_PAUSED'},503)
       const {data,error}=await userClient.rpc('paper_start_evaluation_v1')
       if(error){
         const message=error.message||'Could not start evaluation'
