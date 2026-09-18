@@ -200,6 +200,14 @@ create policy paper_profile_visibility_update_own on public.paper_profile_visibi
 revoke all on public.paper_profile_visibility from public,anon,authenticated;
 grant select,insert,update on public.paper_profile_visibility to authenticated;
 
+create or replace view public.paper_public_profiles with (security_invoker=true) as
+select p.id,p.username,p.display_name,p.bio,p.x_handle,p.avatar_url,p.avatar_emoji,p.accent,p.created_at
+from public.profiles p
+join public.paper_profile_visibility v on v.user_id=p.id
+where v.public_profile or (select auth.uid())=p.id;
+revoke all on public.paper_public_profiles from public,anon,authenticated;
+grant select on public.paper_public_profiles to authenticated;
+
 create or replace function public.paper_profile_visibility_bootstrap()
 returns trigger
 language plpgsql
