@@ -19,12 +19,13 @@
 17. Top-level dependency versions are exact.
 18. CI GitHub actions are commit-SHA pinned.
 19. CI rejects accidental public secret names.
-20. CI runs a production-dependency security audit.
-21. CI uses a committed package lock and `npm ci`.
-22. Parts 2–6 appear in staging migration history.
-23. Security advisors show no signed-in-user executable privileged SECURITY DEFINER functions.
-24. All real-money launch flags remain false after testing.
-25. A rollback-only evaluation-start test produces one attempt/reset under repeated start calls.
-26. A rollback-only funded suite remains green from Parts 4–5.
-27. Production database is not modified during Part 6 preparation.
-28. Production real-money launch is blocked until backup, leaked-password protection, provider secrets, admin MFA and deployment rollback readiness are cleared.
+20. CI runs a production-dependency security audit and fails on high/critical findings.
+21. The high-severity legacy SPL-token dependency path is removed rather than suppressed.
+22. CI uses a committed package lock and `npm ci`.
+23. Parts 2–6 plus Part 6 performance cleanup appear in staging migration history.
+24. Security advisors show no signed-in-user executable privileged SECURITY DEFINER functions.
+25. All real-money launch flags remain false after testing.
+26. A rollback-only evaluation-start test produces one attempt/reset under repeated start calls.
+27. A rollback-only funded suite remains green from Parts 4–5.
+28. Production database is not modified during Part 6 preparation.
+29. Production real-money launch is blocked until backup, leaked-password protection, provider secrets, admin MFA and deployment rollback readiness are cleared.
