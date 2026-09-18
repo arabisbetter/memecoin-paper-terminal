@@ -552,6 +552,7 @@ as $$
 declare
   hard_count integer:=0;
   soft_count integer:=0;
+  v_row_count integer:=0;
 begin
   -- Same payout address across funded profiles is a hard signal. Auto-freeze funded stage.
   with dupes as (
@@ -604,7 +605,8 @@ begin
   having count(*)>=20
   on conflict(user_id,related_user_id,signal_type) where status in ('open','frozen') do nothing;
 
-  get diagnostics soft_count=soft_count+row_count;
+  get diagnostics v_row_count=row_count;
+  soft_count:=soft_count+v_row_count;
 
   return jsonb_build_object('hard_signals_added',hard_count,'soft_signals_added',soft_count);
 end;
