@@ -384,7 +384,7 @@ begin
   update public.paper_custody_wallets set funded_account_id=acct.id,updated_at=v_now where id=cw.id;
   update public.paper_funded_profiles set stage='active',approved_at=coalesce(approved_at,v_now),
     activated_at=v_now,updated_at=v_now where user_id=target_user;
-  update public.paper_funded_applications set status='active',approved_at=coalesce(approved_at,v_now),updated_at=v_now
+  update public.paper_funded_applications set status='active',reviewed_at=coalesce(reviewed_at,v_now),updated_at=v_now
     where id=app.id;
   update public.paper_funded_waitlist set status='activated',activated_at=v_now,updated_at=v_now where user_id=target_user;
   update public.paper_treasury_state set deployed_capital_usd=v_new_deployed,reserve_capital_usd=v_new_reserve,updated_at=v_now where id=true;
