@@ -35,12 +35,13 @@ async function fetchJson(url:string,init:RequestInit={},timeoutMs=8000){
 
 async function upsertHealth(admin:any,provider:string,ok:boolean,latencyMs:number|null,error?:string,metadata:Record<string,unknown>={}){
   const {data:current}=await admin.from('paper_market_provider_health').select('consecutive_successes,consecutive_failures').eq('provider',provider).maybeSingle()
+  const skipped=metadata?.skipped===true
   await admin.from('paper_market_provider_health').upsert({
     provider,
-    status:ok?'LIVE':(Number(current?.consecutive_failures||0)>=1?'DOWN':'DEGRADED'),
+    status:ok?'LIVE':(skipped?'DEGRADED':Number(current?.consecutive_failures||0)>=1?'DOWN':'DEGRADED'),
     last_latency_ms:latencyMs,
     consecutive_successes:ok?Number(current?.consecutive_successes||0)+1:0,
-    consecutive_failures:ok?0:Number(current?.consecutive_failures||0)+1,
+    consecutive_failures:ok||skipped?0:Number(current?.consecutive_failures||0)+1,
     last_success_at:ok?new Date().toISOString():undefined,
     last_failure_at:ok?undefined:new Date().toISOString(),
     last_error:ok?null:String(error||'provider unavailable').slice(0,500),
@@ -139,8 +140,8 @@ Deno.serve(async(req:Request)=>{
 
     const startedAt=new Date().toISOString()
     const {data:evaluations,error:evalError}=await admin.from('paper_evaluations')
-      .select('id,user_id,status,expires_at,last_equity_usd,last_cash_usd,last_open_value_usd')
-      .eq('status','active').order('starts_at',{ascending:true}).limit(250)
+      .select('id,user_id,status,expires_at,last_equity_usd,last_cash_usd,last_open_value_usd,last_mark_at')
+      .eq('status','active').order('last_mark_at',{ascending:true,nullsFirst:true}).limit(250)
     if(evalError)throw new Error(evalError.message)
 
     const run={active_evaluations:evaluations?.length||0,marked_live:0,marked_degraded:0,passed:0,failed:0,expired:0}
