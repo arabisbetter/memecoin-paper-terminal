@@ -658,15 +658,15 @@ $$;
 revoke all on function paper_private.invoke_funded_monitor() from public,anon,authenticated;
 grant execute on function paper_private.invoke_funded_monitor() to service_role;
 
-do $
+do $$
 declare existing_id bigint;
 begin
   select jobid into existing_id from cron.job where jobname='paper-funded-monitor-v1';
   if existing_id is not null then perform cron.unschedule(existing_id); end if;
   perform cron.schedule('paper-funded-monitor-v1','30 seconds','select paper_private.invoke_funded_monitor();');
-end $;
+end $$;
 
-do $
+do $$
 declare existing_id bigint;
 begin
   select jobid into existing_id from cron.job where jobname='paper-funded-settlement-v1';
