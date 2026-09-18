@@ -1,4 +1,4 @@
-import { createClient } from 'npm:@supabase/supabase-js@2'
+import { createClient } from 'npm:@supabase/supabase-js@2.116.0'
 
 const corsHeaders={
   'Access-Control-Allow-Origin':'*',
@@ -75,6 +75,8 @@ Deno.serve(async(req:Request)=>{
     if(userError||!userData.user)return json({error:'invalid session'},401)
     const uid=userData.user.id;userIdForLog=uid
     admin=createClient(supabaseUrl,secretKey,{auth:{persistSession:false,autoRefreshToken:false}})
+    const {data:control}=await admin.from('paper_control_plane').select('emergency_pause,paper_trading_enabled,maintenance_message').eq('id',true).maybeSingle()
+    if(control?.emergency_pause||control?.paper_trading_enabled===false)return json({error:control?.maintenance_message||'PAPER trading is temporarily paused.',code:'PLATFORM_PAUSED'},503)
 
     const {data:profile,error:profileError}=await admin.from('profiles').select('profile_completed').eq('id',uid).maybeSingle()
     if(profileError)throw new Error(profileError.message)
