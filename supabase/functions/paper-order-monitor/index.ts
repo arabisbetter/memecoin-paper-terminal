@@ -56,7 +56,7 @@ Deno.serve(async(req:Request)=>{
   if(req.method!=='POST')return reply({error:'method not allowed'},405)
   const startedMs=Date.now()
   let admin:any=null
-  const stats={checked:0,triggered:0,filled:0,rejected:0,expired:0,recovered:0,waiting:0}
+  const stats={checked:0,triggered:0,filled:0,rejected:0,expired:0,recovered:0,waiting:0,errors:0}
   try{
     const {url,secret}=envKeys()
     admin=createClient(url,secret,{auth:{persistSession:false,autoRefreshToken:false}})
@@ -212,7 +212,7 @@ Deno.serve(async(req:Request)=>{
           await admin.from('paper_conditional_orders').update({
             status:'pending',processing_started_at:null,rejection_reason:'Live market data unavailable; retrying automatically.',updated_at:new Date().toISOString()
           }).eq('id',raw.id)
-          stats.waiting++;stats.errors=(stats as any).errors?Number((stats as any).errors)+1:1
+          stats.waiting++;stats.errors++
         }else{
           await admin.from('paper_conditional_orders').update({
             status:'rejected',rejection_reason:message.slice(0,500),updated_at:new Date().toISOString()
