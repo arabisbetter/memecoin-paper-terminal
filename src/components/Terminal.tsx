@@ -78,7 +78,7 @@ export default function Terminal(){
       const r=await fetch('/api/market/latest',{cache:'no-store'}),j=await r.json();if(!r.ok)throw new Error(j.error||'Market feed unavailable')
       const list=(j.tokens||[]) as MarketToken[];if(list.length)setTokens(list);setFeedSource(String(j.source||''));setFeedAsOf(Number(j.asOf||Date.now()))
       const requested=typeof window!=='undefined'?new URLSearchParams(window.location.search).get('mint'):null
-      if(requested){const local=list.find(t=>t.mint===requested);if(local)chooseToken(local,false);else if(isMint(requested)){const tr=await fetch(`/api/market/token/${encodeURIComponent(requested)}`,{cache:'no-store'}),tj=await tr.json();if(tr.ok&&tj.token)chooseToken(tj.token,false)}}else if(list.length)setSelected(cur=>{if(cur)return cur;setSelectedUpdatedAt(Number(j.asOf||Date.now()));return list[0]})
+      if(requested){const local=list.find(t=>t.mint===requested);if(local)chooseToken(local,false);else if(isMint(requested)){const tr=await fetch(`/api/market/token/${encodeURIComponent(requested)}`,{cache:'no-store'}),tj=await tr.json();if(tr.ok&&tj.token)chooseToken(tj.token,false)}}else if(list.length){setSelected(cur=>cur||list[0]);setSelectedUpdatedAt(prev=>prev||Number(j.asOf||Date.now()))}
     }catch(e){setMessage(e instanceof Error?e.message:'Market feed unavailable')}finally{feedBusy.current=false}
   },[chooseToken])
 
