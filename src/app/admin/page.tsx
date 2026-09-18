@@ -10,7 +10,7 @@ type Dashboard={
   ok?:boolean;role?:string;strongAuth?:boolean;activeEvaluations?:number
   flags?:Record<string,boolean>;control?:any;treasury?:any;riskPolicy?:any
   providers?:any[];monitor?:any;waitlist?:Record<string,number>;funded?:Record<string,number>
-  abuseSignals?:any[];pendingApprovals?:any[];audit?:any[];error?:string
+  abuseSignals?:any[];pendingApprovals?:any[];settlements?:any[];audit?:any[];error?:string
 }
 type Trader={profile:any;evaluation:any;funded:any;waitlist:any;security:any;scale:any}
 
@@ -47,6 +47,22 @@ export default function AdminPage(){
   async function mutate(action:string,payload:Record<string,unknown>={}){
     setSaving(action);setError('')
     try{await invoke({action,...payload});await load()}catch(e){setError(e instanceof Error?e.message:'Admin action failed')}finally{setSaving('')}
+  }
+  async function executePayout(settlementId:string){
+    if(!supabase)return
+    setSaving('payout:'+settlementId);setError('')
+    try{
+      const {data:{session},error:sessionError}=await supabase.auth.getSession()
+      if(sessionError||!session?.access_token)throw new Error('Admin session required')
+      const response=await fetch('/api/funded/payout',{
+        method:'POST',
+        headers:{'Content-Type':'application/json','Authorization':'Bearer '+session.access_token},
+        body:JSON.stringify({settlementId})
+      })
+      const body=await response.json().catch(()=>({}))
+      if(!response.ok)throw new Error(body?.error||body?.message||'Payout execution failed')
+      await load()
+    }catch(e){setError(e instanceof Error?e.message:'Payout execution failed')}finally{setSaving('')}
   }
 
   const flags=dash?.flags||{}
@@ -101,6 +117,38 @@ export default function AdminPage(){
           <button className="admin-safe-btn" disabled={Boolean(saving)} onClick={()=>void mutate('run_abuse_scan')}>RUN ABUSE SCAN</button>
         </article>
       </section>
+      <section className="p23-admin-table-card">
+        <div className="p23-admin-title"><Database size={15}/><div><b>PAYOUT OPERATIONS</b><span>Friday settlements · approval · second approval · Turnkey execution</span></div></div>
+        <div className="p23-payout-head"><span>Settlement</span><span>Trader share</span><span>Asset</span><span>Status</span><span>Approval</span><span>Transaction</span><span>Action</span></div>
+        {(dash.settlements||[]).length===0&&<div className="empty-card">No funded settlements yet.</div>}
+        {(dash.settlements||[]).map(s=>{
+          const pending=(dash.pendingApprovals||[]).find(a=>a.action_type==='payout'&&a.target_id===s.id&&a.status==='pending')
+          const needsSecond=Number(s.trader_share_usd||0)>2000&&!s.second_approved_by
+          return <div className="p23-payout-row" key={s.id}>
+            <span><b>{String(s.id).slice(0,8)}…</b><small>{s.week_start} → {s.week_end}</small></span>
+            <span>{'        <div className="p23-trader-head"><span>Trader</span><span>Evaluation</span><span>Equity</span><span>Funded stage</span><span>Waitlist</span><span>Scale</span><span>Review</span></div>
+        {traders.map(t=><div className="p23-trader-row" key={t.profile.id}><span><b>{t.profile.display_name||t.profile.username||'Paper Trader'}</b><small>@{t.profile.username||'—'}</small></span><span>{t.evaluation?.status||'—'}</span><span>${Number(t.evaluation?.last_equity_usd||0).toFixed(2)}</span><span>{t.funded?.stage||'paper'}</span><span>{t.waitlist?.status||'—'}</span><span>{t.scale?'L'+t.scale.scale_level+' · $'+Number(t.scale.capital_usd).toLocaleString():'—'}</span><span className={t.security?.flagged_for_review?'loss':''}>{t.security?.flagged_for_review?'FLAGGED':'clear'}</span></div>)}
+      </section>
+    </>}
+  </div></main><BottomDock active="profile"/></div>
+}
++Number(s.trader_share_usd||0).toFixed(2)}</span>
+            <span>{s.payout_asset}</span>
+            <span>{String(s.status).replaceAll('_',' ')}</span>
+            <span>{s.approved_by?(needsSecond?'SECOND REQUIRED':'APPROVED'):'NOT APPROVED'}</span>
+            <span>{s.payout_tx_signature?String(s.payout_tx_signature).slice(0,8)+'…':'—'}</span>
+            <span className="p23-payout-actions">
+              {s.status==='generated'&&!s.approved_by&&<button className="admin-safe-btn" disabled={Boolean(saving)||!dash.strongAuth} onClick={()=>void mutate('approve_payout',{settlementId:s.id})}>APPROVE</button>}
+              {pending&&<button className="admin-safe-btn" disabled={Boolean(saving)||!dash.strongAuth} onClick={()=>void mutate('approve_action',{approvalId:pending.id})}>SECOND APPROVE</button>}
+              {s.status==='approved'&&(!needsSecond||Boolean(s.second_approved_by))&&<button className="admin-safe-btn" disabled={Boolean(saving)||!dash.strongAuth||closedGates.length>0} onClick={()=>void executePayout(s.id)}>EXECUTE</button>}
+              {s.status==='paid'&&<small className="gain">PAID</small>}
+              {s.payout_error&&<small className="loss" title={s.payout_error}>REVIEW</small>}
+            </span>
+          </div>
+        })}
+        <small>Execution remains server-killed until every real-money gate is open and PAPER_REAL_MONEY_SERVER_ENABLED=true. Signed payout transactions are persisted before broadcast for idempotent retries.</small>
+      </section>
+
       <section className="p23-admin-table-card"><div className="p23-admin-title"><Users size={15}/><div><b>TRADER REVIEW</b><span>Latest 50 accounts · evaluation / waitlist / KYC / scale / review state</span></div></div>
         <div className="p23-trader-head"><span>Trader</span><span>Evaluation</span><span>Equity</span><span>Funded stage</span><span>Waitlist</span><span>Scale</span><span>Review</span></div>
         {traders.map(t=><div className="p23-trader-row" key={t.profile.id}><span><b>{t.profile.display_name||t.profile.username||'Paper Trader'}</b><small>@{t.profile.username||'—'}</small></span><span>{t.evaluation?.status||'—'}</span><span>${Number(t.evaluation?.last_equity_usd||0).toFixed(2)}</span><span>{t.funded?.stage||'paper'}</span><span>{t.waitlist?.status||'—'}</span><span>{t.scale?'L'+t.scale.scale_level+' · $'+Number(t.scale.capital_usd).toLocaleString():'—'}</span><span className={t.security?.flagged_for_review?'loss':''}>{t.security?.flagged_for_review?'FLAGGED':'clear'}</span></div>)}
