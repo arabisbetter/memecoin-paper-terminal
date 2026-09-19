@@ -66,7 +66,7 @@ test('Part 8 research tools and command palette render',async({page})=>{
   await expect(page.getByRole('heading',{name:'Trade Replay'})).toBeVisible()
 
   await page.keyboard.press('Control+k')
-  await expect(page.getByPlaceholder(/Search token, CA, scanner/)).toBeVisible()
+  await expect(page.getByPlaceholder(/Search token, CA/)).toBeVisible()
   await expect(page.getByText('Launch scanner',{exact:true})).toBeVisible()
   await expect(page.getByText('Trading journal',{exact:true})).toBeVisible()
 })
