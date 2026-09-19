@@ -1,6 +1,5 @@
 'use client'
 
-import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 
@@ -21,5 +20,5 @@ export default function RecoveryNudge(){
     return()=>{alive=false;window.removeEventListener('paper:account-changed',handler)}
   },[supabase])
   if(!show)return null
-  return <aside className="recovery-nudge"><div><b>Protect your PAPER account</b><span>If you clear browser data before adding a recovery method, this anonymous account and its PAPER history cannot be restored.</span></div><Link href="/profile">Add recovery email</Link><button aria-label="Dismiss recovery reminder" onClick={()=>{localStorage.setItem('paper.recoveryNudgeDismissed','1');setShow(false)}}>×</button></aside>
+  return <aside className="recovery-nudge"><div><b>Protect your PAPER account</b><span>If you clear browser data before adding a recovery method, this anonymous account and its PAPER history cannot be restored.</span></div><span className="recovery-profile-hint">Open Profile in the header to add a recovery email.</span><button aria-label="Dismiss recovery reminder" onClick={()=>{localStorage.setItem('paper.recoveryNudgeDismissed','1');setShow(false)}}>×</button></aside>
 }

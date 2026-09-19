@@ -43,12 +43,13 @@ test('presets save, reload, instant buy, and percentage sell work for a fresh an
   const p1Buy=page.locator('.instant-buy-preset').filter({hasText:'P1'}).first()
   await expect(p1Buy).toBeEnabled({timeout:25000})
   await p1Buy.click()
-  await expect(page.getByText('PAPER BUY FILLED',{exact:true})).toBeVisible({timeout:30000})
+  await expect(page.locator('.trade-message').filter({hasText:/^PAPER BUY FILLED$/})).toBeVisible({timeout:30000})
 
   const sell25=page.locator('.percentage-sell-button').filter({hasText:'25%'}).first()
   await expect(sell25).toBeEnabled({timeout:25000})
   await sell25.click()
-  await expect(page.getByText('PAPER SELL FILLED',{exact:true})).toBeVisible({timeout:30000})
+  await expect(page.locator('.trade-message').filter({hasText:/^PAPER SELL FILLED$/})).toBeVisible({timeout:30000})
+  await expect(page.locator('a[href="/profile"]')).toHaveCount(1)
 })
 
 test('candle API fills gaps and chart survives repeated timeframe changes',async({page,request})=>{

@@ -23,9 +23,15 @@ test('mobile PAPER header, search, trade panes, and chart controls stay usable',
   }
 
   await page.getByRole('button',{name:'Chart',exact:true}).click()
-  for(const timeframe of ['1s','1m','5m']){
-    await page.getByRole('button',{name:timeframe,exact:true}).click()
-    await expect(page.locator('.lw-chart-canvas canvas').first()).toBeVisible({timeout:25000})
+  const chart=page.locator('.lw-chart-canvas')
+  await expect(chart).toBeVisible()
+  const picker=page.locator('.tf-picker-button')
+  await expect(picker).toBeVisible()
+  for(const [label,expected] of [['5 minutes','5 minutes'],['1 minute','1 minute']]){
+    await picker.click()
+    await page.getByRole('menuitem',{name:label,exact:true}).click()
+    await expect(picker).toContainText(expected)
+    await expect(chart).toBeVisible()
   }
 
   await page.getByRole('button',{name:'Trade',exact:true}).click()
@@ -39,7 +45,9 @@ test('mobile Pulse remains a readable three-board experience',async({page})=>{
   await completeOnboarding(page,'pulse')
   for(const title of ['New Pairs','Final Stretch','Migrated'])await expect(page.locator('.pulse-board-head').filter({hasText:title})).toHaveCount(1)
   await expect(page.getByRole('button',{name:/Filters/})).toBeVisible()
-  await page.getByRole('button',{name:'Feedback',exact:true}).click()
+  const feedback=page.getByRole('button',{name:'Feedback',exact:true})
+  await expect(feedback).toBeVisible()
+  await feedback.click()
   await expect(page.getByRole('dialog',{name:'Send feedback'})).toBeVisible()
   await page.getByRole('button',{name:'Cancel',exact:true}).click()
 })
