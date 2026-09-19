@@ -80,7 +80,10 @@ test('Part 9 live intelligence surfaces render against live APIs',async({page,re
   expect(token).toBeTruthy()
 
   await page.goto('/scanner',{waitUntil:'domcontentloaded'})
-  await expect(page.getByRole('button',{name:/Deep scan top 10/i})).toBeVisible()
+  const deepButton=page.getByRole('button',{name:/Deep scan top 6/i})
+  await expect(deepButton).toBeVisible()
+  await deepButton.click()
+  await expect(page.getByText(/Deep data refreshed/i)).toBeVisible({timeout:30000})
   await expect(page.getByText(/Require mint authority revoked/i)).toBeVisible()
 
   await page.goto('/smart-money',{waitUntil:'domcontentloaded'})
