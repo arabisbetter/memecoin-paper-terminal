@@ -49,6 +49,7 @@ jobs:
         run: |
           NEXT_PUBLIC_SUPABASE_URL=https://bpnhybmptjenrjntvmsz.supabase.co \
           NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=placeholder \
+          PAPER_INTEL_SUPABASE_URL=https://aehatnwbwyzpdsdqhkjv.supabase.co \
           npm start -- -p 3000 > /tmp/paper-next.log 2>&1 &
           echo $! > /tmp/paper-next.pid
 
