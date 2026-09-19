@@ -1,4 +1,5 @@
 import { createClient } from 'npm:@supabase/supabase-js@2.116.0'
+import { quotePaperExecution, EXECUTION_MODEL_VERSION } from '../_shared/execution-model.mjs'
 
 const corsHeaders={
   'Access-Control-Allow-Origin':'*',
@@ -10,7 +11,6 @@ const json=(body:unknown,status=200)=>new Response(JSON.stringify(body),{status,
 type Pair={chainId?:string;dexId?:string;pairAddress?:string;baseToken?:{address?:string;name?:string;symbol?:string};priceUsd?:string;marketCap?:number;fdv?:number;liquidity?:{usd?:number};info?:{imageUrl?:string}}
 const finite=(v:unknown,fallback=0)=>{const n=Number(v);return Number.isFinite(n)?n:fallback}
 const REQUIRED_LEGAL=[['tos','v2'],['privacy','v1'],['risk_disclosure','v2']] as const
-const PAPER_FEE_BPS=100
 
 async function fetchJson(url:string,timeoutMs=6500){
   const controller=new AbortController();const timer=setTimeout(()=>controller.abort(),timeoutMs)
@@ -99,6 +99,9 @@ Deno.serve(async(req:Request)=>{
 
     const body=await req.json()
     const mint=String(body?.mint||'').trim(),side=String(body?.side||'').toLowerCase(),idempotencyKey=String(body?.idempotencyKey||'').trim()
+    const slippageLimitBps=Math.max(10,Math.min(5000,finite(body?.slippageBps,1000)))
+    const priorityFeeSol=Math.max(0,Math.min(.1,finite(body?.priorityFeeSol,0)))
+    const dexFeeBps=Math.max(0,Math.min(500,finite(body?.dexFeeBps,30)))
     if(!/^[1-9A-HJ-NP-Za-km-z]{32,60}$/.test(mint))return json({error:'invalid Solana mint'},400)
     if(side!=='buy'&&side!=='sell')return json({error:'side must be buy or sell'},400)
     if(idempotencyKey.length<8||idempotencyKey.length>128)return json({error:'idempotency key required'},400)
@@ -114,9 +117,7 @@ Deno.serve(async(req:Request)=>{
     if(marketDataAgeMs>10_000)return json({error:'Live market data is stale. New PAPER orders are temporarily paused.',code:'STALE_MARKET'},503)
     const displayedPrice=finite(pair.priceUsd),marketCap=finite(pair.marketCap??pair.fdv),liquidity=finite(pair.liquidity?.usd)
     if(displayedPrice<=0||liquidity<=0)return json({error:'token has insufficient live market data'},422)
-    const oneSideLiquidityUsd=Math.max(liquidity/2,1)
-    const feeBps=PAPER_FEE_BPS,feeRate=feeBps/10_000
-    const executionModelVersion='v3_evaluation_liquidity_approximation',quality='estimated'
+    const executionModelVersion=EXECUTION_MODEL_VERSION,quality='modeled'
 
     if(side==='buy'){
       const amountSol=finite(body?.amountSol)
@@ -129,13 +130,14 @@ Deno.serve(async(req:Request)=>{
         if(existingValue+notionalUsd>limit+0.000001)return json({error:'This buy would exceed the 25% per-token concentration cap.',code:'EVALUATION_CONCENTRATION_CAP',evaluation:preMark},422)
         if(!existing&&marks.length>=5)return json({error:'Evaluation allows at most 5 simultaneous open positions.',code:'EVALUATION_POSITION_LIMIT',evaluation:preMark},422)
       }
-      const impactRatio=Math.min(notionalUsd/oneSideLiquidityUsd,5)
-      const fillPrice=displayedPrice*(1+impactRatio),impactPct=impactRatio*100,fillMc=marketCap>0?marketCap*(fillPrice/displayedPrice):0,feeUsd=notionalUsd*feeRate
-      const requestFingerprint=`buy|${mint}|${amountSol.toFixed(12)}`
-      const {data,error}=await admin.rpc('execute_paper_buy_v2',{p_user_id:uid,p_idempotency_key:idempotencyKey,p_request_fingerprint:requestFingerprint,p_mint:mint,p_ticker:pair.baseToken?.symbol||null,p_name:pair.baseToken?.name||null,p_image_url:pair.info?.imageUrl||null,p_pair_address:pair.pairAddress||null,p_dex_id:pair.dexId||null,p_amount_sol:amountSol,p_notional_usd:notionalUsd,p_displayed_price_usd:displayedPrice,p_fill_price_usd:fillPrice,p_displayed_mc_usd:marketCap||null,p_fill_mc_usd:fillMc||null,p_liquidity_usd:liquidity,p_price_impact_pct:impactPct,p_fee_usd:feeUsd,p_sol_price_usd:solPrice,p_quote_timestamp:quoteTimestamp,p_market_data_age_ms:marketDataAgeMs,p_execution_quality:quality,p_execution_model_version:executionModelVersion})
+      const execution=quotePaperExecution({side:'buy',referencePriceUsd:displayedPrice,marketCapUsd:marketCap,liquidityUsd:liquidity,notionalUsd,solUsd:solPrice,dexFeeBps,slippageLimitBps,priorityFeeSol})
+      if(execution.rejected)return json({error:'Simulated execution exceeds your slippage limit.',code:execution.rejectionCode,execution},422)
+      const fillPrice=execution.fillPriceUsd,impactPct=execution.priceImpactPct,fillMc=execution.fillMarketCapUsd,feeUsd=execution.paperFeeUsd
+      const requestFingerprint=`buy|${mint}|${amountSol.toFixed(12)}|${slippageLimitBps}|${priorityFeeSol.toFixed(9)}|${dexFeeBps}`
+      const {data,error}=await admin.rpc('execute_paper_buy_v3',{p_user_id:uid,p_idempotency_key:idempotencyKey,p_request_fingerprint:requestFingerprint,p_mint:mint,p_ticker:pair.baseToken?.symbol||null,p_name:pair.baseToken?.name||null,p_image_url:pair.info?.imageUrl||null,p_pair_address:pair.pairAddress||null,p_dex_id:pair.dexId||null,p_amount_sol:amountSol,p_notional_usd:notionalUsd,p_displayed_price_usd:displayedPrice,p_fill_price_usd:fillPrice,p_displayed_mc_usd:marketCap||null,p_fill_mc_usd:fillMc||null,p_liquidity_usd:liquidity,p_price_impact_pct:impactPct,p_effective_slippage_bps:execution.effectiveSlippageBps,p_paper_fee_usd:feeUsd,p_dex_fee_usd:execution.dexFeeUsd,p_network_fee_usd:execution.networkFeeUsd,p_priority_fee_sol:priorityFeeSol,p_post_trade_price_usd:execution.postTradePriceUsd,p_slippage_limit_bps:slippageLimitBps,p_sol_price_usd:solPrice,p_quote_timestamp:quoteTimestamp,p_market_data_age_ms:marketDataAgeMs,p_execution_quality:quality,p_execution_model_version:executionModelVersion})
       if(error)throw new Error(error.message)
       const evaluation=activeEvaluation?await markEvaluation(admin,uid):null
-      return json({ok:true,paper:true,side:'buy',underReview:Boolean(risk?.flagged_for_review),dataStatus:'LIVE',market:{referencePriceUsd:displayedPrice,displayedMcUsd:marketCap,liquidityUsd:liquidity,solUsd:solPrice,quoteTimestamp,marketDataAgeMs},fill:{requestedAmountUsd:notionalUsd,requestedAmountNative:amountSol,simulatedFillPriceUsd:fillPrice,simulatedFillMcUsd:fillMc,priceImpactPct:impactPct,paperFeeUsd:feeUsd,feeBps,executionQuality:quality,executionModelVersion},account:data,evaluation})
+      return json({ok:true,paper:true,side:'buy',underReview:Boolean(risk?.flagged_for_review),dataStatus:'LIVE',market:{referencePriceUsd:displayedPrice,displayedMcUsd:marketCap,liquidityUsd:liquidity,solUsd:solPrice,quoteTimestamp,marketDataAgeMs},fill:{requestedAmountUsd:notionalUsd,requestedAmountNative:amountSol,simulatedFillPriceUsd:fillPrice,simulatedFillMcUsd:fillMc,postTradePriceUsd:execution.postTradePriceUsd,priceImpactPct:impactPct,poolImpactPct:execution.poolImpactPct,effectiveSlippageBps:execution.effectiveSlippageBps,slippageLimitBps,paperFeeUsd:feeUsd,dexFeeUsd:execution.dexFeeUsd,dexFeeBps,networkFeeUsd:execution.networkFeeUsd,baseNetworkFeeSol:execution.baseNetworkFeeSol,priorityFeeSol,executionQuality:quality,executionModelVersion},account:data,evaluation})
     }
 
     const sellPct=finite(body?.sellPct)
@@ -145,17 +147,19 @@ Deno.serve(async(req:Request)=>{
     const {data:position,error:positionError}=await admin.from('paper_positions').select('quantity_tokens,accounting_version').eq('user_id',uid).eq('token_id',tokenRow.id).eq('status','open').maybeSingle()
     if(positionError||!position)return json({error:'no open PAPER position'},422)
     if(position.accounting_version!=='usd_v2')return json({error:'legacy PAPER position cannot be sold in USD mode'},422)
-    const sellQty=finite(position.quantity_tokens)*(sellPct/100),grossUsd=sellQty*displayedPrice,impactRatio=Math.min(grossUsd/oneSideLiquidityUsd,5)
-    const fillPrice=displayedPrice/(1+impactRatio),impactPct=(1-fillPrice/displayedPrice)*100,fillMc=marketCap>0?marketCap*(fillPrice/displayedPrice):0
-    const grossFillUsd=sellQty*fillPrice,feeUsd=grossFillUsd*feeRate,requestFingerprint=`sell|${mint}|${sellPct.toFixed(6)}`
-    const {data,error}=await admin.rpc('execute_paper_sell_v2',{p_user_id:uid,p_idempotency_key:idempotencyKey,p_request_fingerprint:requestFingerprint,p_mint:mint,p_sell_pct:sellPct,p_displayed_price_usd:displayedPrice,p_fill_price_usd:fillPrice,p_displayed_mc_usd:marketCap||null,p_fill_mc_usd:fillMc||null,p_liquidity_usd:liquidity,p_price_impact_pct:impactPct,p_fee_usd:feeUsd,p_sol_price_usd:solPrice,p_quote_timestamp:quoteTimestamp,p_market_data_age_ms:marketDataAgeMs,p_execution_quality:quality,p_execution_model_version:executionModelVersion})
+    const sellQty=finite(position.quantity_tokens)*(sellPct/100),grossReferenceUsd=sellQty*displayedPrice
+    const execution=quotePaperExecution({side:'sell',referencePriceUsd:displayedPrice,marketCapUsd:marketCap,liquidityUsd:liquidity,notionalUsd:grossReferenceUsd,solUsd:solPrice,dexFeeBps,slippageLimitBps,priorityFeeSol})
+    if(execution.rejected)return json({error:'Simulated execution exceeds your slippage limit.',code:execution.rejectionCode,execution},422)
+    const fillPrice=execution.fillPriceUsd,impactPct=execution.priceImpactPct,fillMc=execution.fillMarketCapUsd
+    const grossFillUsd=sellQty*fillPrice,feeUsd=execution.paperFeeUsd,requestFingerprint=`sell|${mint}|${sellPct.toFixed(6)}|${slippageLimitBps}|${priorityFeeSol.toFixed(9)}|${dexFeeBps}`
+    const {data,error}=await admin.rpc('execute_paper_sell_v3',{p_user_id:uid,p_idempotency_key:idempotencyKey,p_request_fingerprint:requestFingerprint,p_mint:mint,p_sell_pct:sellPct,p_displayed_price_usd:displayedPrice,p_fill_price_usd:fillPrice,p_displayed_mc_usd:marketCap||null,p_fill_mc_usd:fillMc||null,p_liquidity_usd:liquidity,p_price_impact_pct:impactPct,p_effective_slippage_bps:execution.effectiveSlippageBps,p_paper_fee_usd:feeUsd,p_dex_fee_usd:execution.dexFeeUsd,p_network_fee_usd:execution.networkFeeUsd,p_priority_fee_sol:priorityFeeSol,p_post_trade_price_usd:execution.postTradePriceUsd,p_slippage_limit_bps:slippageLimitBps,p_sol_price_usd:solPrice,p_quote_timestamp:quoteTimestamp,p_market_data_age_ms:marketDataAgeMs,p_execution_quality:quality,p_execution_model_version:executionModelVersion})
     if(error)throw new Error(error.message)
     const evaluation=activeEvaluation?await markEvaluation(admin,uid):null
-    return json({ok:true,paper:true,side:'sell',underReview:Boolean(risk?.flagged_for_review),dataStatus:'LIVE',market:{referencePriceUsd:displayedPrice,displayedMcUsd:marketCap,liquidityUsd:liquidity,solUsd:solPrice,quoteTimestamp,marketDataAgeMs},fill:{requestedAmountUsd:grossFillUsd,requestedSellPct:sellPct,simulatedFillPriceUsd:fillPrice,simulatedFillMcUsd:fillMc,priceImpactPct:impactPct,paperFeeUsd:feeUsd,feeBps,executionQuality:quality,executionModelVersion},account:data,evaluation})
+    return json({ok:true,paper:true,side:'sell',underReview:Boolean(risk?.flagged_for_review),dataStatus:'LIVE',market:{referencePriceUsd:displayedPrice,displayedMcUsd:marketCap,liquidityUsd:liquidity,solUsd:solPrice,quoteTimestamp,marketDataAgeMs},fill:{requestedAmountUsd:grossFillUsd,requestedSellPct:sellPct,simulatedFillPriceUsd:fillPrice,simulatedFillMcUsd:fillMc,postTradePriceUsd:execution.postTradePriceUsd,priceImpactPct:impactPct,poolImpactPct:execution.poolImpactPct,effectiveSlippageBps:execution.effectiveSlippageBps,slippageLimitBps,paperFeeUsd:feeUsd,dexFeeUsd:execution.dexFeeUsd,dexFeeBps,networkFeeUsd:execution.networkFeeUsd,baseNetworkFeeSol:execution.baseNetworkFeeSol,priorityFeeSol,executionQuality:quality,executionModelVersion},account:data,evaluation})
   }catch(error){
     const message=error instanceof Error?error.message:'unknown error'
     if(admin&&userIdForLog){try{await admin.from('observability_events').insert({event_type:'paper_trade_failure',severity:'error',user_id:userIdForLog,details:{message}})}catch{}}
-    const status=/insufficient PAPER buying power|no open PAPER position|PAPER account not found|legacy PAPER position/.test(message)?422:/market data is stale|evaluation mark unavailable/.test(message)?503:500
+    const status=/insufficient PAPER buying power|no open PAPER position|PAPER account not found|legacy PAPER position|slippage limit exceeded/.test(message)?422:/market data is stale|evaluation mark unavailable/.test(message)?503:500
     return json({error:message},status)
   }
 })
