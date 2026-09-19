@@ -13,7 +13,7 @@ type Meta={symbol?:string;name?:string;priceUsd:number;liquidity:number}
 async function rpc<T>(method:string,params:unknown[]):Promise<T>{
   let lastError:unknown=null
   for(const endpoint of RPCS){
-    const c=new AbortController(),timer=setTimeout(()=>c.abort(),8000)
+    const c=new AbortController(),timer=setTimeout(()=>c.abort(),3500)
     try{
       const r=await fetch(endpoint,{method:'POST',cache:'no-store',signal:c.signal,headers:{'content-type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',id:1,method,params})})
       if(!r.ok)throw new Error('Solana RPC '+r.status)
