@@ -102,6 +102,7 @@ export default function CandleChart({
   const workspaceLoaded=useRef(false)
   const activePoolRef=useRef<string|undefined>(undefined)
   const fittedKeyRef=useRef('')
+  const chartRequestGeneration=useRef(0)
 
   const [tf,setTf]=useState<Timeframe>('1m')
   const [tfOpen,setTfOpen]=useState(false)
@@ -283,25 +284,34 @@ export default function CandleChart({
     const tokenChanged=activePoolRef.current!==poolAddress
     activePoolRef.current=poolAddress
     if(tokenChanged){setCandles([]);fittedKeyRef.current=''}
-    let alive=true
+    let alive=true,inFlight=false
+    const generation=++chartRequestGeneration.current
+    let activeController:AbortController|null=null
     async function load(force=false){
-      if(!force&&document.hidden)return
+      if(inFlight||(!force&&document.hidden))return
+      inFlight=true
+      activeController?.abort()
+      const controller=new AbortController()
+      activeController=controller
       if(alive&&!hasDataRef.current)setLoading(true)
       try{
-        const response=await fetch('/api/market/ohlcv/'+encodeURIComponent(poolAddress!)+'?tf='+tf,{cache:'no-store'})
+        const response=await fetch('/api/market/ohlcv/'+encodeURIComponent(poolAddress!)+'?tf='+tf,{cache:'no-store',signal:controller.signal})
         const json=await response.json()
         if(!response.ok)throw new Error(json.error||'chart unavailable')
-        if(alive&&Array.isArray(json.candles)&&json.candles.length){
+        if(alive&&generation===chartRequestGeneration.current&&Array.isArray(json.candles)&&json.candles.length){
           setCandles(json.candles)
           setError(json.warning||'')
           setAsOf(Number(json.asOf||Date.now()))
           setStatus(json.stale?'STALE':json.warning||json.live===false?'DEGRADED':'LIVE')
         }
       }catch(e){
-        void logClientError('chart',e,{poolAddress:String(poolAddress||''),timeframe:tf})
-        if(alive){setError(e instanceof Error?e.message:'chart unavailable');setStatus('DEGRADED')}
+        if((e as Error)?.name!=='AbortError'){
+          void logClientError('chart',e,{poolAddress:String(poolAddress||''),timeframe:tf})
+          if(alive&&generation===chartRequestGeneration.current){setError(e instanceof Error?e.message:'chart unavailable');setStatus('DEGRADED')}
+        }
       }finally{
-        if(alive)setLoading(false)
+        inFlight=false
+        if(alive&&generation===chartRequestGeneration.current)setLoading(false)
       }
     }
     setHover(null)
@@ -310,7 +320,7 @@ export default function CandleChart({
     const id=window.setInterval(()=>void load(),refreshMs(tf))
     const visible=()=>{if(!document.hidden)void load(true)}
     document.addEventListener('visibilitychange',visible)
-    return()=>{alive=false;clearInterval(id);document.removeEventListener('visibilitychange',visible)}
+    return()=>{alive=false;activeController?.abort();clearInterval(id);document.removeEventListener('visibilitychange',visible)}
   },[poolAddress,tf])
 
   useEffect(()=>{
@@ -562,7 +572,7 @@ export default function CandleChart({
   return <div className={'chart-card lw-chart-card p23-chart axiom-chart '+(expanded?'expanded':'')}>
     <div className="axiom-chart-toolbar">
       <div className="axiom-quick-tfs">
-        {quickTfs.map(value=><button key={value} className={tf===value?'active':''} onClick={()=>chooseTimeframe(value)}>{value}</button>)}
+        {quickTfs.map(value=><button type="button" aria-label={'Chart timeframe '+value} key={value} className={tf===value?'active':''} onClick={()=>chooseTimeframe(value)}>{value}</button>)}
       </div>
 
       <div className="axiom-toolbar-separator"/>

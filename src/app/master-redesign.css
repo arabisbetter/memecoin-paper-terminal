@@ -123,3 +123,6 @@ a,button{outline-offset:2px}a:focus-visible,button:focus-visible,input:focus-vis
     min-height:44px!important;
   }
 }
+
+/* Pulse artwork is decorative; keep fixed feedback controls actionable in Chrome. */
+.pulse-img-terminal,.pulse-img-terminal *{pointer-events:none!important}

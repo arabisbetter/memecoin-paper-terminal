@@ -53,6 +53,7 @@ test('presets save, reload, instant buy, and percentage sell work for a fresh an
 })
 
 test('candle API fills gaps and chart survives repeated timeframe changes',async({page,request})=>{
+  test.setTimeout(120000)
   const token=await liveToken(request)
   for(const [tf,seconds] of [['1m',60],['1s',1]]){
     const response=await request.get('/api/market/ohlcv/'+encodeURIComponent(token.pairAddress)+'?tf='+tf)
@@ -76,7 +77,10 @@ test('candle API fills gaps and chart survives repeated timeframe changes',async
   const quickTimeframes=page.locator('.axiom-quick-tfs')
   await expect(quickTimeframes).toBeVisible()
   for(const timeframe of ['1s','5s','1m','5m']){
-    await quickTimeframes.getByRole('button',{name:timeframe,exact:true}).click()
+    const button=quickTimeframes.getByRole('button',{name:'Chart timeframe '+timeframe,exact:true})
+    await expect(button).toBeVisible()
+    await button.click()
+    await expect(button).toHaveClass(/active/)
     await expect(page.locator('.lw-chart-canvas canvas').first()).toBeVisible({timeout:25000})
     await expect(page.getByText(/chart unavailable/i)).toHaveCount(0)
   }

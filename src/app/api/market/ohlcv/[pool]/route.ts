@@ -63,6 +63,15 @@ function normalizeCandles(rows:Candle[],bucketSeconds:number,maxRows=420){
   return out.slice(-maxRows)
 }
 
+function deriveFromMinuteCache(pool:string,tf:string){
+  const seconds=timeframeSeconds[tf]||0
+  if(seconds<60||seconds%60!==0)return null
+  const minute=cache.get(`${pool}:1m`)
+  if(!minute||!minute.candles.length||Date.now()-minute.at>5*60_000)return null
+  const candles=normalizeCandles(minute.candles,seconds,tf==='1M'?90:420)
+  return candles.length?{candles,at:minute.at}:null
+}
+
 const firstPositive=(...values:unknown[])=>{for(const value of values){const n=Number(value);if(Number.isFinite(n)&&n>0)return n}return 0}
 
 async function fetchTradeCandles(pool:string,bucketSeconds:number,signal:AbortSignal){
@@ -117,6 +126,8 @@ export async function GET(req:NextRequest,ctx:{params:Promise<{pool:string}>}){
   }catch(error){
     console.error('ohlcv_feed_error',{pool,tf,error})
     if(previous)return NextResponse.json({candles:previous.candles,timeframe:tf,source:'geckoterminal',live:false,stale:true,asOf:previous.at,warning:error instanceof Error?error.message:'chart unavailable'})
+    const minuteFallback=deriveFromMinuteCache(pool,tf)
+    if(minuteFallback)return NextResponse.json({candles:minuteFallback.candles,timeframe:tf,source:'paper-1m-cache',live:false,stale:true,fallback:true,asOf:minuteFallback.at,warning:'Live '+tf+' provider refresh is temporarily limited. Showing candles derived from the latest real 1m feed.'},{headers:{'Cache-Control':'public, s-maxage=5, stale-while-revalidate=30'}})
     return NextResponse.json({candles:[],error:error instanceof Error?error.message:'chart unavailable'},{status:502})
   }finally{clearTimeout(timer)}
 }
