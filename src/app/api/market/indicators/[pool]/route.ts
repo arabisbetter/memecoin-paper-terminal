@@ -38,7 +38,7 @@ export async function GET(req:NextRequest,ctx:{params:Promise<{pool:string}>}){
       const internal=new URL('/api/market/ohlcv/'+encodeURIComponent(pool),req.nextUrl.origin)
       internal.searchParams.set('tf',tf)
       const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),7000)
-      const r=await fetch(internal,{cache:'no-store',signal:controller.signal,headers:{Accept:'application/json'}}).finally(()=>clearTimeout(timer))
+      const r=await fetch(internal,{cache:'force-cache',next:{revalidate:10},signal:controller.signal,headers:{Accept:'application/json'}}).finally(()=>clearTimeout(timer))
       if(!r.ok)throw new Error('PAPER OHLCV '+r.status)
       const j=await r.json()
       rows=((j?.candles||[]) as Candle[]).map(x=>({time:Number(x.time),open:Number(x.open),high:Number(x.high),low:Number(x.low),close:Number(x.close),volume:Number(x.volume||0)})).filter(x=>Number.isFinite(x.close)&&x.close>0).sort((a,b)=>a.time-b.time)
@@ -48,7 +48,7 @@ export async function GET(req:NextRequest,ctx:{params:Promise<{pool:string}>}){
       const [unit,aggregate]=tfSpec(tf)
       const url='https://api.geckoterminal.com/api/v2/networks/solana/pools/'+encodeURIComponent(pool)+'/ohlcv/'+unit+'?aggregate='+aggregate+'&limit=250&currency=usd&token=base&include_empty_intervals=false'
       const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),9000)
-      const r=await fetch(url,{cache:'no-store',signal:controller.signal,headers:{Accept:'application/json;version=20230203'}}).finally(()=>clearTimeout(timer))
+      const r=await fetch(url,{cache:'force-cache',next:{revalidate:10},signal:controller.signal,headers:{Accept:'application/json;version=20230203'}}).finally(()=>clearTimeout(timer))
       if(!r.ok)throw new Error('GeckoTerminal '+r.status)
       const j=await r.json()
       const raw=(j?.data?.attributes?.ohlcv_list||[]) as Array<[number,number,number,number,number,number]>
