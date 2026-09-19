@@ -49,6 +49,16 @@ function stage(ageSeconds:number){return ageSeconds<900?'LAUNCH':ageSeconds<2160
 export async function GET(_req:NextRequest,ctx:{params:Promise<{mint:string}>}){
   const {mint}=await ctx.params
   if(!valid.test(mint))return NextResponse.json({error:'Invalid Solana mint'},{status:400})
+  const intelBase=(process.env.PAPER_INTEL_SUPABASE_URL||process.env.NEXT_PUBLIC_SUPABASE_URL||'').replace(/\/$/,'')
+  if(intelBase){
+    try{
+      const edge=await fetch(intelBase+'/functions/v1/token-intelligence-public?mint='+encodeURIComponent(mint),{cache:'no-store',headers:{Accept:'application/json'}})
+      if(edge.ok){
+        const body=await edge.json()
+        return NextResponse.json(body,{headers:{'Cache-Control':'public, s-maxage=20, stale-while-revalidate=60'}})
+      }
+    }catch{}
+  }
   try{
     const pair=await bestPair(mint)
     const [mintRes,largestRes]=await Promise.all([
