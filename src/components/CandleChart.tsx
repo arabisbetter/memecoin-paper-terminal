@@ -10,6 +10,7 @@ import {
   createChart, createSeriesMarkers, type IChartApi, type ISeriesApi, type UTCTimestamp
 } from 'lightweight-charts'
 import { createClient } from '@/lib/supabase/client'
+import { logClientError } from '@/lib/client-telemetry'
 import ChartDrawingOverlay, { type DrawingTool } from '@/components/ChartDrawingOverlay'
 import ServerIndicatorStrip from '@/components/ServerIndicatorStrip'
 
@@ -297,6 +298,7 @@ export default function CandleChart({
           setStatus(json.stale?'STALE':json.warning||json.live===false?'DEGRADED':'LIVE')
         }
       }catch(e){
+        void logClientError('chart',e,{poolAddress:String(poolAddress||''),timeframe:tf})
         if(alive){setError(e instanceof Error?e.message:'chart unavailable');setStatus('DEGRADED')}
       }finally{
         if(alive)setLoading(false)

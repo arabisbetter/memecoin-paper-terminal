@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import RecoveryNudge from "@/components/RecoveryNudge";
+import FeedbackButton from "@/components/FeedbackButton";
 import NetworkStatus from "@/components/NetworkStatus";
 import TerminalPreferences from "@/components/TerminalPreferences";
 import PwaRegistrar from "@/components/PwaRegistrar";
@@ -64,7 +65,7 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en">
-      <body>{children}<PwaRegistrar/><TerminalPreferences/><NetworkStatus/><RecoveryNudge/></body>
+      <body>{children}<PwaRegistrar/><TerminalPreferences/><NetworkStatus/><RecoveryNudge/><FeedbackButton/></body>
     </html>
   );
 }

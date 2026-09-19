@@ -37,18 +37,18 @@ jobs:
       - run: npm run build
         env:
           NEXT_PUBLIC_SUPABASE_URL: https://bpnhybmptjenrjntvmsz.supabase.co
-          NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: placeholder
+          NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: sb_publishable_5FQkar9y4CLyciMdXD_2VQ_kjfGJBY0
 
       - name: Install pinned browser test runner
         run: npm install --no-save --package-lock=false @playwright/test@1.55.0
 
       - name: Install Chromium for E2E
-        run: npx playwright install --with-deps chromium
+        run: npx playwright install --with-deps chromium webkit
 
       - name: Start production build
         run: |
           NEXT_PUBLIC_SUPABASE_URL=https://bpnhybmptjenrjntvmsz.supabase.co \
-          NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=placeholder \
+          NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=sb_publishable_5FQkar9y4CLyciMdXD_2VQ_kjfGJBY0 \
           PAPER_INTEL_SUPABASE_URL=https://aehatnwbwyzpdsdqhkjv.supabase.co \
           npm start -- -p 3000 > /tmp/paper-next.log 2>&1 &
           echo $! > /tmp/paper-next.pid
@@ -64,11 +64,11 @@ jobs:
           cat /tmp/paper-next.log
           exit 1
 
-      - name: Verify PAPER launch homepage
+      - name: Verify PAPER token-table homepage
         run: |
-          grep -q "TRADE PAPER" /tmp/paper-home.html
-          grep -q "EARN REAL" /tmp/paper-home.html
-          grep -q "START TRADING" /tmp/paper-home.html
+          grep -q "Market Cap" /tmp/paper-home.html
+          grep -q "Liquidity" /tmp/paper-home.html
+          grep -q "Action" /tmp/paper-home.html
 
       - name: Verify live Solana market feed and CA lookup
         run: |
@@ -295,7 +295,7 @@ jobs:
 
       - name: Verify public PAPER routes and brand assets
         run: |
-          for route in / /discover /spot /pulse /portfolio /chains /wallets /watchlist /scanner /smart-money /heatmap /compare /workspaces /journal /replay /community /status /rewards /leaderboards /profile /coin /legal /opengraph-image /twitter-image /icon.svg /robots.txt /sitemap.xml /manifest.webmanifest; do
+          for route in / /discover /spot /pulse /api/version /portfolio /chains /wallets /watchlist /scanner /smart-money /heatmap /compare /workspaces /journal /replay /community /status /rewards /leaderboards /profile /coin /legal /opengraph-image /twitter-image /icon.svg /robots.txt /sitemap.xml /manifest.webmanifest; do
             curl -fsS "http://127.0.0.1:3000$route" >/dev/null
           done
 

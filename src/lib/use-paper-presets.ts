@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { ensurePaperUser } from '@/lib/paper-session'
+import { logClientError } from '@/lib/client-telemetry'
 
 export type PaperPresetValues=[number,number,number,number]
 export const DEFAULT_PAPER_PRESETS:PaperPresetValues=[0.1,0.5,1,5]
@@ -35,7 +36,7 @@ export function usePaperPresets(){
         if(!alive)return
         setUserId(user.id)
         const {data,error}=await (supabase as any).from('paper_trade_presets').select('p1,p2,p3,p4').eq('user_id',user.id).maybeSingle()
-        if(error)throw error
+        if(error){void logClientError('presets',error,{stage:'save'});throw error}
         const next=data?clean([data.p1,data.p2,data.p3,data.p4]):DEFAULT_PAPER_PRESETS
         if(!data){
           const {error:insertError}=await (supabase as any).from('paper_trade_presets').insert({user_id:user.id,p1:next[0],p2:next[1],p3:next[2],p4:next[3]})
@@ -43,7 +44,7 @@ export function usePaperPresets(){
         }
         if(alive){setValues(next);localStorage.setItem('paper.quickBuyPresets.v2',JSON.stringify(next))}
       }catch(error){
-        console.error('paper_preset_load_error',error)
+        void logClientError('presets',error,{stage:'load'})
       }finally{if(alive)setReady(true)}
     })()
     return()=>{alive=false}

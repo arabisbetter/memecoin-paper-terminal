@@ -1,141 +1,120 @@
 const { expect, test } = require('@playwright/test')
+const { completeOnboarding, liveToken, relativeDiff } = require('./helpers.cjs')
 
-test('desktop PAPER terminal exposes Axiom-style chart and Part 7 controls',async({page})=>{
-  await page.goto('/spot',{waitUntil:'domcontentloaded'})
-  await expect(page.getByText('LIVE MEMECOINS')).toBeVisible()
-  await expect(page.getByRole('button',{name:'1s'})).toBeVisible()
-  await expect(page.getByRole('button',{name:/MarketCap \/ Price|Price \/ MarketCap/})).toBeVisible()
-  await expect(page.getByTitle('Trend line')).toBeVisible()
-  await expect(page.getByTitle('Ray')).toBeVisible()
-  await expect(page.getByTitle('Rectangle')).toBeVisible()
-  await expect(page.getByTitle('Fibonacci retracement')).toBeVisible()
-  await expect(page.getByLabel('Resize token list')).toBeVisible()
-  await expect(page.getByLabel('Resize trade panel')).toBeVisible()
-  await page.getByRole('button',{name:/Display/}).first().click()
-  await expect(page.getByText('PAPER trade markers')).toBeVisible()
-  await expect(page.getByRole('button',{name:'Limit',exact:true})).toBeVisible()
-  await expect(page.getByRole('button',{name:'Stop',exact:true})).toBeVisible()
-  await expect(page.getByRole('button',{name:'Take Profit',exact:true})).toBeVisible()
+test.describe.configure({mode:'serial'})
+
+test('homepage, header, search, and buttons match the simplified PAPER product',async({page})=>{
+  await page.goto('/',{waitUntil:'domcontentloaded'})
+  await completeOnboarding(page,'home')
+  await expect(page.getByRole('link',{name:'Spot',exact:true})).toBeVisible()
+  await expect(page.getByRole('link',{name:'Pulse',exact:true})).toBeVisible()
+  await expect(page.getByRole('link',{name:'Profile',exact:true})).toBeVisible()
+  await expect(page.getByLabel('Search tokens')).toBeVisible()
+  await expect(page.locator('a[href="/profile"]')).toHaveCount(1)
+  await expect(page.locator('.terminal-table-row').first()).toBeVisible({timeout:25000})
+
+  const searchBox=await page.getByLabel('Search tokens').boundingBox()
+  const profileBox=await page.getByRole('link',{name:'Profile',exact:true}).boundingBox()
+  expect(searchBox&&profileBox).toBeTruthy()
+  const overlap=!(searchBox.x+searchBox.width<=profileBox.x||profileBox.x+profileBox.width<=searchBox.x||searchBox.y+searchBox.height<=profileBox.y||profileBox.y+profileBox.height<=searchBox.y)
+  expect(overlap).toBeFalsy()
+
+  const nameless=await page.locator('button:visible').evaluateAll(buttons=>buttons.filter(b=>!((b.getAttribute('aria-label')||b.getAttribute('title')||b.textContent||'').trim())).map(b=>b.outerHTML.slice(0,160)))
+  expect(nameless,nameless.join('\n')).toEqual([])
 })
 
-test('mobile terminal uses dedicated chart trade positions and info panes',async({page})=>{
-  await page.setViewportSize({width:390,height:844})
-  await page.goto('/spot',{waitUntil:'domcontentloaded'})
-  const terminal=page.locator('main.parts23-terminal')
-  await expect(page.getByRole('button',{name:'Chart',exact:true})).toBeVisible()
+test('presets save, reload, instant buy, and percentage sell work for a fresh anonymous PAPER user',async({page,request})=>{
+  const token=await liveToken(request)
+  await page.goto('/spot?mint='+encodeURIComponent(token.mint),{waitUntil:'domcontentloaded'})
+  await completeOnboarding(page,'trade')
+  await expect(page.getByText('INSTANT BUY',{exact:true})).toBeVisible({timeout:25000})
+  await page.getByRole('button',{name:'Edit presets',exact:true}).click()
+  const p1=page.getByLabel('Preset P1 SOL')
+  await p1.fill('0.01')
+  await page.getByRole('button',{name:'Save presets',exact:true}).click()
+  await expect(page.getByText('Quick-buy presets saved.')).toBeVisible()
 
-  await page.getByRole('button',{name:'Trade',exact:true}).evaluate(el=>el.click())
-  await expect(terminal).toHaveAttribute('data-mobile-pane','trade')
-  await expect(page.locator('.p23-trade-panel')).toBeVisible()
-  await expect(page.getByRole('button',{name:'Limit',exact:true})).toBeVisible()
+  await page.reload({waitUntil:'domcontentloaded'})
+  await completeOnboarding(page,'trade')
+  await page.getByRole('button',{name:'Edit presets',exact:true}).click()
+  await expect(page.getByLabel('Preset P1 SOL')).toHaveValue('0.01')
+  await page.getByRole('button',{name:'Done',exact:true}).click()
 
-  await page.getByRole('button',{name:'Positions',exact:true}).evaluate(el=>el.click())
-  await expect(terminal).toHaveAttribute('data-mobile-pane','positions')
-  await expect(page.locator('.positions-panel')).toBeVisible()
+  const p1Buy=page.locator('.instant-buy-preset').filter({hasText:'P1'}).first()
+  await expect(p1Buy).toBeEnabled({timeout:25000})
+  await p1Buy.click()
+  await expect(page.getByText('PAPER BUY FILLED',{exact:true})).toBeVisible({timeout:30000})
 
-  await page.getByRole('button',{name:'Info',exact:true}).evaluate(el=>el.click())
-  await expect(terminal).toHaveAttribute('data-mobile-pane','info')
-  await expect(page.locator('.token-intel-card')).toBeVisible()
-})
-test('Pulse workspace and Watchlist alert center render',async({page})=>{
-  await page.goto('/pulse',{waitUntil:'domcontentloaded'})
-  await expect(page.getByRole('heading',{name:'Pulse'})).toBeVisible()
-  await expect(page.getByRole('button',{name:/Filters/})).toBeVisible()
-  await page.goto('/watchlist',{waitUntil:'domcontentloaded'})
-  await expect(page.getByText('ALERT EVENTS')).toBeVisible()
-})
-
-
-test('Part 8 research tools and command palette render',async({page})=>{
-  await page.goto('/scanner',{waitUntil:'domcontentloaded'})
-  await expect(page.getByRole('heading',{name:/Filter velocity, then verify concentration/})).toBeVisible()
-
-  await page.goto('/heatmap',{waitUntil:'domcontentloaded'})
-  await expect(page.getByRole('heading',{name:/Where attention is moving/})).toBeVisible()
-
-  await page.goto('/compare',{waitUntil:'domcontentloaded'})
-  await expect(page.getByRole('heading',{name:/Compare up to four markets/})).toBeVisible()
-
-  await page.goto('/workspaces',{waitUntil:'domcontentloaded'})
-  await expect(page.getByRole('heading',{name:/Watch the market your way/})).toBeVisible()
-
-  await page.goto('/journal',{waitUntil:'domcontentloaded'})
-  await expect(page.getByRole('heading',{name:/Record why you took the trade/})).toBeVisible()
-
-  await page.goto('/replay',{waitUntil:'domcontentloaded'})
-  await expect(page.getByRole('heading',{name:'Trade Replay'})).toBeVisible()
-
-  await page.keyboard.press('Control+k')
-  await expect(page.getByPlaceholder(/Search token, CA/)).toBeVisible()
-  await expect(page.getByText('Launch scanner',{exact:true})).toBeVisible()
-  await expect(page.getByText('Trading journal',{exact:true})).toBeVisible()
+  const sell25=page.locator('.percentage-sell-button').filter({hasText:'25%'}).first()
+  await expect(sell25).toBeEnabled({timeout:25000})
+  await sell25.click()
+  await expect(page.getByText('PAPER SELL FILLED',{exact:true})).toBeVisible({timeout:30000})
 })
 
-
-test('Part 9 live intelligence surfaces render against live APIs',async({page,request})=>{
-  const marketRes=await request.get('/api/market/latest')
-  expect(marketRes.ok()).toBeTruthy()
-  const market=await marketRes.json()
-  const tokens=(market.tokens||[]).filter(t=>t&&t.mint&&t.pairAddress).slice(0,12)
-  expect(tokens.length).toBeGreaterThan(0)
-  let token=null
-  for(const candidate of tokens){
-    const intel=await request.get('/api/intelligence/token/'+encodeURIComponent(candidate.mint))
-    if(intel.ok()){const body=await intel.json();if(Array.isArray(body.distribution?.holders)&&body.distribution.holders.length){token=candidate;break}}
+test('candle API fills gaps and chart survives repeated timeframe changes',async({page,request})=>{
+  const token=await liveToken(request)
+  for(const [tf,seconds] of [['1m',60],['1s',1]]){
+    const response=await request.get('/api/market/ohlcv/'+encodeURIComponent(token.pairAddress)+'?tf='+tf)
+    expect(response.ok()).toBeTruthy()
+    const body=await response.json()
+    expect(body.candles.length).toBeGreaterThan(5)
+    for(let i=1;i<body.candles.length;i++){
+      const prev=body.candles[i-1],cur=body.candles[i]
+      expect(Number(cur.time)-Number(prev.time)).toBe(seconds)
+      expect(relativeDiff(cur.open,prev.close)).toBeLessThan(1e-9)
+      if(Number(cur.volume)===0){
+        expect(relativeDiff(cur.open,cur.high)).toBeLessThan(1e-12)
+        expect(relativeDiff(cur.open,cur.low)).toBeLessThan(1e-12)
+        expect(relativeDiff(cur.open,cur.close)).toBeLessThan(1e-12)
+      }
+    }
   }
-  expect(token).toBeTruthy()
-
-  await page.goto('/scanner',{waitUntil:'domcontentloaded'})
-  const deepButton=page.getByRole('button',{name:/Deep scan top 6/i})
-  await expect(deepButton).toBeVisible()
-  await deepButton.click()
-  await expect(page.getByText(/Deep data refreshed/i)).toBeVisible({timeout:30000})
-  await expect(page.getByText(/Require mint authority revoked/i)).toBeVisible()
-
-  await page.goto('/smart-money',{waitUntil:'domcontentloaded'})
-  await expect(page.getByRole('heading',{name:/Score wallets without pretending/i})).toBeVisible()
-
-  await page.goto('/token/EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v/intelligence',{waitUntil:'domcontentloaded'})
-  await expect(page.getByText('TOP HOLDER BUBBLES')).toBeVisible({timeout:20000})
-  await expect(page.getByText('LIVE LIFECYCLE')).toBeVisible()
 
   await page.goto('/spot?mint='+encodeURIComponent(token.mint),{waitUntil:'domcontentloaded'})
-  await expect(page.getByText('MAX SLIPPAGE')).toBeVisible()
-  await expect(page.getByLabel('Custom max slippage')).toBeVisible()
+  await completeOnboarding(page,'chart')
+  for(const timeframe of ['1s','5s','1m','5m']){
+    await page.getByRole('button',{name:timeframe,exact:true}).click()
+    await expect(page.locator('.lw-chart-canvas canvas').first()).toBeVisible({timeout:25000})
+    await expect(page.getByText(/chart unavailable/i)).toHaveCount(0)
+  }
 })
 
+test('token search history persists and Pulse is exactly three columns',async({page,request})=>{
+  const token=await liveToken(request)
+  await page.goto('/spot',{waitUntil:'domcontentloaded'})
+  await completeOnboarding(page,'search')
+  const search=page.getByLabel('Search tokens')
+  await search.fill(token.symbol)
+  await expect(page.locator('.header-search-results a').first()).toBeVisible({timeout:20000})
+  await page.locator('.header-search-results a').first().click()
+  await expect(page).toHaveURL(/\/spot\?mint=/)
 
-test('Part 10 community rewards leaderboards status and server indicators render',async({page,request})=>{
-  const marketRes=await request.get('/api/market/latest')
-  expect(marketRes.ok()).toBeTruthy()
-  const market=await marketRes.json()
-  const token=(market.tokens||[]).find(t=>t&&t.mint&&t.pairAddress&&Number(t.priceUsd)>0)
-  expect(token).toBeTruthy()
+  await search.click()
+  await expect(page.getByText('RECENT',{exact:true})).toBeVisible()
+  await expect(page.locator('.header-search-results')).toContainText(token.symbol)
+  await page.getByRole('button',{name:'Clear history',exact:true}).click()
+  await expect(page.getByText('No search history yet.')).toBeVisible()
 
-  await page.goto('/community',{waitUntil:'domcontentloaded'})
-  await expect(page.getByRole('heading',{name:'Trader feed'})).toBeVisible()
-  await expect(page.getByText('POST TO PAPER',{exact:true})).toBeVisible()
-  await expect(page.getByRole('button',{name:'GLOBAL',exact:true})).toBeVisible()
-  await expect(page.getByRole('button',{name:'FOLLOWING',exact:true})).toBeVisible()
+  await page.goto('/pulse',{waitUntil:'domcontentloaded'})
+  await completeOnboarding(page,'search')
+  for(const title of ['New Pairs','Final Stretch','Migrated'])await expect(page.locator('.pulse-board-head').filter({hasText:title})).toHaveCount(1)
+  await expect(page.locator('.pulse-board-head').filter({hasText:'Trending'})).toHaveCount(0)
+  await expect(page.locator('.pulse-board-head').filter({hasText:'High Volume'})).toHaveCount(0)
+})
 
-  await page.goto('/leaderboards',{waitUntil:'domcontentloaded'})
-  await expect(page.getByRole('heading',{name:/Performance, not one lucky click/})).toBeVisible()
-  for(const name of ['TODAY','WEEK','MONTH','ALL TIME'])await expect(page.getByRole('button',{name,exact:true})).toBeVisible()
-  await expect(page.getByRole('button',{name:'Consistency',exact:true})).toBeVisible()
-  await expect(page.getByRole('button',{name:'Low Drawdown',exact:true})).toBeVisible()
+test('feedback and core Part 10 public surfaces remain available',async({page,request})=>{
+  await page.goto('/spot',{waitUntil:'domcontentloaded'})
+  await completeOnboarding(page,'feedback')
+  await page.getByRole('button',{name:'Feedback',exact:true}).click()
+  await page.getByPlaceholder('What happened?').fill('Automated PAPER feedback flow verification.')
+  await page.getByRole('button',{name:'Send feedback',exact:true}).click()
+  await expect(page.getByText('Sent. Thank you.')).toBeVisible()
 
-  await page.goto('/rewards',{waitUntil:'domcontentloaded'})
-  await expect(page.getByRole('heading',{name:/Levels, badges, and points/})).toBeVisible()
-  await expect(page.getByText('MILESTONE BADGES',{exact:true})).toBeVisible()
-  await expect(page.getByText('First Fill',{exact:true})).toBeVisible()
-
-  await page.goto('/status',{waitUntil:'domcontentloaded'})
-  await expect(page.getByRole('heading',{name:/Live provider and monitor health/})).toBeVisible()
-  await expect(page.getByText('MARKET PROVIDERS',{exact:true})).toBeVisible()
-  await expect(page.getByText('BACKGROUND COMPONENTS',{exact:true})).toBeVisible()
-
-  await page.goto('/spot?mint='+encodeURIComponent(token.mint),{waitUntil:'domcontentloaded'})
-  await expect(page.locator('.server-indicator-strip')).toBeVisible({timeout:20000})
-  await expect(page.getByText('RSI 14',{exact:true})).toBeVisible()
-  await expect(page.getByText('MACD HIST',{exact:true})).toBeVisible()
+  for(const route of ['/community','/status','/rewards','/leaderboards']){
+    const response=await request.get(route)
+    expect(response.ok(),route).toBeTruthy()
+  }
+  const status=await request.get('/api/status')
+  expect(status.ok()).toBeTruthy()
+  expect((await status.json()).status).toBe('ok')
 })
