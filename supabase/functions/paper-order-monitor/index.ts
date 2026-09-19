@@ -126,7 +126,7 @@ Deno.serve(async(req:Request)=>{
         const feeRate=PAPER_FEE_BPS/10_000
         const quoteTimestamp=new Date().toISOString()
         const executionModelVersion='v4_conditional_constant_product'
-        const executionQuality='live-trigger-estimate'
+        const executionQuality='estimated'
         let result:any=null
 
         if(raw.side==='buy'){

@@ -46,6 +46,16 @@ async function rpc(endpoint:string,method:string,params:unknown[]){
   if((body as any)?.error)throw new Error((body as any).error?.message||`${method} failed`)
   return{result:(body as any)?.result,latencyMs}
 }
+async function rpcFallback(endpoints:{url:string;name:string}[],method:string,params:unknown[]){
+  let last:unknown=null
+  for(const endpoint of endpoints){
+    try{
+      const value=await rpc(endpoint.url,method,params)
+      return{...value,provider:endpoint.name}
+    }catch(error){last=error}
+  }
+  throw last instanceof Error?last:new Error(`${method} failed across RPC providers`)
+}
 async function health(admin:any,provider:string,ok:boolean,latencyMs:number|null,error?:string,metadata:Record<string,unknown>={}){
   const {data:cur}=await admin.from('paper_market_provider_health').select('consecutive_successes,consecutive_failures').eq('provider',provider).maybeSingle()
   const skipped=metadata?.skipped===true
@@ -109,11 +119,15 @@ Deno.serve(async(req:Request)=>{
     }
 
     const heliusKey=Deno.env.get('HELIUS_API_KEY')
-    if(!heliusKey)await health(admin,'helius',false,null,'HELIUS_API_KEY not configured',{skipped:true})
-    const endpoint=heliusKey
-      ?`https://mainnet.helius-rpc.com/?api-key=${encodeURIComponent(heliusKey)}`
-      :'https://api.mainnet-beta.solana.com'
-    const chainProvider=heliusKey?'helius':'solana_public_rpc'
+    const heliusEndpoint=heliusKey?`https://mainnet.helius-rpc.com/?api-key=${encodeURIComponent(heliusKey)}`:null
+    if(!heliusKey)await health(admin,'helius',false,null,'Optional in free mode; no HELIUS_API_KEY configured',{skipped:true,optional:true,mode:'free'})
+    const rpcEndpoints=[
+      ...(heliusEndpoint?[{url:heliusEndpoint,name:'helius'}]:[]),
+      {url:'https://solana-rpc.publicnode.com',name:'publicnode'},
+      {url:'https://rpc.ankr.com/solana',name:'ankr'},
+      {url:'https://docs-demo.solana-mainnet.quiknode.pro/',name:'quicknode-demo'},
+      {url:'https://api.mainnet-beta.solana.com',name:'solana-official'},
+    ]
     let chainLatency=0
     let mintInfo:any=null,largest:any[]=[]
     const ownerByAccount=new Map<string,string>()
@@ -121,16 +135,17 @@ Deno.serve(async(req:Request)=>{
     const devWallets=new Set<string>()
 
     try{
-      const [mintRes,largestRes]=await Promise.all([
-        rpc(endpoint,'getAccountInfo',[mint,{encoding:'jsonParsed',commitment:'confirmed'}]),
-        rpc(endpoint,'getTokenLargestAccounts',[mint,{commitment:'confirmed'}])
-      ])
+      const mintRes=await rpcFallback(rpcEndpoints,'getAccountInfo',[mint,{encoding:'jsonParsed',commitment:'confirmed'}])
+      const preferred=[...rpcEndpoints.filter(x=>x.name===mintRes.provider),...rpcEndpoints.filter(x=>x.name!==mintRes.provider)]
+      const largestRes=await rpcFallback(preferred,'getTokenLargestAccounts',[mint,{commitment:'confirmed'}])
       chainLatency=Math.max(mintRes.latencyMs,largestRes.latencyMs)
       mintInfo=mintRes.result?.value?.data?.parsed?.info||null
       largest=Array.isArray(largestRes.result?.value)?largestRes.result.value.slice(0,20):[]
       const tokenAccounts=largest.map((x:any)=>String(x.address||'')).filter(Boolean)
+      let ownerProvider=largestRes.provider
       if(tokenAccounts.length){
-        const ownersRes=await rpc(endpoint,'getMultipleAccounts',[tokenAccounts,{encoding:'jsonParsed',commitment:'confirmed'}])
+        const ownersRes=await rpcFallback(preferred,'getMultipleAccounts',[tokenAccounts,{encoding:'jsonParsed',commitment:'confirmed'}])
+        ownerProvider=ownersRes.provider
         chainLatency=Math.max(chainLatency,ownersRes.latencyMs)
         ;(ownersRes.result?.value||[]).forEach((row:any,i:number)=>{
           const owner=row?.data?.parsed?.info?.owner
@@ -138,15 +153,22 @@ Deno.serve(async(req:Request)=>{
         })
       }
       if(mintInfo?.mintAuthority)devWallets.add(String(mintInfo.mintAuthority))
-      sources.push(chainProvider)
-      await health(admin,chainProvider,true,chainLatency)
+      const used=[mintRes.provider,largestRes.provider,ownerProvider]
+      const usedHelius=used.includes('helius')
+      const usedFree=used.some(x=>x!=='helius')
+      if(usedHelius){sources.push('helius');await health(admin,'helius',true,chainLatency)}
+      if(usedFree||!heliusKey){
+        sources.push('solana_public_rpc')
+        await health(admin,'solana_public_rpc',true,chainLatency,undefined,{endpoints:[...new Set(used.filter(x=>x!=='helius'))],mode:'free'})
+      }
     }catch(e){
-      await health(admin,chainProvider,false,chainLatency||null,e instanceof Error?e.message:String(e))
+      await health(admin,'solana_public_rpc',false,chainLatency||null,e instanceof Error?e.message:String(e),{mode:'free'})
+      if(heliusKey)await health(admin,'helius',false,chainLatency||null,e instanceof Error?e.message:String(e))
     }
 
     if(heliusKey){
       try{
-        const assetRes=await rpc(endpoint,'getAsset',[{id:mint}])
+        const assetRes=await rpc(heliusEndpoint!,'getAsset',[{id:mint}])
         asset=assetRes.result
         chainLatency=Math.max(chainLatency,assetRes.latencyMs)
         for(const a of asset?.authorities||[])if(a?.address)devWallets.add(String(a.address))
@@ -157,7 +179,7 @@ Deno.serve(async(req:Request)=>{
         const owners=new Set<string>()
         let exact=false,totalAccounts=0
         for(let page=1;page<=10;page++){
-          const pageRes=await rpc(endpoint,'getTokenAccounts',[{mint,limit:1000,page}])
+          const pageRes=await rpc(heliusEndpoint!,'getTokenAccounts',[{mint,limit:1000,page}])
           const rows=(pageRes.result?.token_accounts||pageRes.result?.tokenAccounts||[]) as HolderRow[]
           totalAccounts+=rows.length
           for(const row of rows)if(row.owner)owners.add(String(row.owner))
@@ -236,7 +258,7 @@ Deno.serve(async(req:Request)=>{
       (devPct!=null&&devPct>finite(policy?.max_dev_holder_pct,15))
 
     const riskLevel=riskScore>=80?'CRITICAL':riskScore>=60?'HIGH':riskScore>=30?'MEDIUM':'LOW'
-    const dataStatus=mintInfo&&largest.length?(heliusKey?'LIVE':'DEGRADED'):'DEGRADED'
+    const dataStatus=mintInfo&&largest.length?'LIVE':'DEGRADED'
     const snapshot={
       mint_address:mint,token_symbol:String(pair?.baseToken?.symbol||'')||null,
       top10_holder_pct:top10,top20_holder_pct:top20,dev_holder_pct:devPct,

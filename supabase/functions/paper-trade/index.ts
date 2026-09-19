@@ -125,7 +125,7 @@ Deno.serve(async(req:Request)=>{
     const marketMovePct=Math.abs(executionReferencePrice/displayedPrice-1)*100
     if(marketMovePct>maxSlippagePct)return json({error:'PAPER order failed: live market moved beyond your max slippage during simulated execution latency.',code:'SLIPPAGE_EXCEEDED',marketMovePct,maxSlippagePct,simulatedLatencyMs},422)
     const feeBps=PAPER_FEE_BPS,feeRate=feeBps/10_000
-    const executionModelVersion='v4_constant_product_live_requote',quality='live-requoted-estimate'
+    const executionModelVersion='v4_constant_product_live_requote',quality='estimated'
 
     if(side==='buy'){
       const amountSol=finite(body?.amountSol)
