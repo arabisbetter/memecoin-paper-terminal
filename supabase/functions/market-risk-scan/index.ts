@@ -13,6 +13,7 @@ type DexPair={
   txns?:{m5?:{buys?:number;sells?:number}}
 }
 type HolderRow={owner?:string;amount?:string;balance?:string}
+type OhlcvResponse={data?:{attributes?:{ohlcv_list?:Array<[number,number,number,number,number,number]>}}}
 
 const finite=(v:unknown,fallback=0)=>{const n=Number(v);return Number.isFinite(n)?n:fallback}
 const clamp=(n:number)=>Math.max(0,Math.min(100,Math.round(n)))
@@ -84,6 +85,17 @@ function pctRaw(raw:bigint,total:bigint){
   if(total<=0n)return 0
   return Number(raw*1000000n/total)/10000
 }
+async function lifecycleHistory(pairAddress:string){
+  if(!pairAddress)return null
+  const url=new URL('https://api.geckoterminal.com/api/v2/networks/solana/pools/'+encodeURIComponent(pairAddress)+'/ohlcv/day')
+  url.searchParams.set('aggregate','1');url.searchParams.set('limit','1000');url.searchParams.set('currency','usd');url.searchParams.set('token','base');url.searchParams.set('include_empty_intervals','false')
+  const {body}=await fetchJson(url.toString(),{headers:{Accept:'application/json;version=20230203'}},8000)
+  const rows=((body as OhlcvResponse)?.data?.attributes?.ohlcv_list||[]).filter(r=>r.length>=6&&r.every(v=>Number.isFinite(Number(v))))
+  if(!rows.length)return null
+  let ath=0,athTime=0
+  for(const row of rows){const high=finite(row[2]);if(high>ath){ath=high;athTime=finite(row[0])}}
+  return{athPriceUsd:ath,athAt:athTime?new Date(athTime*1000).toISOString():null,candleCount:rows.length,oldestAt:new Date(Math.min(...rows.map(r=>finite(r[0])))*1000).toISOString()}
+}
 
 Deno.serve(async(req:Request)=>{
   if(req.method==='OPTIONS')return new Response('ok',{headers:{'Access-Control-Allow-Origin':'*','Access-Control-Allow-Headers':'authorization, x-client-info, apikey, content-type, x-paper-internal-token'}})
@@ -100,8 +112,10 @@ Deno.serve(async(req:Request)=>{
 
     const sources:string[]=[]
     let pair:DexPair|undefined,dexLatency=0
+    let historyPromise:Promise<any>=Promise.resolve(null)
     try{
       const dex=await bestDexPair(mint);pair=dex.pair;dexLatency=dex.latencyMs;sources.push('dexscreener')
+      historyPromise=lifecycleHistory(String(pair?.pairAddress||'')).catch(()=>null)
       await health(admin,'dexscreener',true,dexLatency)
     }catch(e){
       await health(admin,'dexscreener',false,null,e instanceof Error?e.message:String(e))
@@ -203,6 +217,10 @@ Deno.serve(async(req:Request)=>{
       if(owner&&devWallets.has(owner))devRaw+=amounts[i]||0n
     }
     const devPct=supplyRaw>0n&&devWallets.size?pctRaw(devRaw,supplyRaw):null
+    const topHolders=largest.slice(0,20).map((x:any,i:number)=>{
+      const account=String(x?.address||''),owner=ownerByAccount.get(account)||null
+      return{rank:i+1,tokenAccount:account,owner,pct:supplyRaw>0n?pctRaw(amounts[i]||0n,supplyRaw):null,amount:finite(x?.uiAmountString??x?.uiAmount),isDev:Boolean(owner&&devWallets.has(owner))}
+    })
 
     const liquidity=finite(pair?.liquidity?.usd)
     const ageSeconds=pair?.pairCreatedAt?Math.max(0,Math.round((Date.now()-Number(pair.pairCreatedAt))/1000)):null
@@ -236,6 +254,8 @@ Deno.serve(async(req:Request)=>{
       (devPct!=null&&devPct>finite(policy?.max_dev_holder_pct,15))
 
     const riskLevel=riskScore>=80?'CRITICAL':riskScore>=60?'HIGH':riskScore>=30?'MEDIUM':'LOW'
+    const history=await historyPromise
+    if(history)sources.push('geckoterminal_ohlcv')
     const dataStatus=mintInfo&&largest.length?(heliusKey?'LIVE':'DEGRADED'):'DEGRADED'
     const snapshot={
       mint_address:mint,token_symbol:String(pair?.baseToken?.symbol||'')||null,
@@ -253,6 +273,7 @@ Deno.serve(async(req:Request)=>{
         dev_wallet_candidates:[...devWallets].slice(0,10),
         dev_holding_scope:devWallets.size?(holderLowerBound?'computed from observed accounts/largest holders where available':'observed holder data'):'creator/authority unavailable',
         holder_count_note:holderCount==null?'unavailable':holderLowerBound?'lower bound; scan capped at 10,000 token accounts':'exact within scanned token accounts',
+        top_holders:topHolders,
         dex_id:pair?.dexId||null,pair_address:pair?.pairAddress||null,
         price_usd:finite(pair?.priceUsd),market_cap_usd:finite(pair?.marketCap??pair?.fdv),
         five_minute_transactions:m5Tx
@@ -260,6 +281,42 @@ Deno.serve(async(req:Request)=>{
     }
     const {error:saveError}=await admin.from('paper_token_risk_snapshots').upsert(snapshot,{onConflict:'mint_address'})
     if(saveError)throw new Error(saveError.message)
+
+    const currentPrice=finite(pair?.priceUsd),currentMc=finite(pair?.marketCap??pair?.fdv),currentDex=String(pair?.dexId||'')||null
+    const {data:previousLife}=await admin.from('paper_token_lifecycle_snapshots')
+      .select('current_dex_id,previous_dex_id,migration_count,last_migration_at,peak_price_usd,peak_market_cap_usd,peak_liquidity_usd,ath_at,first_seen_at')
+      .eq('mint_address',mint).maybeSingle()
+    const dexChanged=Boolean(previousLife?.current_dex_id&&currentDex&&previousLife.current_dex_id!==currentDex)
+    const historicalAth=finite(history?.athPriceUsd)
+    const previousPeak=finite(previousLife?.peak_price_usd)
+    const peakPrice=Math.max(currentPrice,historicalAth,previousPeak)
+    const peakMc=currentPrice>0&&currentMc>0?Math.max(finite(previousLife?.peak_market_cap_usd),currentMc,peakPrice/currentPrice*currentMc):Math.max(finite(previousLife?.peak_market_cap_usd),currentMc)
+    const peakLiquidity=Math.max(finite(previousLife?.peak_liquidity_usd),liquidity)
+    const athAt=(historicalAth>=previousPeak&&history?.athAt)?history.athAt:(previousLife?.ath_at||new Date().toISOString())
+    const lifeRow={
+      mint_address:mint,token_symbol:String(pair?.baseToken?.symbol||'')||null,pair_address:pair?.pairAddress||null,
+      pair_created_at:pair?.pairCreatedAt?new Date(Number(pair.pairCreatedAt)).toISOString():null,
+      first_seen_at:previousLife?.first_seen_at||new Date().toISOString(),current_dex_id:currentDex,
+      previous_dex_id:dexChanged?previousLife?.current_dex_id:(previousLife?.previous_dex_id||null),
+      migration_count:Number(previousLife?.migration_count||0)+(dexChanged?1:0),
+      last_migration_at:dexChanged?new Date().toISOString():(previousLife?.last_migration_at||null),
+      current_price_usd:currentPrice,current_market_cap_usd:currentMc,current_liquidity_usd:liquidity,
+      peak_price_usd:peakPrice,peak_market_cap_usd:peakMc,peak_liquidity_usd:peakLiquidity,ath_at:athAt,
+      historical_candle_count:Number(history?.candleCount||0),holder_count:holderCount,top10_holder_pct:top10,top_holders:topHolders,
+      sources:[...new Set(sources)],details:{historical_oldest_at:history?.oldestAt||null,history_scope:history?'GeckoTerminal daily OHLCV returned by the live provider':'historical OHLCV unavailable'},
+      observed_at:new Date().toISOString(),updated_at:new Date().toISOString()
+    }
+    const {error:lifeError}=await admin.from('paper_token_lifecycle_snapshots').upsert(lifeRow,{onConflict:'mint_address'})
+    if(lifeError)throw new Error(lifeError.message)
+    const lifeEvents:any[]=[]
+    if(!previousLife){
+      lifeEvents.push({mint_address:mint,event_type:'first_seen',event_at:lifeRow.first_seen_at,dex_to:currentDex,details:{source:'paper_live_scan'}})
+      if(lifeRow.pair_created_at)lifeEvents.push({mint_address:mint,event_type:'pair_created',event_at:lifeRow.pair_created_at,dex_to:currentDex,details:{source:'dexscreener_pair_created_at'}})
+    }
+    if(history?.athAt&&historicalAth>previousPeak)lifeEvents.push({mint_address:mint,event_type:'ath',event_at:history.athAt,value_usd:historicalAth,details:{source:'geckoterminal_ohlcv'}})
+    if(dexChanged)lifeEvents.push({mint_address:mint,event_type:'dex_change',event_at:new Date().toISOString(),dex_from:previousLife?.current_dex_id,dex_to:currentDex,details:{source:'paper_observed_dex_change'}})
+    for(const event of lifeEvents){const {error:eventError}=await admin.from('paper_token_lifecycle_events').insert(event);if(eventError&&String((eventError as any).code||'')!=='23505')throw new Error(eventError.message)}
+
     await admin.from('paper_market_marks').upsert({
       mint_address:mint,price_usd:finite(pair?.priceUsd),liquidity_usd:liquidity,
       market_cap_usd:finite(pair?.marketCap??pair?.fdv),source:'dexscreener',
@@ -275,6 +332,8 @@ Deno.serve(async(req:Request)=>{
         holderCountIsLowerBound:holderLowerBound,devSellDetected,
         bundledWalletScore:bundledScore,sniperScore,suspiciousClusterScore:clusterScore,
         tokenAgeSeconds:ageSeconds},
+      holders:topHolders,
+      lifecycle:{pairCreatedAt:lifeRow.pair_created_at,firstSeenAt:lifeRow.first_seen_at,currentDexId:lifeRow.current_dex_id,previousDexId:lifeRow.previous_dex_id,migrationCount:lifeRow.migration_count,lastMigrationAt:lifeRow.last_migration_at,peakPriceUsd:lifeRow.peak_price_usd,peakMarketCapUsd:lifeRow.peak_market_cap_usd,peakLiquidityUsd:lifeRow.peak_liquidity_usd,athAt:lifeRow.ath_at,historicalCandleCount:lifeRow.historical_candle_count},
       policy:{minLiquidityUsd:finite(policy?.min_liquidity_usd,10000),maxTop10HolderPct:finite(policy?.max_top10_holder_pct,65),
         maxDevHolderPct:finite(policy?.max_dev_holder_pct,15),blockFreezeAuthority:Boolean(policy?.block_freeze_authority),
         blockMintAuthority:Boolean(policy?.block_mint_authority),maxRiskScore:finite(policy?.max_risk_score,80)},
