@@ -27,7 +27,7 @@ async function bestPair(mint:string){
   if(!validRows.length)throw new Error('No active Solana market found')
   return validRows[0]
 }
-function pct(raw:bigint,total:bigint){return total>0n?Number(raw*1000000n/total)/10000:0}
+function pct(raw:bigint,total:bigint){return total>BigInt(0)?Number(raw*BigInt(1000000)/total)/10000:0}
 function stage(ageSeconds:number){return ageSeconds<900?'LAUNCH':ageSeconds<21600?'EARLY':ageSeconds<86400?'DAY ONE':ageSeconds<604800?'FIRST WEEK':'ESTABLISHED'}
 
 export async function GET(_req:NextRequest,ctx:{params:Promise<{mint:string}>}){
@@ -45,7 +45,7 @@ export async function GET(_req:NextRequest,ctx:{params:Promise<{mint:string}>}){
     const ownerRows=accounts.length?await rpc<{value:any[]}>('getMultipleAccounts',[accounts,{encoding:'jsonParsed',commitment:'confirmed'}]):{value:[]}
     const supplyRaw=BigInt(String(mintInfo?.supply||'0'))
     const holders=largest.map((row,i)=>{
-      let raw=0n;try{raw=BigInt(String(row.amount||'0'))}catch{}
+      let raw=BigInt(0);try{raw=BigInt(String(row.amount||'0'))}catch{}
       const owner=String(ownerRows.value?.[i]?.data?.parsed?.info?.owner||'')
       return{rank:i+1,tokenAccount:row.address,owner:owner||null,amountUi:Number(row.uiAmount??row.uiAmountString??0),pct:pct(raw,supplyRaw)}
     })
