@@ -30,6 +30,7 @@ import "./terminal-v2.css";
 import "./axiom-chart.css";
 import "./part7.css";
 import "./part8.css";
+import "./part9.css";
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://memecoin-paper-terminal.vercel.app"),
