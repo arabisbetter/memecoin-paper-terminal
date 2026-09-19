@@ -26,15 +26,14 @@ export async function GET(req:NextRequest){
       }catch{}
       if(walletVolume.size>=12)break
     }
-    const candidates=[...walletVolume.entries()].sort((a,b)=>b[1]-a[1]).slice(0,6)
-    const scored:(WalletScore&{observedVolumeUsd:number})[]=[]
-    for(const [address,observedVolumeUsd] of candidates){
+    const candidates=[...walletVolume.entries()].sort((a,b)=>b[1]-a[1]).slice(0,4)
+    const scored=(await Promise.all(candidates.map(async([address,observedVolumeUsd])=>{
       try{
         const r=await fetch(origin+'/api/intelligence/wallet/'+encodeURIComponent(address),{cache:'no-store'})
         const j=await r.json() as WalletScore
-        if(r.ok&&j.live)scored.push({...j,address,observedVolumeUsd})
-      }catch{}
-    }
+        return r.ok&&j.live?({...j,address,observedVolumeUsd} as WalletScore&{observedVolumeUsd:number}):null
+      }catch{return null}
+    }))).filter((row):row is WalletScore&{observedVolumeUsd:number}=>Boolean(row))
     scored.sort((a,b)=>Number(b.score?.value||0)-Number(a.score?.value||0))
     return NextResponse.json({wallets:scored,live:true,asOf:Date.now(),marketSource:market.source||'unknown',sampledPools:tokens.length,source:['geckoterminal-trades','solana-mainnet-rpc','dexscreener'],note:'Ranking is a live activity/portfolio-quality score, not a profitability claim. Exact realized P&L is intentionally not inferred.'},{headers:{'Cache-Control':'public, s-maxage=30, stale-while-revalidate=90'}})
   }catch(error){
