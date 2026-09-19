@@ -1,9 +1,9 @@
 import { createClient } from 'npm:@supabase/supabase-js@2.116.0'
+import { quotePaperExecution, EXECUTION_MODEL_VERSION } from '../_shared/execution-model.mjs'
 
 type Pair={chainId?:string;dexId?:string;pairAddress?:string;baseToken?:{address?:string;name?:string;symbol?:string};priceUsd?:string;marketCap?:number;fdv?:number;liquidity?:{usd?:number};info?:{imageUrl?:string}}
-type Order={id:string;user_id:string;idempotency_key:string;token_address:string;token_symbol:string|null;side:'buy'|'sell';order_type:'limit'|'stop_loss'|'take_profit';trigger_price_usd:number;amount_sol:number|null;sell_pct:number|null;status:string;expires_at:string|null;created_at:string}
+type Order={id:string;user_id:string;idempotency_key:string;token_address:string;token_symbol:string|null;side:'buy'|'sell';order_type:'limit'|'stop_loss'|'take_profit';trigger_price_usd:number;amount_sol:number|null;sell_pct:number|null;status:string;expires_at:string|null;created_at:string;metadata?:Record<string,unknown>|null}
 const finite=(v:unknown,fallback=0)=>{const n=Number(v);return Number.isFinite(n)?n:fallback}
-const PAPER_FEE_BPS=100
 const reply=(body:unknown,status=200)=>new Response(JSON.stringify(body),{status,headers:{'Content-Type':'application/json'}})
 
 function envKeys(){
@@ -86,7 +86,7 @@ Deno.serve(async(req:Request)=>{
     stats.expired=(expired||[]).length
 
     const {data:orders,error:orderError}=await admin.from('paper_conditional_orders')
-      .select('id,user_id,idempotency_key,token_address,token_symbol,side,order_type,trigger_price_usd,amount_sol,sell_pct,status,expires_at,created_at')
+      .select('id,user_id,idempotency_key,token_address,token_symbol,side,order_type,trigger_price_usd,amount_sol,sell_pct,status,expires_at,created_at,metadata')
       .eq('status','pending').order('created_at',{ascending:true}).limit(100)
     if(orderError)throw new Error(orderError.message)
 
@@ -122,44 +122,28 @@ Deno.serve(async(req:Request)=>{
         if(!claimed)continue
         stats.triggered++
 
-        const oneSideLiquidityUsd=Math.max(liquidity/2,1)
-        const feeRate=PAPER_FEE_BPS/10_000
         const quoteTimestamp=new Date().toISOString()
-        const executionModelVersion='v3_conditional_liquidity_approximation'
-        const executionQuality='estimated'
+        const executionModelVersion=EXECUTION_MODEL_VERSION
+        const executionQuality='modeled'
+        const slippageLimitBps=Math.max(10,Math.min(5000,finite(raw.metadata?.slippage_bps,1000)))
+        const priorityFeeSol=Math.max(0,Math.min(.1,finite(raw.metadata?.priority_fee_sol,0)))
+        const dexFeeBps=Math.max(0,Math.min(500,finite(raw.metadata?.dex_fee_bps,30)))
         let result:any=null
 
         if(raw.side==='buy'){
           if(!currentSolUsd)currentSolUsd=await solUsd()
           const amountSol=finite(raw.amount_sol),notionalUsd=amountSol*currentSolUsd
-          const impactRatio=Math.min(notionalUsd/oneSideLiquidityUsd,5)
-          const fillPrice=displayedPrice*(1+impactRatio)
-          const fillMc=marketCap>0?marketCap*(fillPrice/displayedPrice):0
-          const feeUsd=notionalUsd*feeRate
-          const {data,error}=await admin.rpc('execute_paper_buy_v2',{
-            p_user_id:raw.user_id,
-            p_idempotency_key:'conditional:'+raw.id,
-            p_request_fingerprint:'conditional-buy|'+raw.id,
-            p_mint:raw.token_address,
-            p_ticker:raw.token_symbol||pair.baseToken?.symbol||null,
-            p_name:pair.baseToken?.name||null,
-            p_image_url:pair.info?.imageUrl||null,
-            p_pair_address:pair.pairAddress||null,
-            p_dex_id:pair.dexId||null,
-            p_amount_sol:amountSol,
-            p_notional_usd:notionalUsd,
-            p_displayed_price_usd:displayedPrice,
-            p_fill_price_usd:fillPrice,
-            p_displayed_mc_usd:marketCap||null,
-            p_fill_mc_usd:fillMc||null,
-            p_liquidity_usd:liquidity,
-            p_price_impact_pct:impactRatio*100,
-            p_fee_usd:feeUsd,
-            p_sol_price_usd:currentSolUsd,
-            p_quote_timestamp:quoteTimestamp,
-            p_market_data_age_ms:0,
-            p_execution_quality:executionQuality,
-            p_execution_model_version:executionModelVersion,
+          const execution=quotePaperExecution({side:'buy',referencePriceUsd:displayedPrice,marketCapUsd:marketCap,liquidityUsd:liquidity,notionalUsd,solUsd:currentSolUsd,dexFeeBps,slippageLimitBps,priorityFeeSol})
+          if(execution.rejected)throw new Error('slippage limit exceeded')
+          const {data,error}=await admin.rpc('execute_paper_buy_v3',{
+            p_user_id:raw.user_id,p_idempotency_key:'conditional:'+raw.id,p_request_fingerprint:'conditional-buy|'+raw.id+'|'+slippageLimitBps+'|'+priorityFeeSol+'|'+dexFeeBps,
+            p_mint:raw.token_address,p_ticker:raw.token_symbol||pair.baseToken?.symbol||null,p_name:pair.baseToken?.name||null,p_image_url:pair.info?.imageUrl||null,
+            p_pair_address:pair.pairAddress||null,p_dex_id:pair.dexId||null,p_amount_sol:amountSol,p_notional_usd:notionalUsd,p_displayed_price_usd:displayedPrice,
+            p_fill_price_usd:execution.fillPriceUsd,p_displayed_mc_usd:marketCap||null,p_fill_mc_usd:execution.fillMarketCapUsd||null,p_liquidity_usd:liquidity,
+            p_price_impact_pct:execution.priceImpactPct,p_effective_slippage_bps:execution.effectiveSlippageBps,p_paper_fee_usd:execution.paperFeeUsd,
+            p_dex_fee_usd:execution.dexFeeUsd,p_network_fee_usd:execution.networkFeeUsd,p_priority_fee_sol:priorityFeeSol,p_post_trade_price_usd:execution.postTradePriceUsd,
+            p_slippage_limit_bps:slippageLimitBps,p_sol_price_usd:currentSolUsd,p_quote_timestamp:quoteTimestamp,p_market_data_age_ms:0,
+            p_execution_quality:executionQuality,p_execution_model_version:executionModelVersion,
           })
           if(error)throw new Error(error.message)
           result=data
@@ -171,29 +155,16 @@ Deno.serve(async(req:Request)=>{
           const {data:position,error:positionError}=await admin.from('paper_positions').select('quantity_tokens,accounting_version').eq('user_id',raw.user_id).eq('token_id',tokenRow.id).eq('status','open').maybeSingle()
           if(positionError||!position)throw new Error('no open PAPER position')
           if(position.accounting_version!=='usd_v2')throw new Error('legacy PAPER position cannot be sold in USD mode')
-          const sellPct=finite(raw.sell_pct),sellQty=finite(position.quantity_tokens)*(sellPct/100),grossUsd=sellQty*displayedPrice
-          const impactRatio=Math.min(grossUsd/oneSideLiquidityUsd,5)
-          const fillPrice=displayedPrice/(1+impactRatio)
-          const fillMc=marketCap>0?marketCap*(fillPrice/displayedPrice):0
-          const grossFillUsd=sellQty*fillPrice,feeUsd=grossFillUsd*feeRate
-          const {data,error}=await admin.rpc('execute_paper_sell_v2',{
-            p_user_id:raw.user_id,
-            p_idempotency_key:'conditional:'+raw.id,
-            p_request_fingerprint:'conditional-sell|'+raw.id,
-            p_mint:raw.token_address,
-            p_sell_pct:sellPct,
-            p_displayed_price_usd:displayedPrice,
-            p_fill_price_usd:fillPrice,
-            p_displayed_mc_usd:marketCap||null,
-            p_fill_mc_usd:fillMc||null,
-            p_liquidity_usd:liquidity,
-            p_price_impact_pct:(1-fillPrice/displayedPrice)*100,
-            p_fee_usd:feeUsd,
-            p_sol_price_usd:currentSolUsd,
-            p_quote_timestamp:quoteTimestamp,
-            p_market_data_age_ms:0,
-            p_execution_quality:executionQuality,
-            p_execution_model_version:executionModelVersion,
+          const sellPct=finite(raw.sell_pct),sellQty=finite(position.quantity_tokens)*(sellPct/100),grossReferenceUsd=sellQty*displayedPrice
+          const execution=quotePaperExecution({side:'sell',referencePriceUsd:displayedPrice,marketCapUsd:marketCap,liquidityUsd:liquidity,notionalUsd:grossReferenceUsd,solUsd:currentSolUsd,dexFeeBps,slippageLimitBps,priorityFeeSol})
+          if(execution.rejected)throw new Error('slippage limit exceeded')
+          const {data,error}=await admin.rpc('execute_paper_sell_v3',{
+            p_user_id:raw.user_id,p_idempotency_key:'conditional:'+raw.id,p_request_fingerprint:'conditional-sell|'+raw.id+'|'+slippageLimitBps+'|'+priorityFeeSol+'|'+dexFeeBps,
+            p_mint:raw.token_address,p_sell_pct:sellPct,p_displayed_price_usd:displayedPrice,p_fill_price_usd:execution.fillPriceUsd,p_displayed_mc_usd:marketCap||null,
+            p_fill_mc_usd:execution.fillMarketCapUsd||null,p_liquidity_usd:liquidity,p_price_impact_pct:execution.priceImpactPct,p_effective_slippage_bps:execution.effectiveSlippageBps,
+            p_paper_fee_usd:execution.paperFeeUsd,p_dex_fee_usd:execution.dexFeeUsd,p_network_fee_usd:execution.networkFeeUsd,p_priority_fee_sol:priorityFeeSol,
+            p_post_trade_price_usd:execution.postTradePriceUsd,p_slippage_limit_bps:slippageLimitBps,p_sol_price_usd:currentSolUsd,p_quote_timestamp:quoteTimestamp,
+            p_market_data_age_ms:0,p_execution_quality:executionQuality,p_execution_model_version:executionModelVersion,
           })
           if(error)throw new Error(error.message)
           result=data
@@ -202,7 +173,7 @@ Deno.serve(async(req:Request)=>{
         await admin.from('paper_conditional_orders').update({
           status:'filled',executed_order_id:result?.order_id||null,current_price_usd:displayedPrice,
           filled_at:new Date().toISOString(),updated_at:new Date().toISOString(),rejection_reason:null,
-          metadata:{monitor:true,execution_model:executionModelVersion,result_summary:{replayed:Boolean(result?.replayed)}}
+          metadata:{...(raw.metadata||{}),monitor:true,execution_model:executionModelVersion,result_summary:{replayed:Boolean(result?.replayed)}}
         }).eq('id',raw.id)
         stats.filled++
       }catch(error){
