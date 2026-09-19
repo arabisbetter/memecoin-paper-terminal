@@ -1,18 +1,20 @@
 async function completeOnboarding(page,prefix='e2e'){
   const profile=page.getByRole('heading',{name:'Create your trader profile'})
-  if(await profile.isVisible().catch(()=>false)){
+  const profileVisible=await profile.waitFor({state:'visible',timeout:10000}).then(()=>true).catch(()=>false)
+  if(profileVisible){
     const suffix=String(Date.now()).slice(-8)
     await page.getByLabel('Username').fill((prefix+'_'+suffix).slice(0,24))
     const display=page.getByLabel(/Display name/i)
     if(await display.isVisible().catch(()=>false))await display.fill('PAPER E2E')
     await page.getByRole('button',{name:'Continue',exact:true}).click()
-    await profile.waitFor({state:'hidden',timeout:20000}).catch(()=>{})
+    await profile.waitFor({state:'hidden',timeout:20000})
   }
   const legal=page.getByRole('heading',{name:'Current PAPER terms'})
-  if(await legal.isVisible().catch(()=>false)){
+  const legalVisible=await legal.waitFor({state:'visible',timeout:10000}).then(()=>true).catch(()=>false)
+  if(legalVisible){
     await page.getByRole('checkbox').check()
     await page.getByRole('button',{name:'Accept & enter PAPER',exact:true}).click()
-    await legal.waitFor({state:'hidden',timeout:20000}).catch(()=>{})
+    await legal.waitFor({state:'hidden',timeout:20000})
   }
 }
 async function liveToken(request){
