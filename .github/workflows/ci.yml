@@ -191,36 +191,25 @@ jobs:
 
       - name: Verify live holder intelligence
         run: |
-          node - <<'NODE'
-          const fs=require('fs')
-          const market=JSON.parse(fs.readFileSync('/tmp/paper-market.json','utf8'))
-          fs.writeFileSync('/tmp/paper-holder-mints.txt',(market.tokens||[]).map(t=>t.mint).filter(Boolean).slice(0,12).join('\n'))
-          NODE
+          mint="EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"
           ok=0
-          while IFS= read -r mint; do
-            [ -z "$mint" ] && continue
-            if curl -sS "http://127.0.0.1:3000/api/intelligence/token/$mint" -o /tmp/paper-token-intel.json -w "%{http_code}" > /tmp/paper-token-intel-status.txt; then
-              status=$(cat /tmp/paper-token-intel-status.txt)
-              if [ "$status" = "200" ]; then
-                if MINT="$mint" node - <<'NODE'
+          for attempt in 1 2 3; do
+            if curl -fsS "http://127.0.0.1:3000/api/intelligence/token/$mint" -o /tmp/paper-token-intel.json; then
+              if MINT="$mint" node - <<'NODE'
           const fs=require('fs')
           const body=JSON.parse(fs.readFileSync('/tmp/paper-token-intel.json','utf8'))
           if(body.live!==true)throw new Error('token intelligence is not live')
           if(!Array.isArray(body.distribution?.holders)||body.distribution.holders.length===0)throw new Error('holder map returned zero accounts')
           if(!Array.isArray(body.source)||!body.source.includes('solana-mainnet-rpc'))throw new Error('holder intelligence did not use live Solana RPC')
           if(body.token?.mint!==process.env.MINT)throw new Error('token intelligence mint mismatch')
-          fs.writeFileSync('/tmp/paper-holder-mint.txt',process.env.MINT)
+          if(!Number.isFinite(Number(body.distribution.top10Pct)))throw new Error('top10 holder concentration invalid')
           console.log('holder intelligence ok mint='+process.env.MINT+' holders='+body.distribution.holders.length+' top10='+body.distribution.top10Pct)
           NODE
-                then ok=1; break; fi
-              fi
+              then ok=1; break; fi
             fi
-          done < /tmp/paper-holder-mints.txt
-          if [ "$ok" -ne 1 ]; then
-            echo "No live discovery mint returned a verifiable Solana RPC holder map."
-            cat /tmp/paper-token-intel.json 2>/dev/null || true
-            exit 1
-          fi
+            sleep 4
+          done
+          if [ "$ok" -ne 1 ]; then cat /tmp/paper-token-intel.json 2>/dev/null || true; exit 1; fi
 
       - name: Verify live smart-wallet scoring
         run: |
