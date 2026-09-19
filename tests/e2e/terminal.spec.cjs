@@ -95,7 +95,7 @@ test('Part 9 live intelligence surfaces render against live APIs',async({page,re
   await page.goto('/smart-money',{waitUntil:'domcontentloaded'})
   await expect(page.getByRole('heading',{name:/Score wallets without pretending/i})).toBeVisible()
 
-  await page.goto('/token/'+encodeURIComponent(token.mint)+'/intelligence',{waitUntil:'domcontentloaded'})
+  await page.goto('/token/EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v/intelligence',{waitUntil:'domcontentloaded'})
   await expect(page.getByText('TOP HOLDER BUBBLES')).toBeVisible({timeout:20000})
   await expect(page.getByText('LIVE LIFECYCLE')).toBeVisible()
 
