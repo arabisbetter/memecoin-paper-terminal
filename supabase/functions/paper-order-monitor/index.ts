@@ -4,6 +4,8 @@ type Pair={chainId?:string;dexId?:string;pairAddress?:string;baseToken?:{address
 type Order={id:string;user_id:string;idempotency_key:string;token_address:string;token_symbol:string|null;side:'buy'|'sell';order_type:'limit'|'stop_loss'|'take_profit';trigger_price_usd:number;amount_sol:number|null;sell_pct:number|null;status:string;expires_at:string|null;created_at:string}
 const finite=(v:unknown,fallback=0)=>{const n=Number(v);return Number.isFinite(n)?n:fallback}
 const PAPER_FEE_BPS=100
+function cpBuy(referencePrice:number,liquidityUsd:number,notionalUsd:number){const quote=Math.max(liquidityUsd/2,1),token=quote/referencePrice,k=quote*token,newQuote=quote+notionalUsd,newToken=k/newQuote,out=token-newToken;if(out<=0)throw new Error('execution model could not produce a fill');const fillPrice=notionalUsd/out;return{fillPrice,impactPct:(fillPrice/referencePrice-1)*100}}
+function cpSell(referencePrice:number,liquidityUsd:number,sellQty:number){const quote=Math.max(liquidityUsd/2,1),token=quote/referencePrice,k=quote*token,newToken=token+sellQty,newQuote=k/newToken,out=quote-newQuote;if(out<=0)throw new Error('execution model could not produce a fill');const fillPrice=out/sellQty;return{fillPrice,impactPct:(1-fillPrice/referencePrice)*100,grossFillUsd:out}}
 const reply=(body:unknown,status=200)=>new Response(JSON.stringify(body),{status,headers:{'Content-Type':'application/json'}})
 
 function envKeys(){
@@ -122,18 +124,17 @@ Deno.serve(async(req:Request)=>{
         if(!claimed)continue
         stats.triggered++
 
-        const oneSideLiquidityUsd=Math.max(liquidity/2,1)
         const feeRate=PAPER_FEE_BPS/10_000
         const quoteTimestamp=new Date().toISOString()
-        const executionModelVersion='v3_conditional_liquidity_approximation'
-        const executionQuality='estimated'
+        const executionModelVersion='v4_conditional_constant_product'
+        const executionQuality='live-trigger-estimate'
         let result:any=null
 
         if(raw.side==='buy'){
           if(!currentSolUsd)currentSolUsd=await solUsd()
           const amountSol=finite(raw.amount_sol),notionalUsd=amountSol*currentSolUsd
-          const impactRatio=Math.min(notionalUsd/oneSideLiquidityUsd,5)
-          const fillPrice=displayedPrice*(1+impactRatio)
+          const model=cpBuy(displayedPrice,liquidity,notionalUsd)
+          const fillPrice=model.fillPrice
           const fillMc=marketCap>0?marketCap*(fillPrice/displayedPrice):0
           const feeUsd=notionalUsd*feeRate
           const {data,error}=await admin.rpc('execute_paper_buy_v2',{
@@ -153,7 +154,7 @@ Deno.serve(async(req:Request)=>{
             p_displayed_mc_usd:marketCap||null,
             p_fill_mc_usd:fillMc||null,
             p_liquidity_usd:liquidity,
-            p_price_impact_pct:impactRatio*100,
+            p_price_impact_pct:model.impactPct,
             p_fee_usd:feeUsd,
             p_sol_price_usd:currentSolUsd,
             p_quote_timestamp:quoteTimestamp,
@@ -171,11 +172,11 @@ Deno.serve(async(req:Request)=>{
           const {data:position,error:positionError}=await admin.from('paper_positions').select('quantity_tokens,accounting_version').eq('user_id',raw.user_id).eq('token_id',tokenRow.id).eq('status','open').maybeSingle()
           if(positionError||!position)throw new Error('no open PAPER position')
           if(position.accounting_version!=='usd_v2')throw new Error('legacy PAPER position cannot be sold in USD mode')
-          const sellPct=finite(raw.sell_pct),sellQty=finite(position.quantity_tokens)*(sellPct/100),grossUsd=sellQty*displayedPrice
-          const impactRatio=Math.min(grossUsd/oneSideLiquidityUsd,5)
-          const fillPrice=displayedPrice/(1+impactRatio)
+          const sellPct=finite(raw.sell_pct),sellQty=finite(position.quantity_tokens)*(sellPct/100)
+          const model=cpSell(displayedPrice,liquidity,sellQty)
+          const fillPrice=model.fillPrice
           const fillMc=marketCap>0?marketCap*(fillPrice/displayedPrice):0
-          const grossFillUsd=sellQty*fillPrice,feeUsd=grossFillUsd*feeRate
+          const grossFillUsd=model.grossFillUsd,feeUsd=grossFillUsd*feeRate
           const {data,error}=await admin.rpc('execute_paper_sell_v2',{
             p_user_id:raw.user_id,
             p_idempotency_key:'conditional:'+raw.id,
@@ -187,7 +188,7 @@ Deno.serve(async(req:Request)=>{
             p_displayed_mc_usd:marketCap||null,
             p_fill_mc_usd:fillMc||null,
             p_liquidity_usd:liquidity,
-            p_price_impact_pct:(1-fillPrice/displayedPrice)*100,
+            p_price_impact_pct:model.impactPct,
             p_fee_usd:feeUsd,
             p_sol_price_usd:currentSolUsd,
             p_quote_timestamp:quoteTimestamp,
