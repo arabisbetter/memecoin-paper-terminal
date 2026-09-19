@@ -13,6 +13,7 @@ import { ensurePaperUser } from '@/lib/paper-session'
 import type { MarketToken } from '@/lib/types'
 import TokenRiskPanel from '@/components/TokenRiskPanel'
 import AdvancedOrderPanel from '@/components/AdvancedOrderPanel'
+import { usePaperPresets } from '@/lib/use-paper-presets'
 
 type TokenRef={mint_address:string;ticker:string|null;name:string|null;image_url:string|null}
 type DbPosition={id:string;token_id:string;quantity_tokens:number;cost_basis_usd:number|null;average_entry_price_usd:number;average_entry_mc_usd:number|null;realized_pnl_usd:number|null;accounting_version:string|null;opened_at:string;tokens:TokenRef|null}
@@ -42,6 +43,7 @@ function statsFor(token:MarketToken|null,window:StatsWindow):WindowStats{
 
 export default function Terminal(){
   const supabase=useMemo(()=>{try{return createClient()}catch{return null}},[])
+  const {values:paperPresets}=usePaperPresets()
   const [tokens,setTokens]=useState<MarketToken[]>([]),[selected,setSelected]=useState<MarketToken|null>(null),[positions,setPositions]=useState<LivePosition[]>([])
   const [account,setAccount]=useState<Account|null>(null),[solUsd,setSolUsd]=useState(0),[userId,setUserId]=useState(''),[viewCount,setViewCount]=useState(0)
   const [query,setQuery]=useState(''),[side,setSide]=useState<Side>('buy'),[amount,setAmount]=useState(.1),[amountMode,setAmountMode]=useState<AmountMode>('sol'),[sellPct,setSellPct]=useState(100)
@@ -90,6 +92,15 @@ export default function Terminal(){
 
   useEffect(()=>{if(!supabase)return;let alive=true;void(async()=>{try{const user=await ensurePaperUser(supabase);if(alive)await loadAccount(user.id,true)}catch(e){if(alive)setMessage(e instanceof Error?e.message:'Could not start PAPER account')}})();void loadFeed(true);const feedId=window.setInterval(()=>void loadFeed(),10000),acctId=window.setInterval(()=>void loadAccount(),12000),onVisible=()=>{if(!document.hidden){void loadFeed(true);void loadAccount(undefined,true)}},onAccount=()=>void loadAccount(undefined,true);document.addEventListener('visibilitychange',onVisible);window.addEventListener('paper:account-changed',onAccount);return()=>{alive=false;clearInterval(feedId);clearInterval(acctId);document.removeEventListener('visibilitychange',onVisible);window.removeEventListener('paper:account-changed',onAccount)}},[supabase,loadAccount,loadFeed])
   useEffect(()=>{const saved=Number(localStorage.getItem('paper.quickBuySize')),savedMode=localStorage.getItem('paper.tradeAmountMode'),savedSlip=Number(localStorage.getItem('paper.maxSlippagePct'));if(saved>0)setAmount(saved);if(savedMode==='usd'||savedMode==='sol')setAmountMode(savedMode);if(savedSlip>=.1&&savedSlip<=50)setMaxSlippagePct(savedSlip);setInstantMode(localStorage.getItem('paper.instantMode')==='1');setConfirmOrders(localStorage.getItem('paper.confirmOrders')==='1')},[])
+  useEffect(()=>{
+    const apply=(event:Event)=>{
+      const detail=(event as CustomEvent<{id?:string;value?:number}>).detail
+      const value=Number(detail?.value||0)
+      if(value>0){setAmountMode('sol');setAmount(value);localStorage.setItem('paper.quickBuySize',String(value));setMobilePane('trade')}
+    }
+    window.addEventListener('paper:preset',apply)
+    return()=>window.removeEventListener('paper:preset',apply)
+  },[])
   useEffect(()=>{localStorage.setItem('paper.tradeAmountMode',amountMode);if(amountMode==='sol')localStorage.setItem('paper.quickBuySize',String(amount));localStorage.setItem('paper.maxSlippagePct',String(maxSlippagePct))},[amountMode,amount,maxSlippagePct])
   useEffect(()=>{try{const saved=JSON.parse(localStorage.getItem('paper.terminal.workspace.v1')||'{}');if(Number(saved.tokenRailWidth)>=220&&Number(saved.tokenRailWidth)<=420)setTokenRailWidth(Number(saved.tokenRailWidth));if(Number(saved.tradePanelWidth)>=300&&Number(saved.tradePanelWidth)<=520)setTradePanelWidth(Number(saved.tradePanelWidth));if(['chart','trade','positions','info'].includes(saved.mobilePane))setMobilePane(saved.mobilePane)}catch{}},[])
   useEffect(()=>{localStorage.setItem('paper.terminal.workspace.v1',JSON.stringify({tokenRailWidth,tradePanelWidth,mobilePane,statsWindow,side,sellPct}))},[tokenRailWidth,tradePanelWidth,mobilePane,statsWindow,side,sellPct])
@@ -102,7 +113,7 @@ export default function Terminal(){
   const cash=Number(account?.cash_usd||0),nativeEquivalent=solUsd>0?cash/solUsd:0,buySol=amountMode==='sol'?amount:(solUsd>0?amount/solUsd:0),buyUsd=amountMode==='usd'?amount:amount*solUsd,estimatedFee=buyUsd*.01,totalDebit=buyUsd+estimatedFee
   const activeStats=statsFor(selected,statsWindow),txCount=activeStats.buys+activeStats.sells,buyPressure=txCount?activeStats.buys/txCount*100:0,liquidityRatio=selected?.marketCap?selected.liquidityUsd/selected.marketCap*100:0
   const description=selected?.description?.trim()||(selected?`$${selected.symbol} is trading on ${selected.dexId||'a Solana DEX'} with ${money(selected.marketCap)} market cap and ${money(selected.liquidityUsd)} liquidity. Current activity shows ${money(Number(selected.volume5m||0))} in observed 5-minute volume. No verified project description was supplied by the current market source.`:'')
-  const presets=amountMode==='sol'?[.01,.1,.5,1]:[10,25,50,100],canBuy=Boolean(selected&&buySol>0&&solUsd>0&&totalDebit<=cash&&dataStatus!=='STALE')
+  const presets=amountMode==='sol'?paperPresets:[10,25,50,100],canBuy=Boolean(selected&&buySol>0&&solUsd>0&&totalDebit<=cash&&dataStatus!=='STALE')
 
   async function searchToken(e?:FormEvent){e?.preventDefault();const q=query.trim();if(!q)return;setLookupBusy(true);setMessage('');try{const local=tokens.find(t=>t.mint===q||t.symbol.toLowerCase()===q.toLowerCase()||t.name.toLowerCase()===q.toLowerCase());if(local){chooseToken(local);return}if(!isMint(q)){setMessage('No exact live match. Paste a Solana contract address for direct lookup.');return}const r=await fetch(`/api/market/token/${encodeURIComponent(q)}`,{cache:'no-store'}),j=await r.json();if(!r.ok||!j.token)throw new Error(j.error||'Token found, but no supported active market was detected.');chooseToken(j.token)}catch(e2){setMessage(e2 instanceof Error?e2.message:'Token lookup failed')}finally{setLookupBusy(false)}}
 
