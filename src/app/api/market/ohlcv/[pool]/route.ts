@@ -35,6 +35,34 @@ function aggregateCandles(rows:Candle[],bucketSeconds:number){
   return [...groups.entries()].sort((a,b)=>a[0]-b[0]).map(([time,list])=>{const ordered=[...list].sort((a,b)=>a.time-b.time);return{time,open:ordered[0].open,high:Math.max(...ordered.map(x=>x.high)),low:Math.min(...ordered.map(x=>x.low)),close:ordered[ordered.length-1].close,volume:ordered.reduce((s,x)=>s+x.volume,0)}})
 }
 
+const timeframeSeconds:Record<string,number>={
+  '1s':1,'5s':5,'15s':15,'30s':30,'1m':60,'3m':180,'5m':300,'15m':900,'30m':1800,
+  '1h':3600,'4h':14400,'6h':21600,'12h':43200,'24h':86400,'1d':86400,'1M':2592000,
+}
+function normalizeCandles(rows:Candle[],bucketSeconds:number,maxRows=420){
+  if(!rows.length||bucketSeconds<=0)return[]
+  const grouped=aggregateCandles(rows,bucketSeconds)
+  if(!grouped.length)return[]
+  const byTime=new Map(grouped.map(row=>[row.time,row]))
+  const firstTime=grouped[0].time,lastTime=grouped[grouped.length-1].time
+  const out:Candle[]=[]
+  let previousClose=Number(grouped[0].open||grouped[0].close)
+  for(let time=firstTime;time<=lastTime&&out.length<2000;time+=bucketSeconds){
+    const row=byTime.get(time)
+    if(row){
+      const close=Number(row.close)>0?Number(row.close):previousClose
+      const open=out.length?previousClose:Number(row.open||close)
+      const high=Math.max(open,close,Number(row.high||close))
+      const low=Math.min(open,close,Number(row.low||close))
+      out.push({time,open,high,low,close,volume:Math.max(0,Number(row.volume||0))})
+      previousClose=close
+    }else if(previousClose>0){
+      out.push({time,open:previousClose,high:previousClose,low:previousClose,close:previousClose,volume:0})
+    }
+  }
+  return out.slice(-maxRows)
+}
+
 const firstPositive=(...values:unknown[])=>{for(const value of values){const n=Number(value);if(Number.isFinite(n)&&n>0)return n}return 0}
 
 async function fetchTradeCandles(pool:string,bucketSeconds:number,signal:AbortSignal){
@@ -44,7 +72,8 @@ async function fetchTradeCandles(pool:string,bucketSeconds:number,signal:AbortSi
   const prints=(json.data||[]).map(item=>{const a=item.attributes||{},ms=Date.parse(String(a.block_timestamp||'')),kind=String(a.kind||'').toLowerCase(),tokenSidePrice=kind==='sell'?a.price_from_in_usd:a.price_to_in_usd,oppositeSidePrice=kind==='sell'?a.price_to_in_usd:a.price_from_in_usd,price=firstPositive(a.price_usd,tokenSidePrice,oppositeSidePrice),volume=firstPositive(a.volume_in_usd);return{time:Number.isFinite(ms)?Math.floor(ms/1000):0,price,volume}}).filter(p=>p.time>0&&p.price>0).sort((a,b)=>a.time-b.time)
   const groups=new Map<number,typeof prints>()
   for(const print of prints){const bucket=Math.floor(print.time/bucketSeconds)*bucketSeconds,list=groups.get(bucket)||[];list.push(print);groups.set(bucket,list)}
-  return [...groups.entries()].sort((a,b)=>a[0]-b[0]).map(([time,list])=>({time,open:list[0].price,high:Math.max(...list.map(x=>x.price)),low:Math.min(...list.map(x=>x.price)),close:list[list.length-1].price,volume:list.reduce((sum,x)=>sum+x.volume,0)})).slice(-300)
+  const raw=[...groups.entries()].sort((a,b)=>a[0]-b[0]).map(([time,list])=>({time,open:list[0].price,high:Math.max(...list.map(x=>x.price)),low:Math.min(...list.map(x=>x.price)),close:list[list.length-1].price,volume:list.reduce((sum,x)=>sum+x.volume,0)}))
+  return normalizeCandles(raw,bucketSeconds,300)
 }
 
 export async function GET(req:NextRequest,ctx:{params:Promise<{pool:string}>}){
@@ -80,8 +109,8 @@ export async function GET(req:NextRequest,ctx:{params:Promise<{pool:string}>}){
     if(!response.ok)throw new Error(`OHLCV ${response.status}`)
     const json=await response.json() as GeckoResponse
     let candles=(json.data?.attributes?.ohlcv_list||[]).map(([time,open,high,low,close,volume])=>({time,open,high,low,close,volume})).filter(c=>[c.time,c.open,c.high,c.low,c.close].every(Number.isFinite)).sort((a,b)=>a.time-b.time)
-    if(config.bucketSeconds)candles=aggregateCandles(candles,config.bucketSeconds).slice(-180)
-    if(tf==='1M')candles=candles.slice(-45)
+    if(config.bucketSeconds)candles=aggregateCandles(candles,config.bucketSeconds)
+    candles=normalizeCandles(candles,timeframeSeconds[tf]||60,tf==='1M'?90:420)
     if(!candles.length)throw new Error('OHLCV returned no candles')
     const at=Date.now();cache.set(key,{at,candles})
     return NextResponse.json({candles,timeframe:tf,source:'geckoterminal',live:true,asOf:at},{headers:{'Cache-Control':`public, s-maxage=${config.cdnSeconds}, stale-while-revalidate=${Math.max(config.cdnSeconds*4,30)}`}})

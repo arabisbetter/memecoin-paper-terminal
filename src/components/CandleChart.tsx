@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   Activity, Camera, Check, ChevronDown, Crosshair, Eye, Maximize2, Minimize2,
-  Minus, MousePointer2, Plus, Redo2, RotateCcw, Settings2, SlidersHorizontal, Undo2, TrendingUp, Square, MoveRight, Trash2
+  Minus, Plus, Redo2, RotateCcw, SlidersHorizontal, Undo2, TrendingUp, Square, MoveRight, Trash2
 } from 'lucide-react'
 import {
   CandlestickSeries, ColorType, CrosshairMode, HistogramSeries, LineSeries, PriceScaleMode,
@@ -99,6 +99,8 @@ export default function CandleChart({
   const hasDataRef=useRef(false)
   const userPickedMode=useRef(false)
   const workspaceLoaded=useRef(false)
+  const activePoolRef=useRef<string|undefined>(undefined)
+  const fittedKeyRef=useRef('')
 
   const [tf,setTf]=useState<Timeframe>('1m')
   const [tfOpen,setTfOpen]=useState(false)
@@ -172,7 +174,7 @@ export default function CandleChart({
     if(!wrap.current)return
     const chart=createChart(wrap.current,{
       autoSize:true,
-      layout:{background:{type:ColorType.Solid,color:'#080b0f'},textColor:'#949dac',fontSize:11,fontFamily:'Inter,ui-sans-serif,system-ui,sans-serif'},
+      layout:{background:{type:ColorType.Solid,color:'#0a0b0d'},textColor:'#b4bac4',fontSize:12,fontFamily:'Inter,ui-sans-serif,system-ui,sans-serif'},
       grid:{vertLines:{color:'#1d232c'},horzLines:{color:'#1d232c'}},
       crosshair:{
         mode:CrosshairMode.Normal,
@@ -276,7 +278,10 @@ export default function CandleChart({
   useEffect(()=>{
     renderedRef.current=null
     hasDataRef.current=false
-    if(!poolAddress){setCandles([]);setError('');setStatus('DEGRADED');return}
+    if(!poolAddress){activePoolRef.current=undefined;setCandles([]);setError('');setStatus('DEGRADED');return}
+    const tokenChanged=activePoolRef.current!==poolAddress
+    activePoolRef.current=poolAddress
+    if(tokenChanged){setCandles([]);fittedKeyRef.current=''}
     let alive=true
     async function load(force=false){
       if(!force&&document.hidden)return
@@ -297,7 +302,6 @@ export default function CandleChart({
         if(alive)setLoading(false)
       }
     }
-    setCandles([])
     setHover(null)
     setError('')
     void load(true)
@@ -370,8 +374,11 @@ export default function CandleChart({
     const first=displayCandles[0].time
     const last=displayCandles[displayCandles.length-1].time
     const previous=renderedRef.current
-    const candlePoint=(c:Candle)=>({time:c.time as UTCTimestamp,open:c.open,high:c.high,low:c.low,close:c.close})
-    const volumePoint=(c:Candle)=>({time:c.time as UTCTimestamp,value:c.volume,color:c.close>=c.open?'rgba(17,199,163,.28)':'rgba(239,57,79,.25)'})
+    const candlePoint=(c:Candle)=>{
+      const empty=Number(c.volume||0)===0
+      return{time:c.time as UTCTimestamp,open:c.open,high:c.high,low:c.low,close:c.close,...(empty?{color:'#5f6773',borderColor:'#5f6773',wickColor:'#5f6773'}:{})}
+    }
+    const volumePoint=(c:Candle)=>({time:c.time as UTCTimestamp,value:c.volume,color:Number(c.volume||0)===0?'rgba(95,103,115,.45)':c.close>=c.open?'rgba(34,197,94,.28)':'rgba(239,68,68,.25)'})
 
     const reset=!previous||previous.first!==first||previous.mode!==mode||previous.quote!==quote||mode==='marketCap'
     if(reset){
@@ -396,8 +403,17 @@ export default function CandleChart({
 
     renderedRef.current={first,last,mode,quote}
     hasDataRef.current=true
-    if(reset)requestAnimationFrame(()=>chartRef.current?.timeScale().fitContent())
-  },[displayCandles,mode,quote,showEma9,showEma21,showVwap])
+    const fitKey=(poolAddress||'')+':'+tf
+    if(fittedKeyRef.current!==fitKey){
+      fittedKeyRef.current=fitKey
+      requestAnimationFrame(()=>{
+        const scale=chartRef.current?.timeScale()
+        if(!scale)return
+        if(displayCandles.length>100)scale.setVisibleLogicalRange({from:Math.max(0,displayCandles.length-100),to:displayCandles.length+4})
+        else scale.fitContent()
+      })
+    }
+  },[displayCandles,mode,quote,showEma9,showEma21,showVwap,poolAddress,tf])
 
   const currentDisplayValue=useMemo(()=>{
     const raw=mode==='marketCap'?Number(currentMarketCap||0):Number(currentPrice||0)
@@ -548,7 +564,7 @@ export default function CandleChart({
       </div>
 
       <div className="axiom-toolbar-separator"/>
-      <button className="axiom-tool-label active"><Activity size={13}/>Candles</button>
+      <span className="axiom-tool-label active"><Activity size={13}/>Candles</span>
 
       <div className="axiom-popover-wrap">
         <button className={(indicatorOpen?'active ':'')+'axiom-tool-label'} onClick={()=>{setIndicatorOpen(v=>!v);setDisplayOpen(false)}}><SlidersHorizontal size={13}/>Indicators</button>
@@ -579,8 +595,7 @@ export default function CandleChart({
       <button className="axiom-icon-button" disabled={!userLevels.current.length} onClick={undoLevel} title="Undo level"><Undo2 size={14}/></button>
       <button className="axiom-icon-button" disabled={!redoLevels.current.length} onClick={redoLevel} title="Redo level"><Redo2 size={14}/></button>
 
-      <div className="axiom-chart-brand">PAPER <ChevronDown size={11}/></div>
-      <button className="axiom-icon-button" onClick={()=>setDisplayOpen(v=>!v)} title="Chart settings"><Settings2 size={14}/></button>
+      <div className="axiom-chart-brand">PAPER</div>
       <button className="axiom-icon-button" onClick={()=>setExpanded(v=>!v)} title={expanded?'Exit fullscreen':'Fullscreen'}>{expanded?<Minimize2 size={14}/>:<Maximize2 size={14}/>}</button>
       <button className="axiom-icon-button" onClick={saveScreenshot} title="Save chart image"><Camera size={14}/></button>
     </div>
@@ -588,7 +603,6 @@ export default function CandleChart({
     <div className="axiom-chart-body">
       <div className="axiom-draw-rail">
         <button className={drawingTool==='none'?'active':''} title="Crosshair" onClick={()=>setDrawingTool('none')}><Crosshair size={16}/></button>
-        <button title="Pointer" onClick={()=>setDrawingTool('none')}><MousePointer2 size={16}/></button>
         <button className={drawingTool==='trend'?'active':''} title="Trend line" onClick={()=>setDrawingTool('trend')}><TrendingUp size={16}/></button>
         <button className={drawingTool==='ray'?'active':''} title="Ray" onClick={()=>setDrawingTool('ray')}><MoveRight size={16}/></button>
         <button className={drawingTool==='rectangle'?'active':''} title="Rectangle" onClick={()=>setDrawingTool('rectangle')}><Square size={15}/></button>
