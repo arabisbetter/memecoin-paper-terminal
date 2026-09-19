@@ -1,3 +1,3 @@
-import LandingHome from '@/components/LandingHome'
+import DiscoverHome from '@/components/DiscoverHome'
 
-export default function Home(){return <LandingHome/>}
+export default function Home(){return <DiscoverHome/>}
