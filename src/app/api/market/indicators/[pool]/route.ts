@@ -32,22 +32,37 @@ export async function GET(req:NextRequest,ctx:{params:Promise<{pool:string}>}){
   const key=pool+':'+tf,hit=cache.get(key)
   if(hit&&Date.now()-hit.at<TTL)return NextResponse.json({...hit.body as object,cached:true},{headers:{'Cache-Control':'public, s-maxage=10, stale-while-revalidate=30'}})
   try{
-    const [unit,aggregate]=tfSpec(tf)
-    const url='https://api.geckoterminal.com/api/v2/networks/solana/pools/'+encodeURIComponent(pool)+'/ohlcv/'+unit+'?aggregate='+aggregate+'&limit=250&currency=usd&token=base&include_empty_intervals=false'
-    const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),9000)
-    const r=await fetch(url,{cache:'no-store',signal:controller.signal,headers:{Accept:'application/json;version=20230203'}}).finally(()=>clearTimeout(timer))
-    if(!r.ok)throw new Error('GeckoTerminal '+r.status)
-    const j=await r.json()
-    const raw=(j?.data?.attributes?.ohlcv_list||[]) as Array<[number,number,number,number,number,number]>
-    const rows:Candle[]=raw.map(x=>({time:Number(x[0]),open:Number(x[1]),high:Number(x[2]),low:Number(x[3]),close:Number(x[4]),volume:Number(x[5])})).filter(x=>Number.isFinite(x.close)&&x.close>0).sort((a,b)=>a.time-b.time)
-    if(rows.length<30)throw new Error('not enough live candles for indicators')
+    let rows:Candle[]=[]
+    let source='geckoterminal'
+    try{
+      const internal=new URL('/api/market/ohlcv/'+encodeURIComponent(pool),req.nextUrl.origin)
+      internal.searchParams.set('tf',tf)
+      const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),7000)
+      const r=await fetch(internal,{cache:'no-store',signal:controller.signal,headers:{Accept:'application/json'}}).finally(()=>clearTimeout(timer))
+      if(!r.ok)throw new Error('PAPER OHLCV '+r.status)
+      const j=await r.json()
+      rows=((j?.candles||[]) as Candle[]).map(x=>({time:Number(x.time),open:Number(x.open),high:Number(x.high),low:Number(x.low),close:Number(x.close),volume:Number(x.volume||0)})).filter(x=>Number.isFinite(x.close)&&x.close>0).sort((a,b)=>a.time-b.time)
+      source=String(j?.source||'geckoterminal')
+      if(rows.length<30)throw new Error('not enough PAPER OHLCV candles for indicators')
+    }catch{
+      const [unit,aggregate]=tfSpec(tf)
+      const url='https://api.geckoterminal.com/api/v2/networks/solana/pools/'+encodeURIComponent(pool)+'/ohlcv/'+unit+'?aggregate='+aggregate+'&limit=250&currency=usd&token=base&include_empty_intervals=false'
+      const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),9000)
+      const r=await fetch(url,{cache:'no-store',signal:controller.signal,headers:{Accept:'application/json;version=20230203'}}).finally(()=>clearTimeout(timer))
+      if(!r.ok)throw new Error('GeckoTerminal '+r.status)
+      const j=await r.json()
+      const raw=(j?.data?.attributes?.ohlcv_list||[]) as Array<[number,number,number,number,number,number]>
+      rows=raw.map(x=>({time:Number(x[0]),open:Number(x[1]),high:Number(x[2]),low:Number(x[3]),close:Number(x[4]),volume:Number(x[5])})).filter(x=>Number.isFinite(x.close)&&x.close>0).sort((a,b)=>a.time-b.time)
+      source='geckoterminal'
+      if(rows.length<30)throw new Error('not enough live candles for indicators')
+    }
     const closes=rows.map(x=>x.close),e9=ema(closes,9),e21=ema(closes,21),e12=ema(closes,12),e26=ema(closes,26)
     const macd=e12.map((v,i)=>v-e26[i]),signal=ema(macd,9),last=rows.at(-1)!
     const window20=closes.slice(-20),mid=window20.reduce((a,b)=>a+b,0)/window20.length,sd=std(window20)
     let cumVol=0,cumPv=0
     for(const row of rows){const v=Math.max(0,row.volume),typ=(row.high+row.low+row.close)/3;cumVol+=v;cumPv+=typ*v}
     const body={
-      live:true,cached:false,asOf:Date.now(),source:'geckoterminal',timeframe:tf,candles:rows.length,
+      live:true,cached:false,asOf:Date.now(),source:source.startsWith('geckoterminal')?'geckoterminal':source,timeframe:tf,candles:rows.length,
       price:last.close,
       indicators:{
         ema9:e9.at(-1),ema21:e21.at(-1),vwap:cumVol>0?cumPv/cumVol:last.close,rsi14:rsi(closes,14),

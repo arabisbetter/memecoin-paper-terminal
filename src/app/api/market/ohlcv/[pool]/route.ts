@@ -8,7 +8,7 @@ type GeckoTradesResponse={data?:GeckoTrade[]}
 type Config={unit:'minute'|'hour'|'day';aggregate:string;limit:number;bucketSeconds?:number;cacheMs:number;cdnSeconds:number}
 
 const configs:Record<string,Config>={
-  '1m':{unit:'minute',aggregate:'1',limit:300,cacheMs:10_000,cdnSeconds:8},
+  '1m':{unit:'minute',aggregate:'1',limit:300,cacheMs:15_000,cdnSeconds:12},
   '3m':{unit:'minute',aggregate:'1',limit:540,bucketSeconds:180,cacheMs:12_000,cdnSeconds:9},
   '5m':{unit:'minute',aggregate:'5',limit:300,cacheMs:14_000,cdnSeconds:10},
   '15m':{unit:'minute',aggregate:'15',limit:300,cacheMs:20_000,cdnSeconds:15},
@@ -22,10 +22,10 @@ const configs:Record<string,Config>={
   '1M':{unit:'day',aggregate:'1',limit:35,cacheMs:120_000,cdnSeconds:60},
 }
 const secondBuckets:Record<string,{seconds:number;cacheMs:number}>={
-  '1s':{seconds:1,cacheMs:900},
-  '5s':{seconds:5,cacheMs:1200},
-  '15s':{seconds:15,cacheMs:1800},
-  '30s':{seconds:30,cacheMs:2400},
+  '1s':{seconds:1,cacheMs:2500},
+  '5s':{seconds:5,cacheMs:4500},
+  '15s':{seconds:15,cacheMs:7000},
+  '30s':{seconds:30,cacheMs:9500},
 }
 const cache=new Map<string,{at:number;candles:Candle[]}>()
 
@@ -62,7 +62,7 @@ export async function GET(req:NextRequest,ctx:{params:Promise<{pool:string}>}){
       const candles=await fetchTradeCandles(pool,secondConfig.seconds,controller.signal)
       if(!candles.length)throw new Error('No recent trades available for sub-minute candles')
       const at=Date.now();cache.set(key,{at,candles})
-      return NextResponse.json({candles,timeframe:tf,source:'geckoterminal-trades',live:true,asOf:at},{headers:{'Cache-Control':'public, s-maxage=1, stale-while-revalidate=3'}})
+      return NextResponse.json({candles,timeframe:tf,source:'geckoterminal-trades',live:true,asOf:at},{headers:{'Cache-Control':'public, s-maxage=2, stale-while-revalidate=8'}})
     }catch(error){
       console.error('subminute_ohlcv_error',{pool,tf,error})
       if(previous)return NextResponse.json({candles:previous.candles,timeframe:tf,source:'geckoterminal-trades',live:false,stale:true,asOf:previous.at,warning:error instanceof Error?error.message:'sub-minute chart unavailable'})

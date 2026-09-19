@@ -32,7 +32,7 @@ const timeframeGroups:TimeframeGroup[]=[
 const quickTfs:Timeframe[]=['1s','5s','15s','30s','1m','5m','15m','1h']
 const timeframeLabel=(tf:Timeframe)=>timeframeGroups.flatMap(g=>g.items).find(x=>x.value===tf)?.label||tf
 const isSecondTf=(tf:Timeframe)=>tf.endsWith('s')
-const refreshMs=(tf:Timeframe)=>tf==='1s'?1050:tf==='5s'?1500:tf==='15s'?2250:tf==='30s'?3000:tf==='1m'?10000:tf==='3m'?12000:tf==='5m'?14000:tf==='15m'||tf==='30m'?22000:tf==='1h'?35000:tf==='4h'||tf==='6h'?60000:tf==='12h'?90000:120000
+const refreshMs=(tf:Timeframe)=>tf==='1s'?3000:tf==='5s'?5000:tf==='15s'?7500:tf==='30s'?10000:tf==='1m'?15000:tf==='3m'?18000:tf==='5m'?20000:tf==='15m'||tf==='30m'?30000:tf==='1h'?45000:tf==='4h'||tf==='6h'?60000:tf==='12h'?90000:120000
 const compact=(n:number,prefix='$')=>{
   if(!Number.isFinite(n))return'—'
   if(n>=1e9)return prefix+(n/1e9).toFixed(2)+'B'
