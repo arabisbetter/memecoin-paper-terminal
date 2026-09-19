@@ -11,6 +11,10 @@ type Pair={chainId?:string;dexId?:string;pairAddress?:string;baseToken?:{address
 const finite=(v:unknown,fallback=0)=>{const n=Number(v);return Number.isFinite(n)?n:fallback}
 const REQUIRED_LEGAL=[['tos','v2'],['privacy','v1'],['risk_disclosure','v2']] as const
 const PAPER_FEE_BPS=100
+const sleep=(ms:number)=>new Promise(resolve=>setTimeout(resolve,ms))
+const hashDelay=(key:string)=>{let h=0;for(let i=0;i<key.length;i++)h=(h*31+key.charCodeAt(i))>>>0;return 180+(h%520)}
+function cpBuy(referencePrice:number,liquidityUsd:number,notionalUsd:number){const quote=Math.max(liquidityUsd/2,1),token=quote/referencePrice,k=quote*token,newQuote=quote+notionalUsd,newToken=k/newQuote,out=token-newToken;if(out<=0)throw new Error('execution model could not produce a fill');const fillPrice=notionalUsd/out,impactPct=(fillPrice/referencePrice-1)*100;return{fillPrice,impactPct}}
+function cpSell(referencePrice:number,liquidityUsd:number,sellQty:number){const quote=Math.max(liquidityUsd/2,1),token=quote/referencePrice,k=quote*token,newToken=token+sellQty,newQuote=k/newToken,out=quote-newQuote;if(out<=0)throw new Error('execution model could not produce a fill');const fillPrice=out/sellQty,impactPct=(1-fillPrice/referencePrice)*100;return{fillPrice,impactPct,grossFillUsd:out}}
 
 async function fetchJson(url:string,timeoutMs=6500){
   const controller=new AbortController();const timer=setTimeout(()=>controller.abort(),timeoutMs)
@@ -112,11 +116,18 @@ Deno.serve(async(req:Request)=>{
     const [pair,solPrice]=await Promise.all([bestPair(mint),solUsd()])
     const quoteTimestamp=new Date().toISOString(),marketDataAgeMs=Math.max(0,Date.now()-marketStarted)
     if(marketDataAgeMs>10_000)return json({error:'Live market data is stale. New PAPER orders are temporarily paused.',code:'STALE_MARKET'},503)
-    const displayedPrice=finite(pair.priceUsd),marketCap=finite(pair.marketCap??pair.fdv),liquidity=finite(pair.liquidity?.usd)
-    if(displayedPrice<=0||liquidity<=0)return json({error:'token has insufficient live market data'},422)
-    const oneSideLiquidityUsd=Math.max(liquidity/2,1)
+    const displayedPrice=finite(pair.priceUsd),marketCap=finite(pair.marketCap??pair.fdv)
+    if(displayedPrice<=0)return json({error:'token has insufficient live market data'},422)
+    const maxSlippagePct=Math.max(.1,Math.min(50,finite(body?.maxSlippagePct,15)))
+    const simulatedLatencyMs=hashDelay(idempotencyKey)
+    await sleep(simulatedLatencyMs)
+    const executionPair=await bestPair(mint)
+    const executionReferencePrice=finite(executionPair.priceUsd),liquidity=finite(executionPair.liquidity?.usd)
+    if(executionReferencePrice<=0||liquidity<=0)return json({error:'token has insufficient live execution data'},422)
+    const marketMovePct=Math.abs(executionReferencePrice/displayedPrice-1)*100
+    if(marketMovePct>maxSlippagePct)return json({error:'PAPER order failed: live market moved beyond your max slippage during simulated execution latency.',code:'SLIPPAGE_EXCEEDED',marketMovePct,maxSlippagePct,simulatedLatencyMs},422)
     const feeBps=PAPER_FEE_BPS,feeRate=feeBps/10_000
-    const executionModelVersion='v3_evaluation_liquidity_approximation',quality='estimated'
+    const executionModelVersion='v4_constant_product_live_requote',quality='live-requoted-estimate'
 
     if(side==='buy'){
       const amountSol=finite(body?.amountSol)
@@ -129,13 +140,15 @@ Deno.serve(async(req:Request)=>{
         if(existingValue+notionalUsd>limit+0.000001)return json({error:'This buy would exceed the 25% per-token concentration cap.',code:'EVALUATION_CONCENTRATION_CAP',evaluation:preMark},422)
         if(!existing&&marks.length>=5)return json({error:'Evaluation allows at most 5 simultaneous open positions.',code:'EVALUATION_POSITION_LIMIT',evaluation:preMark},422)
       }
-      const impactRatio=Math.min(notionalUsd/oneSideLiquidityUsd,5)
-      const fillPrice=displayedPrice*(1+impactRatio),impactPct=impactRatio*100,fillMc=marketCap>0?marketCap*(fillPrice/displayedPrice):0,feeUsd=notionalUsd*feeRate
+      const model=cpBuy(executionReferencePrice,liquidity,notionalUsd)
+      const fillPrice=model.fillPrice,impactPct=model.impactPct,totalSlippagePct=Math.abs(fillPrice/displayedPrice-1)*100
+      if(totalSlippagePct>maxSlippagePct)return json({error:'PAPER order failed: simulated fill exceeded your max slippage.',code:'SLIPPAGE_EXCEEDED',marketMovePct,priceImpactPct:impactPct,totalSlippagePct,maxSlippagePct,simulatedLatencyMs},422)
+      const fillMc=marketCap>0?marketCap*(fillPrice/displayedPrice):0,feeUsd=notionalUsd*feeRate
       const requestFingerprint=`buy|${mint}|${amountSol.toFixed(12)}`
       const {data,error}=await admin.rpc('execute_paper_buy_v2',{p_user_id:uid,p_idempotency_key:idempotencyKey,p_request_fingerprint:requestFingerprint,p_mint:mint,p_ticker:pair.baseToken?.symbol||null,p_name:pair.baseToken?.name||null,p_image_url:pair.info?.imageUrl||null,p_pair_address:pair.pairAddress||null,p_dex_id:pair.dexId||null,p_amount_sol:amountSol,p_notional_usd:notionalUsd,p_displayed_price_usd:displayedPrice,p_fill_price_usd:fillPrice,p_displayed_mc_usd:marketCap||null,p_fill_mc_usd:fillMc||null,p_liquidity_usd:liquidity,p_price_impact_pct:impactPct,p_fee_usd:feeUsd,p_sol_price_usd:solPrice,p_quote_timestamp:quoteTimestamp,p_market_data_age_ms:marketDataAgeMs,p_execution_quality:quality,p_execution_model_version:executionModelVersion})
       if(error)throw new Error(error.message)
       const evaluation=activeEvaluation?await markEvaluation(admin,uid):null
-      return json({ok:true,paper:true,side:'buy',underReview:Boolean(risk?.flagged_for_review),dataStatus:'LIVE',market:{referencePriceUsd:displayedPrice,displayedMcUsd:marketCap,liquidityUsd:liquidity,solUsd:solPrice,quoteTimestamp,marketDataAgeMs},fill:{requestedAmountUsd:notionalUsd,requestedAmountNative:amountSol,simulatedFillPriceUsd:fillPrice,simulatedFillMcUsd:fillMc,priceImpactPct:impactPct,paperFeeUsd:feeUsd,feeBps,executionQuality:quality,executionModelVersion},account:data,evaluation})
+      return json({ok:true,paper:true,side:'buy',underReview:Boolean(risk?.flagged_for_review),dataStatus:'LIVE',market:{referencePriceUsd:displayedPrice,executionReferencePriceUsd:executionReferencePrice,displayedMcUsd:marketCap,liquidityUsd:liquidity,solUsd:solPrice,quoteTimestamp,marketDataAgeMs,marketMovePct,simulatedLatencyMs,maxSlippagePct},fill:{requestedAmountUsd:notionalUsd,requestedAmountNative:amountSol,simulatedFillPriceUsd:fillPrice,simulatedFillMcUsd:fillMc,priceImpactPct:impactPct,totalSlippagePct,paperFeeUsd:feeUsd,feeBps,executionQuality:quality,executionModelVersion},account:data,evaluation})
     }
 
     const sellPct=finite(body?.sellPct)
@@ -145,13 +158,16 @@ Deno.serve(async(req:Request)=>{
     const {data:position,error:positionError}=await admin.from('paper_positions').select('quantity_tokens,accounting_version').eq('user_id',uid).eq('token_id',tokenRow.id).eq('status','open').maybeSingle()
     if(positionError||!position)return json({error:'no open PAPER position'},422)
     if(position.accounting_version!=='usd_v2')return json({error:'legacy PAPER position cannot be sold in USD mode'},422)
-    const sellQty=finite(position.quantity_tokens)*(sellPct/100),grossUsd=sellQty*displayedPrice,impactRatio=Math.min(grossUsd/oneSideLiquidityUsd,5)
-    const fillPrice=displayedPrice/(1+impactRatio),impactPct=(1-fillPrice/displayedPrice)*100,fillMc=marketCap>0?marketCap*(fillPrice/displayedPrice):0
-    const grossFillUsd=sellQty*fillPrice,feeUsd=grossFillUsd*feeRate,requestFingerprint=`sell|${mint}|${sellPct.toFixed(6)}`
+    const sellQty=finite(position.quantity_tokens)*(sellPct/100)
+    const model=cpSell(executionReferencePrice,liquidity,sellQty)
+    const fillPrice=model.fillPrice,impactPct=model.impactPct,totalSlippagePct=Math.abs(fillPrice/displayedPrice-1)*100
+    if(totalSlippagePct>maxSlippagePct)return json({error:'PAPER order failed: simulated fill exceeded your max slippage.',code:'SLIPPAGE_EXCEEDED',marketMovePct,priceImpactPct:impactPct,totalSlippagePct,maxSlippagePct,simulatedLatencyMs},422)
+    const fillMc=marketCap>0?marketCap*(fillPrice/displayedPrice):0
+    const grossFillUsd=model.grossFillUsd,feeUsd=grossFillUsd*feeRate,requestFingerprint=`sell|${mint}|${sellPct.toFixed(6)}`
     const {data,error}=await admin.rpc('execute_paper_sell_v2',{p_user_id:uid,p_idempotency_key:idempotencyKey,p_request_fingerprint:requestFingerprint,p_mint:mint,p_sell_pct:sellPct,p_displayed_price_usd:displayedPrice,p_fill_price_usd:fillPrice,p_displayed_mc_usd:marketCap||null,p_fill_mc_usd:fillMc||null,p_liquidity_usd:liquidity,p_price_impact_pct:impactPct,p_fee_usd:feeUsd,p_sol_price_usd:solPrice,p_quote_timestamp:quoteTimestamp,p_market_data_age_ms:marketDataAgeMs,p_execution_quality:quality,p_execution_model_version:executionModelVersion})
     if(error)throw new Error(error.message)
     const evaluation=activeEvaluation?await markEvaluation(admin,uid):null
-    return json({ok:true,paper:true,side:'sell',underReview:Boolean(risk?.flagged_for_review),dataStatus:'LIVE',market:{referencePriceUsd:displayedPrice,displayedMcUsd:marketCap,liquidityUsd:liquidity,solUsd:solPrice,quoteTimestamp,marketDataAgeMs},fill:{requestedAmountUsd:grossFillUsd,requestedSellPct:sellPct,simulatedFillPriceUsd:fillPrice,simulatedFillMcUsd:fillMc,priceImpactPct:impactPct,paperFeeUsd:feeUsd,feeBps,executionQuality:quality,executionModelVersion},account:data,evaluation})
+    return json({ok:true,paper:true,side:'sell',underReview:Boolean(risk?.flagged_for_review),dataStatus:'LIVE',market:{referencePriceUsd:displayedPrice,executionReferencePriceUsd:executionReferencePrice,displayedMcUsd:marketCap,liquidityUsd:liquidity,solUsd:solPrice,quoteTimestamp,marketDataAgeMs,marketMovePct,simulatedLatencyMs,maxSlippagePct},fill:{requestedAmountUsd:grossFillUsd,requestedSellPct:sellPct,simulatedFillPriceUsd:fillPrice,simulatedFillMcUsd:fillMc,priceImpactPct:impactPct,totalSlippagePct,paperFeeUsd:feeUsd,feeBps,executionQuality:quality,executionModelVersion},account:data,evaluation})
   }catch(error){
     const message=error instanceof Error?error.message:'unknown error'
     if(admin&&userIdForLog){try{await admin.from('observability_events').insert({event_type:'paper_trade_failure',severity:'error',user_id:userIdForLog,details:{message}})}catch{}}
