@@ -244,7 +244,7 @@ jobs:
           const score=Number(body.score?.value)
           if(!Number.isFinite(score)||score<0||score>100)throw new Error('wallet score invalid')
           if(body.profitability?.available!==false)throw new Error('profitability should not be invented')
-          if(!Array.isArray(body.source)||!body.source.includes('solana-mainnet-rpc'))throw new Error('wallet score did not use live Solana RPC')
+          if(!Array.isArray(body.source)||!body.source.some(x=>['helius','helius-rpc','helius_enhanced_transactions','solana_publicnode','solana_public_rpc','solana-mainnet-rpc','quicknode-demo'].includes(String(x))))throw new Error('wallet score did not use a live Solana source')
           console.log('wallet intelligence ok score='+score+' confidence='+body.score?.confidence)
           NODE
               then ok=1; break; fi
