@@ -34,7 +34,9 @@ export async function GET(_req:Request,ctx:{params:Promise<{pool:string}>}){
     const json=await response.json() as GeckoTradesResponse
     const trades=(json.data||[]).map(item=>{
       const a=item.attributes||{},kind=String(a.kind||'').toLowerCase()==='sell'?'sell':'buy'
-      return{kind,volumeUsd:finite(a.volume_in_usd),priceUsd:finite(a.price_usd,a.price_to_in_usd,a.price_from_in_usd),txHash:String(a.tx_hash||''),trader:a.tx_from_address?String(a.tx_from_address):undefined,timestamp:String(a.block_timestamp||'')} satisfies MarketTrade
+      const tokenSidePrice=kind==='sell'?a.price_from_in_usd:a.price_to_in_usd
+      const oppositeSidePrice=kind==='sell'?a.price_to_in_usd:a.price_from_in_usd
+      return{kind,volumeUsd:finite(a.volume_in_usd),priceUsd:finite(a.price_usd,tokenSidePrice,oppositeSidePrice),txHash:String(a.tx_hash||''),trader:a.tx_from_address?String(a.tx_from_address):undefined,timestamp:String(a.block_timestamp||'')} satisfies MarketTrade
     }).filter(t=>t.txHash&&t.timestamp).slice(0,60)
     cache.set(pool,{at:Date.now(),trades})
     return NextResponse.json({trades,source:'geckoterminal',live:true,asOf:Date.now()},{headers:{'Cache-Control':'public, s-maxage=4, stale-while-revalidate=20'}})

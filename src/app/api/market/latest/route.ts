@@ -1,11 +1,13 @@
 import { NextResponse } from 'next/server'
 import { normalizePair } from '@/lib/market'
 import type { MarketToken } from '@/lib/types'
+import { readMarketFeedCache } from '@/lib/server/market-feed-cache'
 
 export const dynamic = 'force-dynamic'
 
 let lastGood:{at:number;tokens:MarketToken[];source:string}|null=null
-const CACHE_MS=2_500
+const CACHE_MS=20_000
+const MAX_STALE_MS=30*60_000
 
 type DiscoveryLink={label?:string;type?:string;url?:string}
 type DiscoveryItem={chainId?:string;tokenAddress?:string;icon?:string;description?:string;url?:string;links?:DiscoveryLink[]}
@@ -71,9 +73,7 @@ function linkFrom(meta:DiscoveryItem|undefined,kind:'website'|'twitter'|'telegra
 async function dexScreenerFeed():Promise<MarketToken[]>{
   const discoveryUrls=[
     'https://api.dexscreener.com/token-profiles/latest/v1',
-    'https://api.dexscreener.com/token-boosts/latest/v1',
     'https://api.dexscreener.com/token-boosts/top/v1',
-    'https://api.dexscreener.com/community-takeovers/latest/v1',
   ]
   const settled=await Promise.allSettled(discoveryUrls.map(url=>fetchJson<DiscoveryItem[]>(url)))
   const addresses:string[]=[]
@@ -87,7 +87,7 @@ async function dexScreenerFeed():Promise<MarketToken[]>{
       metadata.set(item.tokenAddress,{...previous,...item,links:item.links?.length?item.links:previous.links})
     }
   }
-  const unique=[...new Set(addresses)].slice(0,90)
+  const unique=[...new Set(addresses)].slice(0,60)
   if(!unique.length)throw new Error('DexScreener discovery returned no Solana tokens')
 
   const pairResponses=await Promise.all(chunks(unique,30).map(group=>fetchJson<unknown[]>(`https://api.dexscreener.com/tokens/v1/solana/${group.join(',')}`)))
@@ -147,27 +147,31 @@ async function geckoTerminalFeed():Promise<MarketToken[]>{
 
 export async function GET(){
   const now=Date.now()
-  if(lastGood&&now-lastGood.at<CACHE_MS)return NextResponse.json({tokens:lastGood.tokens,source:lastGood.source,live:true,cached:true,asOf:lastGood.at},{headers:{'Cache-Control':'public, s-maxage=2, stale-while-revalidate=8'}})
+  if(!lastGood){
+    const durable=await readMarketFeedCache('solana:latest')
+    if(durable)lastGood=durable
+  }
+  if(lastGood&&now-lastGood.at<CACHE_MS)return NextResponse.json({tokens:lastGood.tokens,source:lastGood.source,live:true,cached:true,asOf:lastGood.at},{headers:{'Cache-Control':'public, s-maxage=10, stale-while-revalidate=60'}})
 
   const errors:string[]=[]
   try{
-    const tokens=await dexScreenerFeed()
-    lastGood={at:Date.now(),tokens,source:'dexscreener'}
-    return NextResponse.json({tokens,source:'dexscreener',live:true,asOf:lastGood.at},{headers:{'Cache-Control':'public, s-maxage=2, stale-while-revalidate=8'}})
+    const tokens=await dexScreenerFeed(),at=Date.now()
+    lastGood={at,tokens,source:'dexscreener'}
+    return NextResponse.json({tokens,source:'dexscreener',live:true,asOf:at},{headers:{'Cache-Control':'public, s-maxage=10, stale-while-revalidate=60'}})
   }catch(error){
     errors.push(error instanceof Error?error.message:'DexScreener failed')
     console.error('market_latest_dexscreener_error',error)
   }
 
   try{
-    const tokens=await geckoTerminalFeed()
-    lastGood={at:Date.now(),tokens,source:'geckoterminal'}
-    return NextResponse.json({tokens,source:'geckoterminal',live:true,fallback:true,asOf:lastGood.at},{headers:{'Cache-Control':'public, s-maxage=4, stale-while-revalidate=15'}})
+    const tokens=await geckoTerminalFeed(),at=Date.now()
+    lastGood={at,tokens,source:'geckoterminal'}
+    return NextResponse.json({tokens,source:'geckoterminal',live:true,fallback:true,asOf:at},{headers:{'Cache-Control':'public, s-maxage=10, stale-while-revalidate=60'}})
   }catch(error){
     errors.push(error instanceof Error?error.message:'GeckoTerminal failed')
     console.error('market_latest_geckoterminal_error',error)
   }
 
-  if(lastGood)return NextResponse.json({tokens:lastGood.tokens,source:lastGood.source,live:false,stale:true,asOf:lastGood.at,warning:errors.join('; ')})
+  if(lastGood&&now-lastGood.at<MAX_STALE_MS)return NextResponse.json({tokens:lastGood.tokens,source:lastGood.source,live:false,stale:true,asOf:lastGood.at,warning:'Live providers are temporarily limited. Showing the last real market snapshot while PAPER retries. '+errors.join('; ')},{headers:{'Cache-Control':'public, s-maxage=5, stale-while-revalidate=30'}})
   return NextResponse.json({tokens:[],error:errors.join('; ')||'market feed unavailable'},{status:502})
 }

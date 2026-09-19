@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { normalizePair } from '@/lib/market'
 import type { MarketToken } from '@/lib/types'
+import { readMarketFeedCache } from '@/lib/server/market-feed-cache'
 
 export const dynamic='force-dynamic'
 
@@ -25,6 +26,9 @@ export async function GET(_req:NextRequest,ctx:{params:Promise<{mint:string}>}){
   if(!/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(mint))return NextResponse.json({error:'Invalid mint'},{status:400})
   const previous=cache.get(mint)
   if(previous&&Date.now()-previous.at<FRESH_MS)return NextResponse.json({token:previous.token,live:true,cached:true,asOf:previous.at})
+  const feedCache=await readMarketFeedCache('solana:latest')
+  const feedToken=feedCache?.tokens.find(t=>t.mint===mint)
+  if(feedToken&&feedCache&&Date.now()-feedCache.at<8_000)return NextResponse.json({token:feedToken,live:true,cached:true,asOf:feedCache.at,metadata:'market-feed-cache'})
 
   const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),7_000)
   try{
@@ -41,6 +45,7 @@ export async function GET(_req:NextRequest,ctx:{params:Promise<{mint:string}>}){
   }catch(error){
     console.error('market_token_lookup_error',{mint,error})
     if(previous)return NextResponse.json({token:previous.token,live:false,stale:true,asOf:previous.at,warning:error instanceof Error?error.message:'lookup failed'})
+    if(feedToken&&feedCache)return NextResponse.json({token:feedToken,live:false,stale:true,asOf:feedCache.at,warning:'Live token refresh is temporarily limited. Showing the last real market snapshot.'})
     return NextResponse.json({error:error instanceof Error?error.message:'lookup failed'},{status:502})
   }finally{clearTimeout(timer)}
 }

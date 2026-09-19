@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { normalizePair } from '@/lib/market'
 import type { MarketToken } from '@/lib/types'
+import { readMarketFeedCache } from '@/lib/server/market-feed-cache'
 
 export const dynamic='force-dynamic'
 const cache=new Map<string,{at:number;tokens:MarketToken[]}>()
@@ -13,6 +14,9 @@ export async function GET(req:NextRequest){
   const key=mints.slice().sort().join(',')
   const previous=cache.get(key)
   if(previous&&Date.now()-previous.at<CACHE_MS)return NextResponse.json({tokens:previous.tokens,live:true,cached:true,asOf:previous.at})
+  const feedCache=await readMarketFeedCache('solana:latest')
+  const cachedTokens=feedCache?feedCache.tokens.filter(t=>mints.includes(t.mint)):[]
+  if(feedCache&&cachedTokens.length===mints.length&&Date.now()-feedCache.at<20_000)return NextResponse.json({tokens:cachedTokens,live:true,cached:true,asOf:feedCache.at,source:'market-feed-cache'})
   const controller=new AbortController();const timer=setTimeout(()=>controller.abort(),7_000)
   try{
     const response=await fetch(`https://api.dexscreener.com/tokens/v1/solana/${mints.join(',')}`,{cache:'no-store',signal:controller.signal,headers:{Accept:'application/json'}})
@@ -27,6 +31,7 @@ export async function GET(req:NextRequest){
     return NextResponse.json({tokens,live:true,asOf:Date.now()},{headers:{'Cache-Control':'public, s-maxage=6, stale-while-revalidate=20'}})
   }catch(error){
     if(previous)return NextResponse.json({tokens:previous.tokens,live:false,stale:true,asOf:previous.at,warning:error instanceof Error?error.message:'batch lookup failed'})
+    if(feedCache&&cachedTokens.length)return NextResponse.json({tokens:cachedTokens,live:false,stale:true,asOf:feedCache.at,warning:'Live position pricing refresh is temporarily limited.'})
     return NextResponse.json({tokens:[],error:error instanceof Error?error.message:'batch lookup failed'},{status:502})
   }finally{clearTimeout(timer)}
 }
