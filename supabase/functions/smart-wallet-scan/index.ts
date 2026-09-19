@@ -26,6 +26,13 @@ async function rpc(endpoint:string,method:string,params:unknown[]){
   if((b as any)?.error)throw new Error((b as any).error?.message||method+' failed')
   return (b as any)?.result
 }
+async function rpcFallback(endpoints:string[],method:string,params:unknown[]){
+  let last:unknown=null
+  for(const endpoint of endpoints){
+    try{return{result:await rpc(endpoint,method,params),endpoint}}catch(error){last=error}
+  }
+  throw last instanceof Error?last:new Error(method+' failed across RPC providers')
+}
 async function priceHoldings(mints:string[]){
   const out=new Map<string,{price:number;liquidity:number;symbol:string|null}>()
   for(let i=0;i<mints.length;i+=30){
@@ -71,12 +78,15 @@ Deno.serve(async(req:Request)=>{
     if(!valid.test(address))return reply({error:'invalid Solana wallet'},400)
 
     const helius=Deno.env.get('HELIUS_API_KEY')
-    const endpoint=helius?'https://mainnet.helius-rpc.com/?api-key='+encodeURIComponent(helius):'https://api.mainnet-beta.solana.com'
-    const [balance,signatures,tokenAccounts]=await Promise.all([
-      rpc(endpoint,'getBalance',[address,{commitment:'confirmed'}]),
-      rpc(endpoint,'getSignaturesForAddress',[address,{limit:100,commitment:'confirmed'}]),
-      rpc(endpoint,'getTokenAccountsByOwner',[address,{programId:'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA'},{encoding:'jsonParsed',commitment:'confirmed'}]),
+    const heliusEndpoint=helius?'https://mainnet.helius-rpc.com/?api-key='+encodeURIComponent(helius):null
+    const endpoints=[...(heliusEndpoint?[heliusEndpoint]:[]),'https://solana-rpc.publicnode.com','https://api.mainnet.solana.com']
+    const [balanceCall,signatureCall,tokenCall]=await Promise.all([
+      rpcFallback(endpoints,'getBalance',[address,{commitment:'confirmed'}]),
+      rpcFallback(endpoints,'getSignaturesForAddress',[address,{limit:100,commitment:'confirmed'}]),
+      rpcFallback(endpoints,'getTokenAccountsByOwner',[address,{programId:'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA'},{encoding:'jsonParsed',commitment:'confirmed'}]),
     ])
+    const balance=balanceCall.result,signatures=signatureCall.result,tokenAccounts=tokenCall.result
+    const baseRpcSources=[balanceCall.endpoint,signatureCall.endpoint,tokenCall.endpoint].map(endpoint=>endpoint.includes('helius')?'helius':endpoint.includes('publicnode')?'solana_publicnode':'solana_public_rpc')
     const sigs=((signatures||[]) as Sig[])
     const now=Math.floor(Date.now()/1000),cutoff=now-30*86400
     const recent30=sigs.filter(s=>Number(s.blockTime||0)>=cutoff)
@@ -106,7 +116,8 @@ Deno.serve(async(req:Request)=>{
     const topPct=portfolio>0&&top?top.value/portfolio*100:null
 
     const swapCount30=swaps.filter(s=>Number(s.timestamp||0)>=cutoff).length
-    const activity=Math.min(30,Math.round(swapCount30/40*30))
+    const activityBasis=helius?swapCount30:recent30.length
+    const activity=Math.min(30,Math.round(activityBasis/40*30))
     const consistency=Math.min(25,Math.round(activeDays/15*25))
     const reliability=successPct==null?0:Math.max(0,Math.min(15,Math.round((successPct-85)/15*15)))
     const breadth=Math.min(15,Math.round(unique.size/15*15))
@@ -115,7 +126,7 @@ Deno.serve(async(req:Request)=>{
     const smartScore=Math.max(0,Math.min(100,activity+consistency+reliability+breadth+recency))
     const sample=Math.max(sigs.length,swaps.length)
     const confidence=helius&&sample>=50?'HIGH':sample>=20?'MEDIUM':'LOW'
-    const sources=['solana_rpc',...(helius?['helius_enhanced_transactions']:[]),...(priced.length?['dexscreener']:[])]
+    const sources=[...new Set(baseRpcSources),...(helius?['helius_enhanced_transactions']:[]),...(priced.length?['dexscreener']:[])]
     const snapshot={
       address,smart_score:smartScore,confidence,recent_tx_count:sigs.length,tx_success_pct:successPct,
       swap_count_30d:helius?swapCount30:null,active_days_30d:activeDays,unique_tokens_30d:helius?unique.size:null,
@@ -123,7 +134,7 @@ Deno.serve(async(req:Request)=>{
       last_activity_at:lastActivity?new Date(lastActivity*1000).toISOString():null,profitability_status:'UNKNOWN',
       estimated_realized_pnl_usd:null,estimated_win_rate_pct:null,sources,
       score_components:{activity,consistency,reliability,breadth,recency},
-      details:{profitability_note:'No historical P&L is claimed without reconstructable cost basis.',helius_enrichment:Boolean(helius),sampled_signatures:sigs.length,sampled_swaps:swaps.length,top_priced_holdings:priced.slice(0,8)},
+      details:{profitability_note:'No historical P&L is claimed without reconstructable cost basis.',activity_basis:helius?'parsed swaps':'recent signatures',helius_enrichment:Boolean(helius),sampled_signatures:sigs.length,sampled_swaps:swaps.length,top_priced_holdings:priced.slice(0,8)},
       observed_at:new Date().toISOString(),updated_at:new Date().toISOString()
     }
     const {error}=await admin.from('paper_smart_wallet_snapshots').upsert(snapshot,{onConflict:'address'})
