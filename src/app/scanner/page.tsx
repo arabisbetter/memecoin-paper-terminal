@@ -29,11 +29,10 @@ export default function ScannerPage(){
 
   async function deepScan(){
     setDeepBusy(true);setError('')
-    const candidates=baseRows.slice(0,10),next={...deep}
+    const candidates=baseRows.slice(0,6),next={...deep}
     try{
-      for(const t of candidates){
-        try{const r=await fetch('/api/intelligence/token/'+encodeURIComponent(t.mint),{cache:'no-store'}),j=await r.json();if(r.ok)next[t.mint]={top10Pct:Number(j.distribution?.top10Pct||0),mintRevoked:j.authority?.mintRevoked??null,freezeRevoked:j.authority?.freezeRevoked??null,stage:String(j.token?.stage||'—'),source:j.source||[]}}catch{}
-      }
+      const scanned=await Promise.all(candidates.map(async t=>{try{const r=await fetch('/api/intelligence/token/'+encodeURIComponent(t.mint),{cache:'no-store'}),j=await r.json();return r.ok?[t.mint,{top10Pct:Number(j.distribution?.top10Pct||0),mintRevoked:j.authority?.mintRevoked??null,freezeRevoked:j.authority?.freezeRevoked??null,stage:String(j.token?.stage||'—'),source:j.source||[]} as Deep] as const:null}catch{return null}}))
+      for(const row of scanned)if(row)next[row[0]]=row[1]
       setDeep(next);setDeepAt(Date.now())
     }finally{setDeepBusy(false)}
   }
@@ -46,7 +45,7 @@ export default function ScannerPage(){
       {numeric.map(([label,key])=><label key={String(key)}>{label}<input type="number" value={Number(filters[key])} onChange={e=>setFilters(v=>({...v,[key]:Number(e.target.value)||0}))}/></label>)}
       <label className="scanner-check"><input type="checkbox" checked={filters.requireMintRevoked} onChange={e=>setFilters(v=>({...v,requireMintRevoked:e.target.checked}))}/> Require mint authority revoked</label>
       <label className="scanner-check"><input type="checkbox" checked={filters.requireFreezeRevoked} onChange={e=>setFilters(v=>({...v,requireFreezeRevoked:e.target.checked}))}/> Require freeze authority revoked</label>
-      <button className="scanner-deep" disabled={deepBusy||!baseRows.length} onClick={()=>void deepScan()}><ScanSearch size={12}/>{deepBusy?'Scanning RPC…':'Deep scan top 10'}</button>
+      <button className="scanner-deep" disabled={deepBusy||!baseRows.length} onClick={()=>void deepScan()}><ScanSearch size={12}/>{deepBusy?'Scanning RPC…':'Deep scan top 6'}</button>
       {deepAt>0&&<small className="scanner-live-note">Deep data refreshed {new Date(deepAt).toLocaleTimeString()}</small>}
       <button onClick={()=>setFilters(defaults)}>Reset</button>
       <form onSubmit={savePreset}><input value={name} maxLength={48} onChange={e=>setName(e.target.value)} placeholder="Preset name"/><button><Save size={12}/> Save preset</button></form>
