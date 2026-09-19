@@ -30,7 +30,7 @@ const timeframeGroups:TimeframeGroup[]=[
   {label:'HOURS',items:[{value:'1h',label:'1 hour'},{value:'4h',label:'4 hours'},{value:'6h',label:'6 hours'},{value:'12h',label:'12 hours'},{value:'24h',label:'24 hours'}]},
   {label:'LONGER',items:[{value:'1M',label:'1 month'}]},
 ]
-const quickTfs:Timeframe[]=['1s','5s','15s','30s','1m','5m','15m','1h']
+const quickTfs:Timeframe[]=['1s','5s','1m','5m']
 const timeframeLabel=(tf:Timeframe)=>timeframeGroups.flatMap(g=>g.items).find(x=>x.value===tf)?.label||tf
 const isSecondTf=(tf:Timeframe)=>tf.endsWith('s')
 const refreshMs=(tf:Timeframe)=>tf==='1s'?3000:tf==='5s'?5000:tf==='15s'?7500:tf==='30s'?10000:tf==='1m'?15000:tf==='3m'?18000:tf==='5m'?20000:tf==='15m'||tf==='30m'?30000:tf==='1h'?45000:tf==='4h'||tf==='6h'?60000:tf==='12h'?90000:120000

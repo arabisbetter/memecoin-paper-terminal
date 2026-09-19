@@ -126,3 +126,33 @@ a,button{outline-offset:2px}a:focus-visible,button:focus-visible,input:focus-vis
 
 /* Pulse artwork is decorative; keep fixed feedback controls actionable in Chrome. */
 .pulse-img-terminal,.pulse-img-terminal *{pointer-events:none!important}
+
+/* Final fixed-layer ownership: the Feedback UI gets a viewport-level stacking
+   context so token cards can never win hit-testing in mobile Chrome. */
+.feedback-root{
+  position:fixed!important;
+  right:16px!important;
+  bottom:16px!important;
+  z-index:2147483000!important;
+  pointer-events:none!important;
+}
+.feedback-root>.feedback-launcher{
+  position:relative!important;
+  right:auto!important;
+  bottom:auto!important;
+  z-index:1!important;
+  pointer-events:auto!important;
+}
+.feedback-root>.feedback-backdrop{
+  position:fixed!important;
+  inset:0!important;
+  z-index:2!important;
+  pointer-events:auto!important;
+}
+.axiom-quick-tfs{display:flex!important;flex:0 0 auto!important;overflow:visible!important}
+@media(max-width:760px){
+  .feedback-root{
+    right:12px!important;
+    bottom:calc(18px + env(safe-area-inset-bottom,0px))!important;
+  }
+}
