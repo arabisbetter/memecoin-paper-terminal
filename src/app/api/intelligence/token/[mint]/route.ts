@@ -1,22 +1,27 @@
 import { NextRequest, NextResponse } from 'next/server'
 
 export const dynamic='force-dynamic'
-const RPC='https://api.mainnet-beta.solana.com'
+const RPCS=['https://api.mainnet-beta.solana.com','https://solana-rpc.publicnode.com']
 const valid=/^[1-9A-HJ-NP-Za-km-z]{32,44}$/
 type RpcResult<T>={result?:T;error?:{message?:string}}
 type Largest={address:string;amount:string;uiAmount?:number|null;uiAmountString?:string}
 type Pair={chainId?:string;dexId?:string;pairAddress?:string;priceUsd?:string;marketCap?:number;fdv?:number;liquidity?:{usd?:number};pairCreatedAt?:number;baseToken?:{address?:string;symbol?:string;name?:string}}
 type Gecko={data?:{attributes?:{ohlcv_list?:Array<[number,number,number,number,number,number]>}}}
 async function rpc<T>(method:string,params:unknown[]):Promise<T>{
-  const c=new AbortController(),timer=setTimeout(()=>c.abort(),9000)
-  try{
-    const r=await fetch(RPC,{method:'POST',cache:'no-store',signal:c.signal,headers:{'content-type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',id:1,method,params})})
-    if(!r.ok)throw new Error('Solana RPC '+r.status)
-    const body=await r.json() as RpcResult<T>
-    if(body.error)throw new Error(body.error.message||'Solana RPC error')
-    if(body.result===undefined)throw new Error('Solana RPC returned no result')
-    return body.result
-  }finally{clearTimeout(timer)}
+  let lastError:unknown=null
+  for(const endpoint of RPCS){
+    const c=new AbortController(),timer=setTimeout(()=>c.abort(),8000)
+    try{
+      const r=await fetch(endpoint,{method:'POST',cache:'no-store',signal:c.signal,headers:{'content-type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',id:1,method,params})})
+      if(!r.ok)throw new Error('Solana RPC '+r.status)
+      const body=await r.json() as RpcResult<T>
+      if(body.error)throw new Error(body.error.message||'Solana RPC error')
+      if(body.result===undefined)throw new Error('Solana RPC returned no result')
+      return body.result
+    }catch(error){lastError=error}
+    finally{clearTimeout(timer)}
+  }
+  throw lastError instanceof Error?lastError:new Error('All Solana RPC endpoints failed')
 }
 async function bestPair(mint:string){
   const r=await fetch('https://api.dexscreener.com/token-pairs/v1/solana/'+encodeURIComponent(mint),{cache:'no-store',headers:{Accept:'application/json'}})
