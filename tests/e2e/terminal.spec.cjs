@@ -48,7 +48,7 @@ test('Pulse workspace and Watchlist alert center render',async({page})=>{
 
 test('Part 8 research tools and command palette render',async({page})=>{
   await page.goto('/scanner',{waitUntil:'domcontentloaded'})
-  await expect(page.getByRole('heading',{name:/Find velocity/})).toBeVisible()
+  await expect(page.getByRole('heading',{name:/Filter the launch/})).toBeVisible()
 
   await page.goto('/heatmap',{waitUntil:'domcontentloaded'})
   await expect(page.getByRole('heading',{name:/Where attention is moving/})).toBeVisible()
