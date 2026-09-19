@@ -85,7 +85,7 @@ Deno.serve(async(req:Request)=>{
 
     const helius=Deno.env.get('HELIUS_API_KEY')
     const heliusEndpoint=helius?'https://mainnet.helius-rpc.com/?api-key='+encodeURIComponent(helius):null
-    const endpoints=[...(heliusEndpoint?[heliusEndpoint]:[]),'https://solana-rpc.publicnode.com','https://rpc.ankr.com/solana','https://api.mainnet.solana.com']
+    const endpoints=[...(heliusEndpoint?[heliusEndpoint]:[]),'https://solana-rpc.publicnode.com','https://rpc.ankr.com/solana','https://docs-demo.solana-mainnet.quiknode.pro/','https://api.mainnet.solana.com']
     const [balanceCall,signatureCall,tokenCall]=await Promise.all([
       rpcFallback(endpoints,'getBalance',[address,{commitment:'confirmed'}]),
       rpcFallback(endpoints,'getSignaturesForAddress',[address,{limit:100,commitment:'confirmed'}]),
