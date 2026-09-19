@@ -6,7 +6,7 @@ const TOKEN_PROGRAM='TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA'
 const valid=/^[1-9A-HJ-NP-Za-km-z]{32,44}$/
 type RpcResult<T>={result?:T;error?:{message?:string}}
 type Sig={signature:string;err:unknown;blockTime?:number|null}
-type TokenAccount={account?:{data?:{parsed?:{info?:{mint?:string;tokenAmount?:{uiAmount?:number|null;uiAmountString?:string}}}}}}}
+type TokenAccount={account?:{data?:{parsed?:{info?:{mint?:string;tokenAmount?:{uiAmount?:number|null;uiAmountString?:string}}}}}}
 type DexPair={chainId?:string;baseToken?:{address?:string;name?:string;symbol?:string};priceUsd?:string;liquidity?:{usd?:number}}
 type Meta={symbol?:string;name?:string;priceUsd:number;liquidity:number}
 
