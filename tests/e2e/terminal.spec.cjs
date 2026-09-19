@@ -73,8 +73,10 @@ test('candle API fills gaps and chart survives repeated timeframe changes',async
 
   await page.goto('/spot?mint='+encodeURIComponent(token.mint),{waitUntil:'domcontentloaded'})
   await completeOnboarding(page,'chart')
+  const quickTimeframes=page.locator('.axiom-quick-tfs')
+  await expect(quickTimeframes).toBeVisible()
   for(const timeframe of ['1s','5s','1m','5m']){
-    await page.getByRole('button',{name:timeframe,exact:true}).click()
+    await quickTimeframes.getByRole('button',{name:timeframe,exact:true}).click()
     await expect(page.locator('.lw-chart-canvas canvas').first()).toBeVisible({timeout:25000})
     await expect(page.getByText(/chart unavailable/i)).toHaveCount(0)
   }

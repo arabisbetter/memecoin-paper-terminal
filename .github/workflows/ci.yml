@@ -42,8 +42,8 @@ jobs:
       - name: Install pinned browser test runner
         run: npm install --no-save --package-lock=false @playwright/test@1.55.0
 
-      - name: Install Chromium for E2E
-        run: npx playwright install --with-deps chromium webkit
+      - name: Install Chromium, Firefox, and WebKit for E2E
+        run: npx playwright install --with-deps chromium firefox webkit
 
       - name: Start production build
         run: |
@@ -312,7 +312,7 @@ jobs:
           console.log('PWA shell ok shortcuts='+m.shortcuts.length)
           NODE
 
-      - name: Run Chromium terminal E2E
+      - name: Run desktop and mobile cross-browser E2E
         run: npx playwright test
 
       - name: Print server log on failure

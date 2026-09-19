@@ -29,7 +29,7 @@ export async function GET(_req:Request,ctx:{params:Promise<{pool:string}>}){
   const controller=new AbortController();const timer=setTimeout(()=>controller.abort(),8_000)
   try{
     const url=`https://api.geckoterminal.com/api/v2/networks/solana/pools/${encodeURIComponent(pool)}/trades`
-    const response=await fetch(url,{cache:'no-store',signal:controller.signal,headers:{Accept:'application/json;version=20230203'}})
+    const response=await fetch(url,{cache:'force-cache',next:{revalidate:5},signal:controller.signal,headers:{Accept:'application/json;version=20230203'}})
     if(!response.ok)throw new Error(`trades ${response.status}`)
     const json=await response.json() as GeckoTradesResponse
     const trades=(json.data||[]).map(item=>{

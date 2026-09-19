@@ -103,3 +103,23 @@ a,button{outline-offset:2px}a:focus-visible,button:focus-visible,input:focus-vis
   .tf-picker-menu button{width:100%;min-height:42px!important}
   .feedback-launcher{right:12px!important;bottom:calc(18px + env(safe-area-inset-bottom,0px))!important;z-index:760!important;min-width:92px!important;min-height:44px!important;transform:none!important;animation:none!important;transition:none!important}
 }
+
+/* Final interaction hardening.
+   Token artwork is decorative; card/link parents own the click target. */
+.ax-app img,.pulse-console img,.terminal-table-row img,.token-row-shell img,.header-search-results img{
+  pointer-events:none!important;
+}
+.feedback-launcher{
+  z-index:2147483000!important;
+  pointer-events:auto!important;
+  isolation:isolate;
+}
+.feedback-backdrop{z-index:2147483001!important}
+@media(max-width:760px){
+  .feedback-launcher{
+    right:12px!important;
+    bottom:calc(18px + env(safe-area-inset-bottom,0px))!important;
+    min-width:92px!important;
+    min-height:44px!important;
+  }
+}

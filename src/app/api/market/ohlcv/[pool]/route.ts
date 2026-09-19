@@ -66,7 +66,7 @@ function normalizeCandles(rows:Candle[],bucketSeconds:number,maxRows=420){
 const firstPositive=(...values:unknown[])=>{for(const value of values){const n=Number(value);if(Number.isFinite(n)&&n>0)return n}return 0}
 
 async function fetchTradeCandles(pool:string,bucketSeconds:number,signal:AbortSignal){
-  const response=await fetch(`https://api.geckoterminal.com/api/v2/networks/solana/pools/${encodeURIComponent(pool)}/trades`,{cache:'no-store',signal,headers:{Accept:'application/json;version=20230203'}})
+  const response=await fetch(`https://api.geckoterminal.com/api/v2/networks/solana/pools/${encodeURIComponent(pool)}/trades`,{cache:'force-cache',next:{revalidate:Math.max(3,bucketSeconds)},signal,headers:{Accept:'application/json;version=20230203'}})
   if(!response.ok)throw new Error(`trades ${response.status}`)
   const json=await response.json() as GeckoTradesResponse
   const prints=(json.data||[]).map(item=>{const a=item.attributes||{},ms=Date.parse(String(a.block_timestamp||'')),kind=String(a.kind||'').toLowerCase(),tokenSidePrice=kind==='sell'?a.price_from_in_usd:a.price_to_in_usd,oppositeSidePrice=kind==='sell'?a.price_to_in_usd:a.price_from_in_usd,price=firstPositive(a.price_usd,tokenSidePrice,oppositeSidePrice),volume=firstPositive(a.volume_in_usd);return{time:Number.isFinite(ms)?Math.floor(ms/1000):0,price,volume}}).filter(p=>p.time>0&&p.price>0).sort((a,b)=>a.time-b.time)
@@ -105,7 +105,7 @@ export async function GET(req:NextRequest,ctx:{params:Promise<{pool:string}>}){
   try{
     const url=new URL(`https://api.geckoterminal.com/api/v2/networks/solana/pools/${encodeURIComponent(pool)}/ohlcv/${config.unit}`)
     url.searchParams.set('aggregate',config.aggregate);url.searchParams.set('limit',String(config.limit));url.searchParams.set('currency','usd');url.searchParams.set('token','base');url.searchParams.set('include_empty_intervals','false')
-    const response=await fetch(url,{cache:'no-store',signal:controller.signal,headers:{Accept:'application/json;version=20230203'}})
+    const response=await fetch(url,{cache:'force-cache',next:{revalidate:Math.max(10,config.cdnSeconds)},signal:controller.signal,headers:{Accept:'application/json;version=20230203'}})
     if(!response.ok)throw new Error(`OHLCV ${response.status}`)
     const json=await response.json() as GeckoResponse
     let candles=(json.data?.attributes?.ohlcv_list||[]).map(([time,open,high,low,close,volume])=>({time,open,high,low,close,volume})).filter(c=>[c.time,c.open,c.high,c.low,c.close].every(Number.isFinite)).sort((a,b)=>a.time-b.time)
