@@ -33,7 +33,7 @@ export default function CommunityPage(){
       const user=await ensurePaperUser(supabase);setMe(user.id)
       const {data:follows,error:fe}=await supabase.from('paper_social_follows').select('following_id').eq('follower_id',user.id)
       if(fe)throw fe
-      const ids=(follows||[]).map(x=>String(x.following_id));setFollowing(ids)
+      const ids=(follows||[]).map((x:{following_id:string})=>String(x.following_id));setFollowing(ids)
       const postQ=supabase.from('paper_social_posts').select('id,user_id,body,token_address,token_symbol,created_at,profiles(username,display_name,avatar_url,avatar_emoji,accent),paper_social_likes(user_id)').is('deleted_at',null).order('created_at',{ascending:false}).limit(80)
       const cardQ=supabase.from('paper_trade_cards').select('trade_id,user_id,token_symbol,action,notional_usd,realized_pnl_usd,verified,created_at,profiles(username,display_name,avatar_url,avatar_emoji,accent)').order('created_at',{ascending:false}).limit(80)
       const actQ=supabase.from('paper_activity_events').select('id,user_id,event_type,token_symbol,created_at,profiles(username,display_name,avatar_url,avatar_emoji,accent)').order('created_at',{ascending:false}).limit(80)
