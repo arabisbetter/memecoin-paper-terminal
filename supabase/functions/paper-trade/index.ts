@@ -1,4 +1,5 @@
 import { createClient } from 'npm:@supabase/supabase-js@2.116.0'
+import { constantProductBuy, constantProductSell, deterministicLatencyMs } from '../_shared/paper-execution.ts'
 
 const corsHeaders={
   'Access-Control-Allow-Origin':'*',
@@ -12,9 +13,6 @@ const finite=(v:unknown,fallback=0)=>{const n=Number(v);return Number.isFinite(n
 const REQUIRED_LEGAL=[['tos','v2'],['privacy','v1'],['risk_disclosure','v2']] as const
 const PAPER_FEE_BPS=100
 const sleep=(ms:number)=>new Promise(resolve=>setTimeout(resolve,ms))
-const hashDelay=(key:string)=>{let h=0;for(let i=0;i<key.length;i++)h=(h*31+key.charCodeAt(i))>>>0;return 180+(h%520)}
-function cpBuy(referencePrice:number,liquidityUsd:number,notionalUsd:number){const quote=Math.max(liquidityUsd/2,1),token=quote/referencePrice,k=quote*token,newQuote=quote+notionalUsd,newToken=k/newQuote,out=token-newToken;if(out<=0)throw new Error('execution model could not produce a fill');const fillPrice=notionalUsd/out,impactPct=(fillPrice/referencePrice-1)*100;return{fillPrice,impactPct}}
-function cpSell(referencePrice:number,liquidityUsd:number,sellQty:number){const quote=Math.max(liquidityUsd/2,1),token=quote/referencePrice,k=quote*token,newToken=token+sellQty,newQuote=k/newToken,out=quote-newQuote;if(out<=0)throw new Error('execution model could not produce a fill');const fillPrice=out/sellQty,impactPct=(1-fillPrice/referencePrice)*100;return{fillPrice,impactPct,grossFillUsd:out}}
 
 async function fetchJson(url:string,timeoutMs=6500){
   const controller=new AbortController();const timer=setTimeout(()=>controller.abort(),timeoutMs)
@@ -119,7 +117,7 @@ Deno.serve(async(req:Request)=>{
     const displayedPrice=finite(pair.priceUsd),marketCap=finite(pair.marketCap??pair.fdv)
     if(displayedPrice<=0)return json({error:'token has insufficient live market data'},422)
     const maxSlippagePct=Math.max(.1,Math.min(50,finite(body?.maxSlippagePct,15)))
-    const simulatedLatencyMs=hashDelay(idempotencyKey)
+    const simulatedLatencyMs=deterministicLatencyMs(idempotencyKey)
     await sleep(simulatedLatencyMs)
     const executionPair=await bestPair(mint)
     const executionReferencePrice=finite(executionPair.priceUsd),liquidity=finite(executionPair.liquidity?.usd)
@@ -140,7 +138,7 @@ Deno.serve(async(req:Request)=>{
         if(existingValue+notionalUsd>limit+0.000001)return json({error:'This buy would exceed the 25% per-token concentration cap.',code:'EVALUATION_CONCENTRATION_CAP',evaluation:preMark},422)
         if(!existing&&marks.length>=5)return json({error:'Evaluation allows at most 5 simultaneous open positions.',code:'EVALUATION_POSITION_LIMIT',evaluation:preMark},422)
       }
-      const model=cpBuy(executionReferencePrice,liquidity,notionalUsd)
+      const model=constantProductBuy(executionReferencePrice,liquidity,notionalUsd)
       const fillPrice=model.fillPrice,impactPct=model.impactPct,totalSlippagePct=Math.abs(fillPrice/displayedPrice-1)*100
       if(totalSlippagePct>maxSlippagePct)return json({error:'PAPER order failed: simulated fill exceeded your max slippage.',code:'SLIPPAGE_EXCEEDED',marketMovePct,priceImpactPct:impactPct,totalSlippagePct,maxSlippagePct,simulatedLatencyMs},422)
       const fillMc=marketCap>0?marketCap*(fillPrice/displayedPrice):0,feeUsd=notionalUsd*feeRate
@@ -159,7 +157,7 @@ Deno.serve(async(req:Request)=>{
     if(positionError||!position)return json({error:'no open PAPER position'},422)
     if(position.accounting_version!=='usd_v2')return json({error:'legacy PAPER position cannot be sold in USD mode'},422)
     const sellQty=finite(position.quantity_tokens)*(sellPct/100)
-    const model=cpSell(executionReferencePrice,liquidity,sellQty)
+    const model=constantProductSell(executionReferencePrice,liquidity,sellQty)
     const fillPrice=model.fillPrice,impactPct=model.impactPct,totalSlippagePct=Math.abs(fillPrice/displayedPrice-1)*100
     if(totalSlippagePct>maxSlippagePct)return json({error:'PAPER order failed: simulated fill exceeded your max slippage.',code:'SLIPPAGE_EXCEEDED',marketMovePct,priceImpactPct:impactPct,totalSlippagePct,maxSlippagePct,simulatedLatencyMs},422)
     const fillMc=marketCap>0?marketCap*(fillPrice/displayedPrice):0
