@@ -177,6 +177,39 @@ jobs:
           console.log(`market tape ok trades=${body.trades.length}`)
           NODE
 
+      - name: Verify live server indicators
+        run: |
+          pool=$(cat /tmp/paper-pool.txt)
+          ok=0
+          for attempt in 1 2 3; do
+            if curl -fsS "http://127.0.0.1:3000/api/market/indicators/$pool?tf=1m" -o /tmp/paper-indicators.json; then
+              if node - <<'NODE'
+          const fs=require('fs')
+          const body=JSON.parse(fs.readFileSync('/tmp/paper-indicators.json','utf8'))
+          if(body.live!==true)throw new Error('indicator payload is not live')
+          if(body.source!=='geckoterminal')throw new Error('unexpected indicator source')
+          if(Number(body.candles)<30)throw new Error('not enough candles for indicators')
+          for(const path of [['ema9'],['ema21'],['vwap']]){
+            if(!Number.isFinite(Number(body.indicators?.[path[0]])))throw new Error(path[0]+' is invalid')
+          }
+          if(!Number.isFinite(Number(body.indicators?.rsi14)))throw new Error('RSI is invalid')
+          if(!Number.isFinite(Number(body.indicators?.macd?.histogram)))throw new Error('MACD histogram is invalid')
+          if(!Number.isFinite(Number(body.indicators?.bollinger20?.upper)))throw new Error('Bollinger upper is invalid')
+          console.log('server indicators ok candles='+body.candles+' rsi='+body.indicators.rsi14)
+          NODE
+              then ok=1; break; fi
+            fi
+            sleep 4
+          done
+          if [ "$ok" -ne 1 ]; then cat /tmp/paper-indicators.json 2>/dev/null || true; exit 1; fi
+          curl -fsS "http://127.0.0.1:3000/api/market/indicators/$pool?tf=1m" -o /tmp/paper-indicators-cached.json
+          node - <<'NODE'
+          const fs=require('fs')
+          const body=JSON.parse(fs.readFileSync('/tmp/paper-indicators-cached.json','utf8'))
+          if(body.cached!==true)throw new Error('second indicator request did not hit server cache')
+          console.log('indicator cache ok')
+          NODE
+
       - name: Verify shared PAPER execution model
         run: |
           node --experimental-strip-types --input-type=module - <<'NODE'
@@ -262,9 +295,22 @@ jobs:
 
       - name: Verify public PAPER routes and brand assets
         run: |
-          for route in / /discover /spot /pulse /portfolio /chains /wallets /watchlist /scanner /smart-money /heatmap /compare /workspaces /journal /replay /rewards /leaderboards /profile /coin /legal /opengraph-image /twitter-image /icon.svg /robots.txt /sitemap.xml /manifest.webmanifest; do
+          for route in / /discover /spot /pulse /portfolio /chains /wallets /watchlist /scanner /smart-money /heatmap /compare /workspaces /journal /replay /community /status /rewards /leaderboards /profile /coin /legal /opengraph-image /twitter-image /icon.svg /robots.txt /sitemap.xml /manifest.webmanifest; do
             curl -fsS "http://127.0.0.1:3000$route" >/dev/null
           done
+
+      - name: Verify PAPER PWA shell
+        run: |
+          curl -fsS http://127.0.0.1:3000/sw.js -o /tmp/paper-sw.js
+          grep -q "paper-shell-v10-1" /tmp/paper-sw.js
+          grep -q "url.pathname.startsWith('/api/')" /tmp/paper-sw.js
+          curl -fsS http://127.0.0.1:3000/manifest.webmanifest -o /tmp/paper-manifest.json
+          node - <<'NODE'
+          const fs=require('fs')
+          const m=JSON.parse(fs.readFileSync('/tmp/paper-manifest.json','utf8'))
+          if(m.display!=='standalone'||m.scope!=='/'||!Array.isArray(m.shortcuts)||m.shortcuts.length<3)throw new Error('PWA manifest incomplete')
+          console.log('PWA shell ok shortcuts='+m.shortcuts.length)
+          NODE
 
       - name: Run Chromium terminal E2E
         run: npx playwright test

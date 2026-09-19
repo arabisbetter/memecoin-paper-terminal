@@ -11,6 +11,7 @@ import {
 } from 'lightweight-charts'
 import { createClient } from '@/lib/supabase/client'
 import ChartDrawingOverlay, { type DrawingTool } from '@/components/ChartDrawingOverlay'
+import ServerIndicatorStrip from '@/components/ServerIndicatorStrip'
 
 type Candle={time:number;open:number;high:number;low:number;close:number;volume:number}
 type Timeframe='1s'|'5s'|'15s'|'30s'|'1m'|'3m'|'5m'|'15m'|'30m'|'1h'|'4h'|'6h'|'12h'|'24h'|'1M'
@@ -611,6 +612,8 @@ export default function CandleChart({
             <span className={summary.change>=0?'gain':'loss'}>{summary.change>=0?'+':''}{summary.change.toFixed(2)}%</span>
           </>}
         </div>
+
+        <ServerIndicatorStrip pool={poolAddress} timeframe={tf}/>
 
         <div className="axiom-live-strip">
           <span className={'chart-live-badge '+status.toLowerCase()}><i/>{loading?'SYNCING':status}</span>

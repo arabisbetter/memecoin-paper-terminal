@@ -66,7 +66,7 @@ test('Part 8 research tools and command palette render',async({page})=>{
   await expect(page.getByRole('heading',{name:'Trade Replay'})).toBeVisible()
 
   await page.keyboard.press('Control+k')
-  await expect(page.getByPlaceholder(/Search token, CA, scanner/)).toBeVisible()
+  await expect(page.getByPlaceholder(/Search token, CA/)).toBeVisible()
   await expect(page.getByText('Launch scanner',{exact:true})).toBeVisible()
   await expect(page.getByText('Trading journal',{exact:true})).toBeVisible()
 })
@@ -102,4 +102,40 @@ test('Part 9 live intelligence surfaces render against live APIs',async({page,re
   await page.goto('/spot?mint='+encodeURIComponent(token.mint),{waitUntil:'domcontentloaded'})
   await expect(page.getByText('MAX SLIPPAGE')).toBeVisible()
   await expect(page.getByLabel('Custom max slippage')).toBeVisible()
+})
+
+
+test('Part 10 community rewards leaderboards status and server indicators render',async({page,request})=>{
+  const marketRes=await request.get('/api/market/latest')
+  expect(marketRes.ok()).toBeTruthy()
+  const market=await marketRes.json()
+  const token=(market.tokens||[]).find(t=>t&&t.mint&&t.pairAddress&&Number(t.priceUsd)>0)
+  expect(token).toBeTruthy()
+
+  await page.goto('/community',{waitUntil:'domcontentloaded'})
+  await expect(page.getByRole('heading',{name:'Trader feed'})).toBeVisible()
+  await expect(page.getByText('POST TO PAPER',{exact:true})).toBeVisible()
+  await expect(page.getByRole('button',{name:'GLOBAL',exact:true})).toBeVisible()
+  await expect(page.getByRole('button',{name:'FOLLOWING',exact:true})).toBeVisible()
+
+  await page.goto('/leaderboards',{waitUntil:'domcontentloaded'})
+  await expect(page.getByRole('heading',{name:/Performance, not one lucky click/})).toBeVisible()
+  for(const name of ['TODAY','WEEK','MONTH','ALL TIME'])await expect(page.getByRole('button',{name,exact:true})).toBeVisible()
+  await expect(page.getByRole('button',{name:'Consistency',exact:true})).toBeVisible()
+  await expect(page.getByRole('button',{name:'Low Drawdown',exact:true})).toBeVisible()
+
+  await page.goto('/rewards',{waitUntil:'domcontentloaded'})
+  await expect(page.getByRole('heading',{name:/Levels, badges, and points/})).toBeVisible()
+  await expect(page.getByText('MILESTONE BADGES',{exact:true})).toBeVisible()
+  await expect(page.getByText('First Fill',{exact:true})).toBeVisible()
+
+  await page.goto('/status',{waitUntil:'domcontentloaded'})
+  await expect(page.getByRole('heading',{name:/Live provider and monitor health/})).toBeVisible()
+  await expect(page.getByText('MARKET PROVIDERS',{exact:true})).toBeVisible()
+  await expect(page.getByText('BACKGROUND COMPONENTS',{exact:true})).toBeVisible()
+
+  await page.goto('/spot?mint='+encodeURIComponent(token.mint),{waitUntil:'domcontentloaded'})
+  await expect(page.locator('.server-indicator-strip')).toBeVisible({timeout:20000})
+  await expect(page.getByText('RSI 14',{exact:true})).toBeVisible()
+  await expect(page.getByText('MACD HIST',{exact:true})).toBeVisible()
 })
