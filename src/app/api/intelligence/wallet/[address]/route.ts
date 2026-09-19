@@ -59,6 +59,28 @@ function clamp(n:number){return Math.max(0,Math.min(100,Math.round(n)))}
 export async function GET(_req:NextRequest,ctx:{params:Promise<{address:string}>}){
   const {address}=await ctx.params
   if(!valid.test(address))return NextResponse.json({error:'Invalid Solana wallet address'},{status:400})
+  const intelBase=(process.env.PAPER_INTEL_SUPABASE_URL||process.env.NEXT_PUBLIC_SUPABASE_URL||'').replace(/\/$/,'')
+  if(intelBase){
+    try{
+      const edge=await fetch(intelBase+'/functions/v1/smart-wallet-scan?address='+encodeURIComponent(address),{cache:'no-store',headers:{Accept:'application/json'}})
+      if(edge.ok){
+        const body=await edge.json(),snap=body?.wallet||{}
+        const confidence=String(snap.confidence||'LOW').toUpperCase()
+        const confidencePct=confidence==='HIGH'?90:confidence==='MEDIUM'?65:35
+        const score=Number(snap.smart_score||0)
+        const label=score>=80?'HIGH SIGNAL':score>=65?'STRONG':score>=50?'ACTIVE':'LOW CONFIDENCE'
+        const priced=Array.isArray(snap.details?.top_priced_holdings)?snap.details.top_priced_holdings:[]
+        return NextResponse.json({
+          address,live:true,dataStatus:body?.dataStatus||'LIVE',asOf:Date.now(),source:Array.isArray(snap.sources)?snap.sources:[],
+          score:{value:score,label,confidence:confidencePct,components:snap.score_components||{}},
+          metrics:{balanceSol:Number(snap.sol_balance||0),portfolioValueUsd:Number(snap.priced_portfolio_usd||0),pricedHoldings:Number(snap.priced_holding_count||0),totalTokenHoldings:Number(snap.priced_holding_count||0),topHoldingSharePct:Number(snap.top_holding_pct||0),liquidHoldingSharePct:0,txSuccessRatePct:Number(snap.tx_success_pct||0),active24h:0,active7d:Number(snap.recent_tx_count||0),lastActivityAt:snap.last_activity_at||null},
+          profitability:{available:false,reason:'Exact realized P&L and win rate are not claimed without reconstructable historical cost basis.'},
+          topHoldings:priced.map((h:any)=>({mint:h.mint,amount:h.amount,symbol:h.symbol||null,priceUsd:Number(h.price||0),liquidityUsd:Number(h.liquidity||0),valueUsd:Number(h.value||0)})).slice(0,8),
+          recent:[]
+        },{headers:{'Cache-Control':'public, s-maxage=20, stale-while-revalidate=60'}})
+      }
+    }catch{}
+  }
   try{
     const now=Date.now()/1000
     const [balanceResult,signatures,tokenResult]=await Promise.all([
