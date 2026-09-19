@@ -11,6 +11,7 @@ const actions:Action[]=[
   {id:'pulse',label:'Pulse',hint:'New pairs · trending · migrated',href:'/pulse',icon:'pulse'},
   {id:'portfolio',label:'Portfolio analytics',hint:'P&L · equity · fills',href:'/portfolio',icon:'portfolio'},
   {id:'wallets',label:'Wallet intelligence',hint:'Track a Solana wallet',href:'/wallets',icon:'wallets'},
+  {id:'smart-money',label:'Smart-wallet radar',hint:'Live observed wallet scoring',href:'/smart-money',icon:'wallets'},
   {id:'watchlist',label:'Watchlists & alerts',hint:'Price alerts',href:'/watchlist',icon:'watchlist'},
   {id:'replay',label:'Trade replay',hint:'Practice historical launches',href:'/replay',icon:'replay'},
   {id:'scanner',label:'Launch scanner',hint:'Velocity · buy pressure · new pairs',href:'/scanner',icon:'scanner'},

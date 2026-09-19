@@ -49,6 +49,7 @@ jobs:
         run: |
           NEXT_PUBLIC_SUPABASE_URL=https://bpnhybmptjenrjntvmsz.supabase.co \
           NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=placeholder \
+          PAPER_INTEL_SUPABASE_URL=https://aehatnwbwyzpdsdqhkjv.supabase.co \
           npm start -- -p 3000 > /tmp/paper-next.log 2>&1 &
           echo $! > /tmp/paper-next.pid
 
@@ -176,9 +177,92 @@ jobs:
           console.log(`market tape ok trades=${body.trades.length}`)
           NODE
 
+      - name: Verify shared PAPER execution model
+        run: |
+          node --experimental-strip-types --input-type=module - <<'NODE'
+          const m=await import('./supabase/functions/_shared/paper-execution.ts')
+          const buy=m.constantProductBuy(1,100000,1000)
+          const sell=m.constantProductSell(1,100000,1000)
+          if(!(buy.fillPrice>1&&buy.impactPct>0))throw new Error('buy model did not apply positive impact')
+          if(!(sell.fillPrice<1&&sell.impactPct>0&&sell.grossFillUsd>0))throw new Error('sell model did not apply negative impact')
+          const a=m.deterministicLatencyMs('same-key'),b=m.deterministicLatencyMs('same-key')
+          if(a!==b||a<180||a>699)throw new Error('deterministic latency is invalid')
+          console.log('execution model ok',buy,sell,{latency:a})
+          NODE
+
+      - name: Verify live holder intelligence
+        run: |
+          mint="EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"
+          ok=0
+          for attempt in 1 2 3; do
+            if curl -fsS "http://127.0.0.1:3000/api/intelligence/token/$mint" -o /tmp/paper-token-intel.json; then
+              if MINT="$mint" node - <<'NODE'
+          const fs=require('fs')
+          const body=JSON.parse(fs.readFileSync('/tmp/paper-token-intel.json','utf8'))
+          if(body.live!==true)throw new Error('token intelligence is not live')
+          if(!Array.isArray(body.distribution?.holders)||body.distribution.holders.length===0)throw new Error('holder map returned zero accounts')
+          if(!Array.isArray(body.source)||!body.source.includes('solana-mainnet-rpc'))throw new Error('holder intelligence did not use live Solana RPC')
+          if(body.token?.mint!==process.env.MINT)throw new Error('token intelligence mint mismatch')
+          if(!Number.isFinite(Number(body.distribution.top10Pct)))throw new Error('top10 holder concentration invalid')
+          console.log('holder intelligence ok mint='+process.env.MINT+' holders='+body.distribution.holders.length+' top10='+body.distribution.top10Pct)
+          NODE
+              then ok=1; break; fi
+            fi
+            sleep 4
+          done
+          if [ "$ok" -ne 1 ]; then cat /tmp/paper-token-intel.json 2>/dev/null || true; exit 1; fi
+
+      - name: Verify live smart-wallet scoring
+        run: |
+          wallet=""
+          node - <<'NODE'
+          const fs=require('fs')
+          const market=JSON.parse(fs.readFileSync('/tmp/paper-market.json','utf8'))
+          fs.writeFileSync('/tmp/paper-pools.txt',(market.tokens||[]).map(t=>t.pairAddress).filter(Boolean).slice(0,10).join('\n'))
+          NODE
+          while IFS= read -r pool; do
+            [ -z "$pool" ] && continue
+            if curl -fsS "http://127.0.0.1:3000/api/market/trades/$pool" -o /tmp/paper-wallet-tape.json; then
+              wallet=$(node - <<'NODE'
+          const fs=require('fs')
+          const body=JSON.parse(fs.readFileSync('/tmp/paper-wallet-tape.json','utf8'))
+          const row=(body.trades||[]).find(t=>/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(String(t.trader||'')))
+          process.stdout.write(row?.trader||'')
+          NODE
+              )
+              [ -n "$wallet" ] && break
+            fi
+          done < /tmp/paper-pools.txt
+          if [ -z "$wallet" ]; then echo "No live trader address found across sampled pools"; exit 1; fi
+          ok=0
+          for attempt in 1 2 3; do
+            if curl -fsS "http://127.0.0.1:3000/api/intelligence/wallet/$wallet" -o /tmp/paper-wallet-intel.json; then
+              if node - <<'NODE'
+          const fs=require('fs')
+          const body=JSON.parse(fs.readFileSync('/tmp/paper-wallet-intel.json','utf8'))
+          if(body.live!==true)throw new Error('wallet intelligence is not live')
+          const score=Number(body.score?.value)
+          if(!Number.isFinite(score)||score<0||score>100)throw new Error('wallet score invalid')
+          if(body.profitability?.available!==false)throw new Error('profitability should not be invented')
+          if(!Array.isArray(body.source)||!body.source.some(x=>['helius','helius-rpc','helius_enhanced_transactions','solana_publicnode','solana_public_rpc','solana-mainnet-rpc','quicknode-demo'].includes(String(x))))throw new Error('wallet score did not use a live Solana source')
+          console.log('wallet intelligence ok score='+score+' confidence='+body.score?.confidence)
+          NODE
+              then ok=1; break; fi
+            fi
+            sleep 4
+          done
+          if [ "$ok" -ne 1 ]; then cat /tmp/paper-wallet-intel.json 2>/dev/null || true; exit 1; fi
+          curl -fsS "http://127.0.0.1:3000/api/intelligence/smart-wallets" -o /tmp/paper-smart-wallets.json
+          node - <<'NODE'
+          const fs=require('fs')
+          const body=JSON.parse(fs.readFileSync('/tmp/paper-smart-wallets.json','utf8'))
+          if(body.live!==true||!Array.isArray(body.wallets))throw new Error('smart-wallet leaderboard payload invalid')
+          console.log('smart-wallet feed ok wallets='+body.wallets.length)
+          NODE
+
       - name: Verify public PAPER routes and brand assets
         run: |
-          for route in / /discover /spot /pulse /portfolio /chains /wallets /watchlist /scanner /heatmap /compare /workspaces /journal /replay /rewards /leaderboards /profile /coin /legal /opengraph-image /twitter-image /icon.svg /robots.txt /sitemap.xml /manifest.webmanifest; do
+          for route in / /discover /spot /pulse /portfolio /chains /wallets /watchlist /scanner /smart-money /heatmap /compare /workspaces /journal /replay /rewards /leaderboards /profile /coin /legal /opengraph-image /twitter-image /icon.svg /robots.txt /sitemap.xml /manifest.webmanifest; do
             curl -fsS "http://127.0.0.1:3000$route" >/dev/null
           done
 

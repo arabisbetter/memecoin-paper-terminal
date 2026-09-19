@@ -48,7 +48,7 @@ test('Pulse workspace and Watchlist alert center render',async({page})=>{
 
 test('Part 8 research tools and command palette render',async({page})=>{
   await page.goto('/scanner',{waitUntil:'domcontentloaded'})
-  await expect(page.getByRole('heading',{name:/Find velocity/})).toBeVisible()
+  await expect(page.getByRole('heading',{name:/Filter velocity, then verify concentration/})).toBeVisible()
 
   await page.goto('/heatmap',{waitUntil:'domcontentloaded'})
   await expect(page.getByRole('heading',{name:/Where attention is moving/})).toBeVisible()
@@ -69,4 +69,37 @@ test('Part 8 research tools and command palette render',async({page})=>{
   await expect(page.getByPlaceholder(/Search token, CA, scanner/)).toBeVisible()
   await expect(page.getByText('Launch scanner',{exact:true})).toBeVisible()
   await expect(page.getByText('Trading journal',{exact:true})).toBeVisible()
+})
+
+
+test('Part 9 live intelligence surfaces render against live APIs',async({page,request})=>{
+  const marketRes=await request.get('/api/market/latest')
+  expect(marketRes.ok()).toBeTruthy()
+  const market=await marketRes.json()
+  const tokens=(market.tokens||[]).filter(t=>t&&t.mint&&t.pairAddress).slice(0,12)
+  expect(tokens.length).toBeGreaterThan(0)
+  let token=null
+  for(const candidate of tokens){
+    const intel=await request.get('/api/intelligence/token/'+encodeURIComponent(candidate.mint))
+    if(intel.ok()){const body=await intel.json();if(Array.isArray(body.distribution?.holders)&&body.distribution.holders.length){token=candidate;break}}
+  }
+  expect(token).toBeTruthy()
+
+  await page.goto('/scanner',{waitUntil:'domcontentloaded'})
+  const deepButton=page.getByRole('button',{name:/Deep scan top 6/i})
+  await expect(deepButton).toBeVisible()
+  await deepButton.click()
+  await expect(page.getByText(/Deep data refreshed/i)).toBeVisible({timeout:30000})
+  await expect(page.getByText(/Require mint authority revoked/i)).toBeVisible()
+
+  await page.goto('/smart-money',{waitUntil:'domcontentloaded'})
+  await expect(page.getByRole('heading',{name:/Score wallets without pretending/i})).toBeVisible()
+
+  await page.goto('/token/EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v/intelligence',{waitUntil:'domcontentloaded'})
+  await expect(page.getByText('TOP HOLDER BUBBLES')).toBeVisible({timeout:20000})
+  await expect(page.getByText('LIVE LIFECYCLE')).toBeVisible()
+
+  await page.goto('/spot?mint='+encodeURIComponent(token.mint),{waitUntil:'domcontentloaded'})
+  await expect(page.getByText('MAX SLIPPAGE')).toBeVisible()
+  await expect(page.getByLabel('Custom max slippage')).toBeVisible()
 })
