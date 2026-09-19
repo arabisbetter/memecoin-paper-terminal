@@ -34,6 +34,9 @@ jobs:
       - name: Audit production dependencies
         run: npm audit --omit=dev --audit-level=high
 
+      - name: Verify deterministic PAPER execution model
+        run: node tests/execution-model.mjs
+
       - run: npm run build
         env:
           NEXT_PUBLIC_SUPABASE_URL: https://bpnhybmptjenrjntvmsz.supabase.co
@@ -178,7 +181,7 @@ jobs:
 
       - name: Verify public PAPER routes and brand assets
         run: |
-          for route in / /discover /spot /pulse /portfolio /chains /wallets /watchlist /scanner /heatmap /compare /workspaces /journal /replay /rewards /leaderboards /profile /coin /legal /opengraph-image /twitter-image /icon.svg /robots.txt /sitemap.xml /manifest.webmanifest; do
+          for route in / /discover /spot /pulse /portfolio /chains /wallets /watchlist /scanner /smart-money /heatmap /compare /workspaces /journal /replay /rewards /leaderboards /profile /coin /legal /opengraph-image /twitter-image /icon.svg /robots.txt /sitemap.xml /manifest.webmanifest; do
             curl -fsS "http://127.0.0.1:3000$route" >/dev/null
           done
 
