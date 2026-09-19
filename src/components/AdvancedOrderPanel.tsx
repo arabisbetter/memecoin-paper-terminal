@@ -24,13 +24,16 @@ type ConditionalOrder={
 const money=(n:number)=>!Number.isFinite(n)?'—':n>=1?('$'+n.toFixed(4)):('$'+n.toPrecision(5))
 
 export default function AdvancedOrderPanel({
-  token,side,amountSol,sellPct,hasPosition,onChanged
+  token,side,amountSol,sellPct,hasPosition,slippageBps=1000,priorityFeeSol=0,dexFeeBps=30,onChanged
 }:{
   token:MarketToken|null
   side:Side
   amountSol:number
   sellPct:number
   hasPosition:boolean
+  slippageBps?:number
+  priorityFeeSol?:number
+  dexFeeBps?:number
   onChanged?:()=>void
 }){
   const supabase=useMemo(()=>{try{return createClient()}catch{return null}},[])
@@ -97,6 +100,7 @@ export default function AdvancedOrderPanel({
         sellPct:side==='sell'?sellPct:undefined,
         expiresInHours:expiresHours,
         currentPriceUsd:token.priceUsd,
+        slippageBps,priorityFeeSol,dexFeeBps,
         idempotencyKey:crypto.randomUUID(),
       }
       const {data,error}=await supabase.functions.invoke('paper-advanced-orders',{body})
