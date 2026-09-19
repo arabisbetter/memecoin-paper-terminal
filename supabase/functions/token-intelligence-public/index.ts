@@ -76,6 +76,7 @@ Deno.serve(async(req:Request)=>{
       ...(helius?[{url:'https://mainnet.helius-rpc.com/?api-key='+encodeURIComponent(helius),name:'helius'}]:[]),
       {url:'https://solana-rpc.publicnode.com',name:'publicnode'},
       {url:'https://rpc.ankr.com/solana',name:'ankr'},
+      {url:'https://docs-demo.solana-mainnet.quiknode.pro/',name:'quicknode-demo'},
       {url:'https://api.mainnet.solana.com',name:'solana-official'},
     ]
     const [mintCall,largestCall]=await Promise.all([
