@@ -70,3 +70,27 @@ test('Part 8 research tools and command palette render',async({page})=>{
   await expect(page.getByText('Launch scanner',{exact:true})).toBeVisible()
   await expect(page.getByText('Trading journal',{exact:true})).toBeVisible()
 })
+
+
+test('Part 9 live intelligence surfaces render against live APIs',async({page,request})=>{
+  const marketRes=await request.get('/api/market/latest')
+  expect(marketRes.ok()).toBeTruthy()
+  const market=await marketRes.json()
+  const token=(market.tokens||[]).find(t=>t&&t.mint&&t.pairAddress)
+  expect(token).toBeTruthy()
+
+  await page.goto('/scanner',{waitUntil:'domcontentloaded'})
+  await expect(page.getByRole('button',{name:/Deep scan top 10/i})).toBeVisible()
+  await expect(page.getByText(/Require mint authority revoked/i)).toBeVisible()
+
+  await page.goto('/smart-money',{waitUntil:'domcontentloaded'})
+  await expect(page.getByRole('heading',{name:/Score wallets without pretending/i})).toBeVisible()
+
+  await page.goto('/token/'+encodeURIComponent(token.mint)+'/intelligence',{waitUntil:'domcontentloaded'})
+  await expect(page.getByText('TOP HOLDER BUBBLES')).toBeVisible({timeout:20000})
+  await expect(page.getByText('LIVE LIFECYCLE')).toBeVisible()
+
+  await page.goto('/spot?mint='+encodeURIComponent(token.mint),{waitUntil:'domcontentloaded'})
+  await expect(page.getByText('MAX SLIPPAGE')).toBeVisible()
+  await expect(page.getByLabel('Custom max slippage')).toBeVisible()
+})
