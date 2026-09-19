@@ -1,6 +1,6 @@
 import { createClient } from 'npm:@supabase/supabase-js@2.116.0'
 
-const reply=(body:unknown,status=200)=>new Response(JSON.stringify(body),{status,headers:{'Content-Type':'application/json','Access-Control-Allow-Origin':'*','Access-Control-Allow-Headers':'authorization, x-client-info, apikey, content-type'}})
+const reply=(body:unknown,status=200)=>new Response(JSON.stringify(body),{status,headers:{'Content-Type':'application/json','Access-Control-Allow-Origin':'*','Access-Control-Allow-Headers':'authorization, x-client-info, apikey, content-type, x-paper-internal-token'}})
 const finite=(v:unknown,f=0)=>{const n=Number(v);return Number.isFinite(n)?n:f}
 const valid=/^[1-9A-HJ-NP-Za-km-z]{32,44}$/
 type Sig={signature:string;err:unknown;blockTime:number|null}
@@ -49,17 +49,26 @@ Deno.serve(async(req:Request)=>{
   if(req.method!=='POST')return reply({error:'method not allowed'},405)
   try{
     const {url,pub,secret}=keys()
-    const auth=req.headers.get('Authorization')
-    if(!auth?.startsWith('Bearer '))return reply({error:'PAPER account required'},401)
-    const userClient=createClient(url,pub,{global:{headers:{Authorization:auth}},auth:{persistSession:false,autoRefreshToken:false}})
-    const {data:{user},error:userError}=await userClient.auth.getUser()
-    if(userError||!user)return reply({error:'invalid session'},401)
+    const admin=createClient(url,secret,{auth:{persistSession:false,autoRefreshToken:false}})
+    const internal=req.headers.get('x-paper-internal-token')||''
+    let subject=''
+    if(internal){
+      const {data:validInternal}=await admin.rpc('paper_verify_internal_token',{p_token:internal})
+      if(validInternal!==true)return reply({error:'unauthorized'},401)
+      subject='internal-monitor'
+    }else{
+      const auth=req.headers.get('Authorization')
+      if(!auth?.startsWith('Bearer '))return reply({error:'PAPER account required'},401)
+      const userClient=createClient(url,pub,{global:{headers:{Authorization:auth}},auth:{persistSession:false,autoRefreshToken:false}})
+      const {data:{user},error:userError}=await userClient.auth.getUser()
+      if(userError||!user)return reply({error:'invalid session'},401)
+      subject=user.id
+      const {data:rate}=await admin.rpc('paper_consume_server_rate_limit_v1',{p_scope:'smart-wallet-scan',p_subject:user.id,p_limit:30,p_window_seconds:60})
+      if(rate?.allowed===false)return reply({error:'Too many wallet scans. Try again shortly.'},429)
+    }
     const body=await req.json().catch(()=>({}))
     const address=String(body?.address||'').trim()
     if(!valid.test(address))return reply({error:'invalid Solana wallet'},400)
-    const admin=createClient(url,secret,{auth:{persistSession:false,autoRefreshToken:false}})
-    const {data:rate}=await admin.rpc('paper_consume_server_rate_limit_v1',{p_scope:'smart-wallet-scan',p_subject:user.id,p_limit:30,p_window_seconds:60})
-    if(rate?.allowed===false)return reply({error:'Too many wallet scans. Try again shortly.'},429)
 
     const helius=Deno.env.get('HELIUS_API_KEY')
     const endpoint=helius?'https://mainnet.helius-rpc.com/?api-key='+encodeURIComponent(helius):'https://api.mainnet-beta.solana.com'
