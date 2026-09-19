@@ -38,8 +38,7 @@ export default function RewardsPage(){
     if(te)throw te;if(ee)throw ee;if(le)throw le;if(be)throw be;if(!alive)return
     setTotal((t as Total|null)||{user_id:user.id,points:0,qualifying_trades:0,last_earned_at:null});setEvents((e||[]) as Event[]);setLeaders((l||[]) as Total[]);setBadges((b||[]) as Badge[]);setError('')
   }catch(err){if(alive)setError(err instanceof Error?err.message:'Rewards unavailable')}finally{if(alive)setLoading(false)}}
-  void load();const id=window.setInterval(()=>{if(!document.hidden)void load()},10000);return()=>{live=false;clearInterval(id)}
-  let live=true
+  void load();const id=window.setInterval(()=>{if(!document.hidden)void load()},10000);return()=>{alive=false;clearInterval(id)}
   },[supabase])
 
   const points=Number(total?.points||0),fills=Number(total?.qualifying_trades||0),tier=tierFor(points),next=nextTier(points),progress=next?Math.max(0,Math.min(100,(points-tier.min)/(next.min-tier.min)*100)):100
