@@ -48,7 +48,7 @@ test('Pulse workspace and Watchlist alert center render',async({page})=>{
 
 test('Part 8 research tools and command palette render',async({page})=>{
   await page.goto('/scanner',{waitUntil:'domcontentloaded'})
-  await expect(page.getByRole('heading',{name:/Find velocity/})).toBeVisible()
+  await expect(page.getByRole('heading',{name:/Filter the launch/})).toBeVisible()
 
   await page.goto('/heatmap',{waitUntil:'domcontentloaded'})
   await expect(page.getByRole('heading',{name:/Where attention is moving/})).toBeVisible()
@@ -69,4 +69,24 @@ test('Part 8 research tools and command palette render',async({page})=>{
   await expect(page.getByPlaceholder(/Search token, CA, scanner/)).toBeVisible()
   await expect(page.getByText('Launch scanner',{exact:true})).toBeVisible()
   await expect(page.getByText('Trading journal',{exact:true})).toBeVisible()
+})
+
+
+test('Part 9 first four controls render and are interactive',async({page})=>{
+  await page.goto('/smart-money',{waitUntil:'domcontentloaded'})
+  await expect(page.getByRole('heading',{name:/Score what can actually be observed/})).toBeVisible()
+  await expect(page.getByRole('button',{name:/Discover from live tapes/})).toBeVisible()
+  await expect(page.getByText('No wealth bonus. No invented win rate.')).toBeVisible()
+
+  await page.goto('/scanner',{waitUntil:'domcontentloaded'})
+  await expect(page.getByRole('button',{name:/Deep scan top 20/})).toBeVisible()
+  await expect(page.getByText('Max top-10 %')).toBeVisible()
+  await expect(page.getByText('Authorities')).toBeVisible()
+
+  await page.goto('/spot',{waitUntil:'domcontentloaded'})
+  await expect(page.getByLabel('Slippage limit')).toBeVisible()
+  await expect(page.getByLabel('Priority fee')).toBeVisible()
+  await expect(page.getByLabel('Assumed DEX fee')).toBeVisible()
+  await page.getByLabel('Slippage limit').selectOption('500')
+  await expect(page.getByLabel('Slippage limit')).toHaveValue('500')
 })

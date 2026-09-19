@@ -34,6 +34,9 @@ jobs:
       - name: Audit production dependencies
         run: npm audit --omit=dev --audit-level=high
 
+      - name: Verify deterministic PAPER execution model
+        run: node tests/execution-model.mjs
+
       - run: npm run build
         env:
           NEXT_PUBLIC_SUPABASE_URL: https://bpnhybmptjenrjntvmsz.supabase.co
@@ -130,6 +133,19 @@ jobs:
           console.log(`Base contract lookup ok ${body.token.symbol||body.token.mint}`)
           NODE
 
+      - name: Verify live wallet RPC failover
+        run: |
+          curl -fsS "http://127.0.0.1:3000/api/wallet/solana/78Bo7xxGWBEvqbh3VMKvkFG4Z63cXKSJ2LCEXAanhN7a" -o /tmp/paper-wallet.json
+          node - <<'NODE'
+          const fs=require('fs')
+          const body=JSON.parse(fs.readFileSync('/tmp/paper-wallet.json','utf8'))
+          if(body.live!==true)throw new Error('wallet endpoint did not report live data')
+          if(!Number.isFinite(Number(body.balanceSol)))throw new Error('wallet endpoint returned invalid SOL balance')
+          if(!Array.isArray(body.recent))throw new Error('wallet endpoint returned invalid recent transactions')
+          if(!String(body.source||'').includes('solana'))throw new Error('wallet endpoint did not report a Solana RPC source')
+          console.log(`wallet live source=${body.source} balance=${body.balanceSol} recent=${body.recent.length}`)
+          NODE
+
       - name: Verify real OHLCV, one-second candles, and market tape
         run: |
           pool=$(cat /tmp/paper-pool.txt)
@@ -178,7 +194,7 @@ jobs:
 
       - name: Verify public PAPER routes and brand assets
         run: |
-          for route in / /discover /spot /pulse /portfolio /chains /wallets /watchlist /scanner /heatmap /compare /workspaces /journal /replay /rewards /leaderboards /profile /coin /legal /opengraph-image /twitter-image /icon.svg /robots.txt /sitemap.xml /manifest.webmanifest; do
+          for route in / /discover /spot /pulse /portfolio /chains /wallets /watchlist /scanner /smart-money /heatmap /compare /workspaces /journal /replay /rewards /leaderboards /profile /coin /legal /opengraph-image /twitter-image /icon.svg /robots.txt /sitemap.xml /manifest.webmanifest; do
             curl -fsS "http://127.0.0.1:3000$route" >/dev/null
           done
 

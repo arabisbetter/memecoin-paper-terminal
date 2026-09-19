@@ -100,6 +100,9 @@ Deno.serve(async(req:Request)=>{
     const amountSol=finite(body?.amountSol)
     const sellPct=finite(body?.sellPct)
     const expiresInHours=Math.max(1,Math.min(168,Math.round(finite(body?.expiresInHours,24))))
+    const slippageBps=Math.max(10,Math.min(5000,finite(body?.slippageBps,1000)))
+    const priorityFeeSol=Math.max(0,Math.min(.1,finite(body?.priorityFeeSol,0)))
+    const dexFeeBps=Math.max(0,Math.min(500,finite(body?.dexFeeBps,30)))
     const idempotencyKey=String(body?.idempotencyKey||'').trim()
 
     if(!/^[1-9A-HJ-NP-Za-km-z]{32,60}$/.test(mint))return json({error:'invalid Solana mint'},400)
@@ -121,7 +124,7 @@ Deno.serve(async(req:Request)=>{
       if(!position)return json({error:'no open PAPER position'},422)
     }
 
-    const fingerprint=[side,mint,orderType,triggerPriceUsd.toPrecision(15),side==='buy'?amountSol.toPrecision(15):sellPct.toPrecision(12),expiresInHours].join('|')
+    const fingerprint=[side,mint,orderType,triggerPriceUsd.toPrecision(15),side==='buy'?amountSol.toPrecision(15):sellPct.toPrecision(12),expiresInHours,slippageBps,priorityFeeSol.toFixed(9),dexFeeBps].join('|')
     const {data:existing,error:existingError}=await admin.from('paper_conditional_orders')
       .select('*').eq('user_id',uid).eq('idempotency_key',idempotencyKey).maybeSingle()
     if(existingError)throw new Error(existingError.message)
@@ -143,7 +146,7 @@ Deno.serve(async(req:Request)=>{
       sell_pct:side==='sell'?sellPct:null,
       status:'pending',
       expires_at:new Date(Date.now()+expiresInHours*3600_000).toISOString(),
-      metadata:{source:'terminal',created_price_usd:finite(body?.currentPriceUsd)||null,request_fingerprint:fingerprint},
+      metadata:{source:'terminal',created_price_usd:finite(body?.currentPriceUsd)||null,slippage_bps:slippageBps,priority_fee_sol:priorityFeeSol,dex_fee_bps:dexFeeBps,execution_model:'v4_constant_product_slippage',request_fingerprint:fingerprint},
       updated_at:new Date().toISOString(),
     }
 
