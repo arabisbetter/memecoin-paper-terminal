@@ -33,25 +33,30 @@ async function guaranteeProfile(supabase:SupabaseClient){
   if(error)throw new Error(`Could not initialize PAPER balance: ${error.message}`)
 }
 
-export async function ensurePaperUser(supabase: SupabaseClient): Promise<User> {
-  const { data: sessionData, error: sessionError } = await supabase.auth.getSession()
+let pendingEnsure:Promise<User>|null=null
+
+async function ensurePaperUserOnce(supabase:SupabaseClient):Promise<User>{
+  const {data:sessionData,error:sessionError}=await supabase.auth.getSession()
   if(sessionError)throw sessionError
 
-  if (sessionData.session?.user) {
+  if(sessionData.session?.user){
     await guaranteeProfile(supabase)
     void registerSessionSignal(supabase,sessionData.session.user)
     return sessionData.session.user
   }
 
-  const { data, error } = await supabase.auth.signInAnonymously({
-    options: {
-      data: { account_type: 'paper' },
-    },
+  const {data,error}=await supabase.auth.signInAnonymously({
+    options:{data:{account_type:'paper'}},
   })
-
-  if (error) throw error
-  if (!data.user) throw new Error('Could not create PAPER account')
+  if(error)throw error
+  if(!data.user)throw new Error('Could not create PAPER account')
   await guaranteeProfile(supabase)
   void registerSessionSignal(supabase,data.user)
   return data.user
+}
+
+export function ensurePaperUser(supabase:SupabaseClient):Promise<User>{
+  if(pendingEnsure)return pendingEnsure
+  pendingEnsure=ensurePaperUserOnce(supabase).finally(()=>{pendingEnsure=null})
+  return pendingEnsure
 }

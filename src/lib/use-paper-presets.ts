@@ -36,7 +36,7 @@ export function usePaperPresets(){
         if(!alive)return
         setUserId(user.id)
         const {data,error}=await (supabase as any).from('paper_trade_presets').select('p1,p2,p3,p4').eq('user_id',user.id).maybeSingle()
-        if(error){void logClientError('presets',error,{stage:'save'});throw error}
+        if(error)throw error
         const next=data?clean([data.p1,data.p2,data.p3,data.p4]):DEFAULT_PAPER_PRESETS
         if(!data){
           const {error:insertError}=await (supabase as any).from('paper_trade_presets').insert({user_id:user.id,p1:next[0],p2:next[1],p3:next[2],p4:next[3]})
@@ -60,7 +60,7 @@ export function usePaperPresets(){
     const {error}=await (supabase as any).from('paper_trade_presets').upsert({
       user_id:userId,p1:next[0],p2:next[1],p3:next[2],p4:next[3],updated_at:new Date().toISOString()
     },{onConflict:'user_id'})
-    if(error)throw error
+    if(error){void logClientError('presets',error,{stage:'save'});throw error}
     return next
   },[supabase,userId])
 
