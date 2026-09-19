@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 
 export const dynamic='force-dynamic'
-const RPC='https://api.mainnet-beta.solana.com'
+const RPCS=['https://api.mainnet-beta.solana.com','https://solana-rpc.publicnode.com']
 const TOKEN_PROGRAM='TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA'
 const valid=/^[1-9A-HJ-NP-Za-km-z]{32,44}$/
 type RpcResult<T>={result?:T;error?:{message?:string}}
@@ -11,15 +11,20 @@ type DexPair={chainId?:string;baseToken?:{address?:string;name?:string;symbol?:s
 type Meta={symbol?:string;name?:string;priceUsd:number;liquidity:number}
 
 async function rpc<T>(method:string,params:unknown[]):Promise<T>{
-  const c=new AbortController(),timer=setTimeout(()=>c.abort(),8000)
-  try{
-    const r=await fetch(RPC,{method:'POST',cache:'no-store',signal:c.signal,headers:{'content-type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',id:1,method,params})})
-    if(!r.ok)throw new Error('Solana RPC '+r.status)
-    const body=await r.json() as RpcResult<T>
-    if(body.error)throw new Error(body.error.message||'Solana RPC error')
-    if(body.result===undefined)throw new Error('Solana RPC returned no result')
-    return body.result
-  }finally{clearTimeout(timer)}
+  let lastError:unknown=null
+  for(const endpoint of RPCS){
+    const c=new AbortController(),timer=setTimeout(()=>c.abort(),8000)
+    try{
+      const r=await fetch(endpoint,{method:'POST',cache:'no-store',signal:c.signal,headers:{'content-type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',id:1,method,params})})
+      if(!r.ok)throw new Error('Solana RPC '+r.status)
+      const body=await r.json() as RpcResult<T>
+      if(body.error)throw new Error(body.error.message||'Solana RPC error')
+      if(body.result===undefined)throw new Error('Solana RPC returned no result')
+      return body.result
+    }catch(error){lastError=error}
+    finally{clearTimeout(timer)}
+  }
+  throw lastError instanceof Error?lastError:new Error('All Solana RPC endpoints failed')
 }
 const chunks=<T,>(a:T[],n:number)=>Array.from({length:Math.ceil(a.length/n)},(_,i)=>a.slice(i*n,(i+1)*n))
 async function dexMetadata(mints:string[]){
