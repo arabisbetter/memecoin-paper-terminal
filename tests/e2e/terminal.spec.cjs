@@ -76,7 +76,13 @@ test('Part 9 live intelligence surfaces render against live APIs',async({page,re
   const marketRes=await request.get('/api/market/latest')
   expect(marketRes.ok()).toBeTruthy()
   const market=await marketRes.json()
-  const token=(market.tokens||[]).find(t=>t&&t.mint&&t.pairAddress)
+  const tokens=(market.tokens||[]).filter(t=>t&&t.mint&&t.pairAddress).slice(0,12)
+  expect(tokens.length).toBeGreaterThan(0)
+  let token=null
+  for(const candidate of tokens){
+    const intel=await request.get('/api/intelligence/token/'+encodeURIComponent(candidate.mint))
+    if(intel.ok()){const body=await intel.json();if(Array.isArray(body.distribution?.holders)&&body.distribution.holders.length){token=candidate;break}}
+  }
   expect(token).toBeTruthy()
 
   await page.goto('/scanner',{waitUntil:'domcontentloaded'})
