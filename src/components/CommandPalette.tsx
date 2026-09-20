@@ -55,7 +55,7 @@ export default function CommandPalette(){
     return()=>{clearTimeout(start);controller.abort()}
   },[open])
   useEffect(()=>{if(open)return;const start=window.setTimeout(()=>{setQuery('');setActive(0)},0);return()=>clearTimeout(start)},[open])
-  useEffect(()=>{if(!open)return;const previous=document.body.style.overflow;document.body.style.overflow='hidden';return()=>{document.body.style.overflow=previous;requestAnimationFrame(()=>triggerRef.current?.focus())}},[open])
+  useEffect(()=>{if(!open)return;const previous=document.body.style.overflow,trigger=triggerRef.current;document.body.style.overflow='hidden';return()=>{document.body.style.overflow=previous;requestAnimationFrame(()=>trigger?.focus())}},[open])
 
   const results=useMemo(()=>{
     const q=query.trim().toLowerCase()
