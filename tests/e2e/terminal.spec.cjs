@@ -101,6 +101,61 @@ test('candle API fills gaps and chart survives repeated timeframe changes',async
     await expect(page.locator('.lw-chart-canvas canvas').first()).toBeVisible({timeout:25000})
     await expect(page.getByText(/chart unavailable/i)).toHaveCount(0)
   }
+
+  await page.getByRole('button',{name:'Indicators',exact:true}).click()
+  for(const name of ['EMA 9','EMA 21','EMA 50','SMA 20','SMA 50','VWAP','Bollinger 20']){
+    const box=page.getByRole('checkbox',{name,exact:true})
+    await box.check()
+    await expect(box).toBeChecked()
+  }
+  await page.keyboard.press('Escape')
+
+  await page.getByRole('button',{name:/Display/}).click()
+  for(const name of ['Volume','Grid','Crosshair','PAPER trade markers']){
+    const box=page.getByRole('checkbox',{name,exact:true})
+    await box.uncheck();await expect(box).not.toBeChecked()
+    await box.check();await expect(box).toBeChecked()
+  }
+  await page.keyboard.press('Escape')
+
+  const chartCard=page.locator('.lw-chart-card')
+  await page.getByTitle('Fullscreen').click()
+  await expect(chartCard).toHaveClass(/expanded/)
+  await page.getByTitle('Exit fullscreen').click()
+  await expect(chartCard).not.toHaveClass(/expanded/)
+
+  for(const name of ['Trend line','Ray','Rectangle','Fibonacci retracement','Crosshair']){
+    const button=page.getByTitle(name)
+    await button.click()
+    await expect(button).toHaveClass(/active/)
+  }
+  await page.getByTitle('Add horizontal level').click()
+  await expect(page.getByTitle('Undo level')).toBeEnabled()
+  await page.getByTitle('Undo level').click()
+  await expect(page.getByTitle('Redo level')).toBeEnabled()
+  await page.getByTitle('Redo level').click()
+  for(const name of ['Zoom in','Zoom out','Fit chart','Clear drawings'])await page.getByTitle(name).click()
+
+  const downloadPromise=page.waitForEvent('download')
+  await page.getByTitle('Save chart image').click()
+  await downloadPromise
+
+  const stats=page.locator('.trade-window-tabs')
+  for(const name of ['1m','5m','1h','6h','24h']){
+    const button=stats.getByRole('button',{name,exact:true})
+    await button.click()
+    await expect(button).toHaveClass(/active/)
+  }
+  await page.locator('summary').filter({hasText:'Advanced orders'}).click()
+  await page.getByRole('button',{name:'Sell order',exact:true}).click()
+  await expect(page.getByRole('button',{name:'Sell order',exact:true})).toHaveClass(/active/)
+  await page.getByRole('button',{name:'Buy order',exact:true}).click()
+  await expect(page.getByRole('button',{name:'Buy order',exact:true})).toHaveClass(/active/)
+  for(const value of ['1%','5%','15%','30%']){
+    const button=page.locator('.slippage-control').getByRole('button',{name:value,exact:true})
+    await button.click()
+    await expect(button).toHaveClass(/active/)
+  }
 })
 
 test('token search history persists and full Pulse boards remain available',async({page,request})=>{
@@ -129,6 +184,19 @@ test('token search history persists and full Pulse boards remain available',asyn
   await expect(page.getByRole('dialog',{name:'Market filters'})).toBeVisible()
   await page.keyboard.press('Escape')
   await expect(page.getByRole('dialog',{name:'Market filters'})).toHaveCount(0)
+  for(const name of ['All venues','Pump.fun','Raydium','Meteora','Other venues']){
+    const button=page.getByRole('button',{name,exact:true})
+    await button.click()
+    await expect(button).toHaveClass(/active/)
+  }
+  const display=page.getByRole('button',{name:/Display/})
+  await display.click();await expect(display).toHaveClass(/active/);await display.click()
+  const liquidity=page.getByRole('button',{name:/Liquidity/})
+  await liquidity.click();await expect(liquidity).toHaveClass(/active/);await liquidity.click()
+  await page.getByRole('button',{name:/Filters/}).click()
+  await expect(page.getByRole('button',{name:'Close filters',exact:true})).toBeVisible()
+  await page.getByRole('button',{name:'Close filters',exact:true}).click()
+  await page.getByRole('button',{name:'Refresh',exact:true}).click()
   await page.evaluate(()=>{localStorage.setItem('paper.quickBuyPreset','P3');localStorage.setItem('paper.quickBuySize','1')})
   await page.getByRole('button',{name:'$50',exact:true}).click()
   const presetStorage=await page.evaluate(()=>({
@@ -163,92 +231,4 @@ test('feedback and core Part 10 public surfaces remain available',async({page,re
   const status=await request.get('/api/status')
   expect(status.ok()).toBeTruthy()
   expect((await status.json()).status).toBe('ok')
-})
-
-test('chart toolbar, indicators, display controls, and trade selectors all respond',async({page,request})=>{
-  test.setTimeout(120000)
-  const token=await liveToken(request)
-  await page.goto('/spot?mint='+encodeURIComponent(token.mint),{waitUntil:'domcontentloaded'})
-  await completeOnboarding(page,'controls')
-  await expect(page.locator('.lw-chart-canvas canvas').first()).toBeVisible({timeout:25000})
-
-  await page.getByRole('button',{name:'Indicators',exact:true}).click()
-  for(const name of ['EMA 9','EMA 21','EMA 50','SMA 20','SMA 50','VWAP','Bollinger 20']){
-    const box=page.getByRole('checkbox',{name,exact:true})
-    await expect(box).toBeVisible()
-    await box.check()
-    await expect(box).toBeChecked()
-  }
-  await page.keyboard.press('Escape')
-
-  await page.getByRole('button',{name:/Display/}).click()
-  for(const name of ['Volume','Grid','Crosshair','PAPER trade markers']){
-    const box=page.getByRole('checkbox',{name,exact:true})
-    await box.uncheck()
-    await expect(box).not.toBeChecked()
-    await box.check()
-    await expect(box).toBeChecked()
-  }
-  await page.keyboard.press('Escape')
-
-  const chartCard=page.locator('.lw-chart-card')
-  await page.getByTitle('Fullscreen').click()
-  await expect(chartCard).toHaveClass(/expanded/)
-  await page.getByTitle('Exit fullscreen').click()
-  await expect(chartCard).not.toHaveClass(/expanded/)
-
-  for(const name of ['Trend line','Ray','Rectangle','Fibonacci retracement','Crosshair']){
-    const button=page.getByTitle(name)
-    await button.click()
-    await expect(button).toHaveClass(/active/)
-  }
-
-  await page.getByTitle('Add horizontal level').click()
-  await expect(page.getByTitle('Undo level')).toBeEnabled()
-  await page.getByTitle('Undo level').click()
-  await expect(page.getByTitle('Redo level')).toBeEnabled()
-  await page.getByTitle('Redo level').click()
-  for(const name of ['Zoom in','Zoom out','Fit chart','Clear drawings'])await page.getByTitle(name).click()
-
-  const downloadPromise=page.waitForEvent('download')
-  await page.getByTitle('Save chart image').click()
-  await downloadPromise
-
-  const stats=page.locator('.trade-window-tabs')
-  for(const name of ['1m','5m','1h','6h','24h']){
-    const button=stats.getByRole('button',{name,exact:true})
-    await button.click()
-    await expect(button).toHaveClass(/active/)
-  }
-
-  await page.locator('summary').filter({hasText:'Advanced orders'}).click()
-  await page.getByRole('button',{name:'Sell order',exact:true}).click()
-  await expect(page.getByRole('button',{name:'Sell order',exact:true})).toHaveClass(/active/)
-  await page.getByRole('button',{name:'Buy order',exact:true}).click()
-  await expect(page.getByRole('button',{name:'Buy order',exact:true})).toHaveClass(/active/)
-
-  for(const value of ['1%','5%','15%','30%']){
-    const button=page.locator('.slippage-control').getByRole('button',{name:value,exact:true})
-    await button.click()
-    await expect(button).toHaveClass(/active/)
-  }
-})
-
-test('Pulse venue and display controls all respond',async({page})=>{
-  await page.goto('/pulse',{waitUntil:'domcontentloaded'})
-  await completeOnboarding(page,'pulse-controls')
-  for(const name of ['All venues','Pump.fun','Raydium','Meteora','Other venues']){
-    const button=page.getByRole('button',{name,exact:true})
-    await button.click()
-    await expect(button).toHaveClass(/active/)
-  }
-  const display=page.getByRole('button',{name:/Display/})
-  await display.click();await expect(display).toHaveClass(/active/);await display.click()
-  const liquidity=page.getByRole('button',{name:/Liquidity/})
-  await liquidity.click();await expect(liquidity).toHaveClass(/active/);await liquidity.click()
-  await page.getByRole('button',{name:/Filters/}).click()
-  await expect(page.getByRole('button',{name:'Close filters',exact:true})).toBeVisible()
-  await page.getByRole('button',{name:'Close filters',exact:true}).click()
-  await expect(page.getByRole('dialog',{name:'Market filters'})).toHaveCount(0)
-  await page.getByRole('button',{name:'Refresh',exact:true}).click()
 })

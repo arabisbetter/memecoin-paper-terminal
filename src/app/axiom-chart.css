@@ -263,3 +263,11 @@
 @media(prefers-reduced-motion:reduce){
   .axiom-chart-toolbar button,.axiom-draw-rail button{transition:none!important}
 }
+
+@media(max-width:1320px){
+  .axiom-chart-toolbar{height:auto;min-height:42px;flex-wrap:wrap;row-gap:2px;padding-top:4px;padding-bottom:4px}
+  .axiom-chart-brand{margin-left:0}
+  .axiom-quick-tfs button{min-width:31px;padding:0 6px}
+  .axiom-tool-label,.axiom-switch-button{padding-left:5px;padding-right:5px}
+  .axiom-toolbar-separator{margin-left:2px;margin-right:2px}
+}
