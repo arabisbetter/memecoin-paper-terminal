@@ -15,6 +15,7 @@ import TokenRiskPanel from '@/components/TokenRiskPanel'
 import AdvancedOrderPanel from '@/components/AdvancedOrderPanel'
 import { usePaperPresets, type PaperPresetValues } from '@/lib/use-paper-presets'
 import { logClientError } from '@/lib/client-telemetry'
+import { useTokenViewers } from '@/lib/use-token-views'
 
 type TokenRef={mint_address:string;ticker:string|null;name:string|null;image_url:string|null}
 type DbPosition={id:string;token_id:string;quantity_tokens:number;cost_basis_usd:number|null;average_entry_price_usd:number;average_entry_mc_usd:number|null;realized_pnl_usd:number|null;accounting_version:string|null;opened_at:string;tokens:TokenRef|null}
@@ -45,7 +46,7 @@ export default function Terminal(){
   const supabase=useMemo(()=>{try{return createClient()}catch{return null}},[])
   const {values:paperPresets,save:savePaperPresets,selectedId:selectedPresetId,selectPreset}=usePaperPresets()
   const [tokens,setTokens]=useState<MarketToken[]>([]),[selected,setSelected]=useState<MarketToken|null>(null),[positions,setPositions]=useState<LivePosition[]>([])
-  const [account,setAccount]=useState<Account|null>(null),[solUsd,setSolUsd]=useState(0),[userId,setUserId]=useState(''),[viewCount,setViewCount]=useState(0)
+  const [account,setAccount]=useState<Account|null>(null),[solUsd,setSolUsd]=useState(0),[userId,setUserId]=useState('')
   const [query,setQuery]=useState(''),[side,setSide]=useState<Side>('buy'),[amount,setAmount]=useState(.1),[sellPct,setSellPct]=useState(100)
   const [busy,setBusy]=useState(false),[message,setMessage]=useState(''),[copied,setCopied]=useState(false)
   const [selectedUpdatedAt,setSelectedUpdatedAt]=useState(0),[receipt,setReceipt]=useState<FillReceipt|null>(null),[statsWindow,setStatsWindow]=useState<StatsWindow>('5m'),[maxSlippagePct,setMaxSlippagePct]=useState(15)
@@ -53,6 +54,8 @@ export default function Terminal(){
   const [feedSource,setFeedSource]=useState(''),[feedAsOf,setFeedAsOf]=useState(0),[feedWarning,setFeedWarning]=useState(''),[clockMs,setClockMs]=useState(0)
   const [tokenRailWidth,setTokenRailWidth]=useState(280),[tradePanelWidth,setTradePanelWidth]=useState(350),[mobilePane,setMobilePane]=useState<MobilePane>('chart')
   const feedBusy=useRef(false),accountBusy=useRef(false),tradeBusy=useRef(false)
+  const viewerStats=useTokenViewers(selected?.mint?[selected.mint]:[],5000)
+  const viewCount=selected?viewerStats.byMint[selected.mint]||0:0
 
   const chooseToken=useCallback((token:MarketToken,syncUrl=true,clearFeedback=true)=>{
     setSelected(token);setSelectedUpdatedAt(Date.now());if(clearFeedback){setReceipt(null);setMessage('')}
@@ -109,29 +112,21 @@ export default function Terminal(){
   useEffect(()=>{if(!selected)return;let alive=true;const refresh=async()=>{if(document.hidden)return;try{const r=await fetch(`/api/market/token/${encodeURIComponent(selected.mint)}`,{cache:'no-store'}),j=await r.json();if(r.ok&&j.token&&alive){setSelected(cur=>cur?{...cur,...j.token,description:j.token.description||cur.description,profileUrl:j.token.profileUrl||cur.profileUrl,buyUrl:j.token.buyUrl||cur.buyUrl}:j.token);setSelectedUpdatedAt(Number(j.asOf||Date.now()))}}catch{}};void refresh();const id=window.setInterval(()=>void refresh(),8000);return()=>{alive=false;clearInterval(id)}},[selected?.mint])
   useEffect(()=>{
     if(!supabase||!selected?.mint||!userId)return
-    let alive=true,busy=false
+    let alive=true
     const mint=selected.mint,key=`paper-view:${mint}`
-    const refresh=async(record=false)=>{
-      if(busy)return
-      busy=true
+    const record=async()=>{
+      if(sessionStorage.getItem(key))return
       try{
-        if(record&&!sessionStorage.getItem(key)){
-          const {error}=await supabase.from('token_view_events').insert({user_id:userId,mint_address:mint})
-          if(error)throw error
+        const {error}=await supabase.from('token_view_events').insert({user_id:userId,mint_address:mint})
+        if(error)throw error
+        if(alive){
           sessionStorage.setItem(key,'1')
           window.dispatchEvent(new CustomEvent('paper:token-view-changed',{detail:{mint}}))
         }
-        const {data,error}=await supabase.from('token_view_totals').select('views').eq('mint_address',mint).maybeSingle()
-        if(error)throw error
-        if(alive)setViewCount(Number(data?.views||0))
-      }catch(error){void logClientError('views',error,{mint})}
-      finally{busy=false}
+      }catch(error){void logClientError('viewers',error,{mint,stage:'record'})}
     }
-    void refresh(true)
-    const id=window.setInterval(()=>{if(!document.hidden)void refresh(false)},10000)
-    const changed=(event:Event)=>{const detail=(event as CustomEvent<{mint?:string}>).detail;if(!detail?.mint||detail.mint===mint)void refresh(false)}
-    window.addEventListener('paper:token-view-changed',changed)
-    return()=>{alive=false;clearInterval(id);window.removeEventListener('paper:token-view-changed',changed)}
+    void record()
+    return()=>{alive=false}
   },[supabase,userId,selected?.mint])
 
   const visible=useMemo(()=>{const q=query.trim().toLowerCase();if(!q)return tokens;return tokens.filter(t=>t.symbol.toLowerCase().includes(q)||t.name.toLowerCase().includes(q)||t.mint.toLowerCase().includes(q))},[tokens,query])
@@ -219,7 +214,7 @@ export default function Terminal(){
   return <div className="ax-app"><AppHeader active="spot"/><nav className="mobile-terminal-tabs"><button className={mobilePane==='chart'?'active':''} onClick={()=>setMobilePane('chart')}>Chart</button><button className={mobilePane==='trade'?'active':''} onClick={()=>setMobilePane('trade')}>Trade</button><button className={mobilePane==='positions'?'active':''} onClick={()=>setMobilePane('positions')}>Positions</button><button className={mobilePane==='info'?'active':''} onClick={()=>setMobilePane('info')}>Info</button></nav><main data-mobile-pane={mobilePane} className="spot-detail phase1-terminal parts23-terminal" style={{'--paper-token-rail':tokenRailWidth+'px','--paper-trade-panel':tradePanelWidth+'px'} as CSSProperties}>
     <aside className="spot-token-list p23-token-rail"><div className="spot-search p23-search"><Search size={13}/><input aria-label="Filter live token list" placeholder="Filter live list" value={query} onChange={e=>setQuery(e.target.value)}/></div><div className="spot-list-head"><span>LIVE MEMECOINS</span><span>{visible.length}</span></div><div className="token-list">{!visible.length&&<div className="portfolio-empty">Market data is temporarily unavailable. PAPER is retrying automatically. <button onClick={()=>void loadFeed(true)}>Retry now</button></div>}{visible.map(t=><div key={t.mint} role="button" tabIndex={0} className={`token-row-shell ${selected?.mint===t.mint?'selected':''}`} onClick={()=>chooseToken(t)} onKeyDown={e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();chooseToken(t)}}}><div className="token-avatar">{t.image?<img src={t.image} alt="" loading="lazy" decoding="async"/>:t.symbol.slice(0,2)}</div><div className="token-copy"><div className="token-line"><b>${t.symbol}</b><span>{t.name}</span></div><div className="token-sub"><span>MC {money(t.marketCap)}</span><span>LQ {money(t.liquidityUsd)}</span></div></div><div className="token-price"><b>{money(t.priceUsd)}</b><span className={Number(t.priceChange5m||0)>=0?'gain':'loss'}>{pct(Number(t.priceChange5m||0))}</span></div></div>)}</div><div className="rail-feed-status"><i/><span>{feedWarning?'RECONNECTING':feedSource||'market feed'}</span><small>{feedAsOf?new Date(feedAsOf).toLocaleTimeString():''}</small></div></aside>
 
-    <button className="paper-panel-resizer token-resizer" aria-label="Resize token list" onPointerDown={e=>beginPanelResize('token',e)}/><section className="spot-market p23-market"><div className="token-head p23-token-head">{selected?<><div className="token-avatar large">{selected.image?<img src={selected.image} alt="" decoding="async"/>:selected.symbol.slice(0,2)}</div><div className="p23-token-identity"><div className="token-title">${selected.symbol}<span>{selected.name}</span></div><div className="token-link-row"><button className="mint-button" onClick={()=>void copyMint()}><Copy size={10}/>{copied?'Copied':short(selected.mint)}</button><span className="venue-pill">{selected.dexId||'Solana'}</span>{selected.website&&<a href={selected.website} target="_blank" rel="noreferrer"><Globe2 size={11}/> Web</a>}{selected.twitter&&<a href={selected.twitter} target="_blank" rel="noreferrer">X</a>}{selected.telegram&&<a href={selected.telegram} target="_blank" rel="noreferrer"><MessageCircle size={11}/> TG</a>}</div></div><div className="spacer"/><div className="headline-stat"><small>VIEWS</small><b className="view-stat"><Eye size={12}/>{viewCount.toLocaleString()}</b></div><div className="headline-stat"><small>PRICE</small><b>{money(selected.priceUsd)}</b></div><div className="headline-stat"><small>5M</small><b className={Number(selected.priceChange5m||0)>=0?'gain':'loss'}>{pct(Number(selected.priceChange5m||0))}</b></div><div className="headline-stat"><small>MC</small><b>{money(selected.marketCap)}</b></div><span className={`data-health ${dataStatus.toLowerCase()}`}>{dataStatus}</span></>:<span>Select a live memecoin</span>}</div>
+    <button className="paper-panel-resizer token-resizer" aria-label="Resize token list" onPointerDown={e=>beginPanelResize('token',e)}/><section className="spot-market p23-market"><div className="token-head p23-token-head">{selected?<><div className="token-avatar large">{selected.image?<img src={selected.image} alt="" decoding="async"/>:selected.symbol.slice(0,2)}</div><div className="p23-token-identity"><div className="token-title">${selected.symbol}<span>{selected.name}</span></div><div className="token-link-row"><button className="mint-button" onClick={()=>void copyMint()}><Copy size={10}/>{copied?'Copied':short(selected.mint)}</button><span className="venue-pill">{selected.dexId||'Solana'}</span>{selected.website&&<a href={selected.website} target="_blank" rel="noreferrer"><Globe2 size={11}/> Web</a>}{selected.twitter&&<a href={selected.twitter} target="_blank" rel="noreferrer">X</a>}{selected.telegram&&<a href={selected.telegram} target="_blank" rel="noreferrer"><MessageCircle size={11}/> TG</a>}</div></div><div className="spacer"/><div className="headline-stat"><small>VIEWERS</small><b className="view-stat" title={`Unique viewers active in the last ${viewerStats.windowMinutes} minutes`}><Eye size={12}/>{viewerStats.ready?viewCount.toLocaleString():'—'}</b></div><div className="headline-stat"><small>PRICE</small><b>{money(selected.priceUsd)}</b></div><div className="headline-stat"><small>5M</small><b className={Number(selected.priceChange5m||0)>=0?'gain':'loss'}>{pct(Number(selected.priceChange5m||0))}</b></div><div className="headline-stat"><small>MC</small><b>{money(selected.marketCap)}</b></div><span className={`data-health ${dataStatus.toLowerCase()}`}>{dataStatus}</span></>:<span>Select a live memecoin</span>}</div>
       <CandleChart poolAddress={selected?.pairAddress} tokenId={selectedPosition?.token_id} currentPrice={selected?.priceUsd} currentMarketCap={selected?.marketCap} currentSolUsd={solUsd} averageEntryPrice={selectedPosition?Number(selectedPosition.average_entry_price_usd):undefined} averageEntryMarketCap={selectedPosition?Number(selectedPosition.average_entry_mc_usd||0):undefined} symbol={selected?.symbol} venue={selected?.dexId}/>
       <div className="metric-strip p23-metric-strip">{[['Market Cap',selected?money(selected.marketCap):'—'],['Liquidity',selected?money(selected.liquidityUsd):'—'],['Supply',selected&&selected.priceUsd>0?(selected.marketCap/selected.priceUsd).toLocaleString(undefined,{maximumFractionDigits:0}):'—'],['5m Volume',selected?money(Number(selected.volume5m||0)):'—'],['1h Volume',selected?money(Number(selected.volume1h||0)):'—'],['24h Volume',selected?money(Number(selected.volume24h||0)):'—'],['24h TXNS',selected?String(Number(selected.buys24h||0)+Number(selected.sells24h||0)):'—'],['Age',selected?age(selected.pairCreatedAt):'—']].map(([l,v])=><div className="metric" key={l}><small>{l}</small><b>{v}</b></div>)}</div>
       {selected&&<section className="token-intel-card"><div className="token-intel-head"><div><Info size={15}/><span><b>ABOUT ${selected.symbol}</b><small>Verified links + live market context</small></span></div>{(selected.buyUrl||selected.pairUrl)&&<a className="real-market-link" href={selected.buyUrl||selected.pairUrl} target="_blank" rel="noreferrer">OPEN REAL MARKET <ExternalLink size={12}/></a>}</div><p>{description}</p><div className="token-intel-grid"><span><small>CHAIN</small><b>Solana</b></span><span><small>VENUE</small><b>{selected.dexId||'—'}</b></span><span><small>PAIR AGE</small><b>{age(selected.pairCreatedAt)}</b></span><span><small>LIQ / MC</small><b>{selected.marketCap?`${liquidityRatio.toFixed(1)}%`:'—'}</b></span><span><small>1H VOL</small><b>{money(Number(selected.volume1h||0))}</b></span><span><small>24H VOL</small><b>{money(Number(selected.volume24h||0))}</b></span><span><small>24H TXNS</small><b>{Number(selected.buys24h||0)+Number(selected.sells24h||0)}</b></span><span><small>BOOSTS</small><b>{Number(selected.boostsActive||0)||'—'}</b></span></div><div className="token-intel-foot"><ShieldCheck size={13}/><span>No holder, tax, mint-authority, sniper, or bundle score is shown unless a verified data source supports it.</span><Link href={'/token/'+selected.mint+'/intelligence'}>HOLDER MAP + LIFECYCLE →</Link></div></section>}

@@ -1,32 +1,38 @@
 'use client'
 
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { createClient } from '@/lib/supabase/client'
+import { useEffect, useRef, useState } from 'react'
 import { logClientError } from '@/lib/client-telemetry'
 
-export function useTokenViews(mints:string[],refreshMs=10000){
-  const supabase=useMemo(()=>{try{return createClient()}catch{return null}},[])
-  const [views,setViews]=useState<Record<string,number>>({})
+export type TokenViewerStats={
+  byMint:Record<string,number>
+  total:number
+  windowMinutes:number
+  ready:boolean
+}
+
+export function useTokenViewers(mints:string[]=[],refreshMs=7000):TokenViewerStats{
+  const [stats,setStats]=useState<TokenViewerStats>({byMint:{},total:0,windowMinutes:15,ready:false})
   const errorReported=useRef(false)
-  const mintKey=[...new Set(mints.filter(Boolean))].sort().join('|')
+  const mintKey=[...new Set(mints.filter(Boolean))].sort().slice(0,80).join('|')
 
   useEffect(()=>{
-    const list=mintKey?mintKey.split('|'):[]
-    if(!supabase||!list.length)return
     let alive=true,busy=false
     const refresh=async()=>{
       if(busy||document.hidden)return
       busy=true
       try{
-        const {data,error}=await supabase.from('token_view_totals').select('mint_address,views').in('mint_address',list)
-        if(error)throw error
-        const next:Record<string,number>={}
-        for(const mint of list)next[mint]=0
-        for(const row of data||[])next[String(row.mint_address)]=Number(row.views||0)
-        if(alive)setViews(next)
+        const list=mintKey?mintKey.split('|'):[]
+        const query=list.length?'?mints='+encodeURIComponent(list.join(',')):''
+        const response=await fetch('/api/viewers'+query,{cache:'no-store'})
+        const body=await response.json().catch(()=>null)
+        if(!response.ok)throw new Error(body?.error||'viewer service unavailable')
+        const byMint:Record<string,number>={}
+        for(const mint of list)byMint[mint]=Number(body?.byMint?.[mint]||0)
+        if(alive)setStats({byMint,total:Number(body?.viewerTotal||0),windowMinutes:Number(body?.windowMinutes||15),ready:true})
         errorReported.current=false
       }catch(error){
-        if(!errorReported.current){errorReported.current=true;void logClientError('views',error,{mints:list.length})}
+        if(alive)setStats(current=>({...current,ready:true}))
+        if(!errorReported.current){errorReported.current=true;void logClientError('viewers',error,{mints:mintKey?mintKey.split('|').length:0})}
       }finally{busy=false}
     }
     void refresh()
@@ -36,7 +42,11 @@ export function useTokenViews(mints:string[],refreshMs=10000){
     window.addEventListener('paper:token-view-changed',changed)
     document.addEventListener('visibilitychange',visible)
     return()=>{alive=false;clearInterval(id);window.removeEventListener('paper:token-view-changed',changed);document.removeEventListener('visibilitychange',visible)}
-  },[supabase,mintKey,refreshMs])
+  },[mintKey,refreshMs])
 
-  return views
+  return stats
+}
+
+export function useTokenViews(mints:string[],refreshMs=7000){
+  return useTokenViewers(mints,refreshMs).byMint
 }

@@ -1,4 +1,4 @@
-const VERSION='paper-shell-v10-12'
+const VERSION='paper-shell-v10-13-viewers'
 const SHELL_CACHE=VERSION+'-shell'
 const STATIC_CACHE=VERSION+'-static'
 const SHELL=new Set(['/','/spot','/pulse','/portfolio','/community','/status','/manifest.webmanifest','/icon.svg'])
