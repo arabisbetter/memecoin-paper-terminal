@@ -146,7 +146,9 @@ test('candle API fills gaps and chart survives repeated timeframe changes',async
     await button.click()
     await expect(button).toHaveClass(/active/)
   }
-  await page.locator('summary').filter({hasText:'Advanced orders'}).click()
+  const advancedToggle=page.getByRole('button',{name:'Advanced orders',exact:true})
+  await advancedToggle.click()
+  await expect(advancedToggle).toHaveAttribute('aria-expanded','true')
   await page.getByRole('button',{name:'Sell order',exact:true}).click()
   await expect(page.getByRole('button',{name:'Sell order',exact:true})).toHaveClass(/active/)
   await page.getByRole('button',{name:'Buy order',exact:true}).click()
