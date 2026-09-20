@@ -46,11 +46,11 @@ test('exact deployed release works on the public PAPER hostname',async({page,req
   const buy=page.locator('.instant-buy-preset').filter({hasText:'P1'}).first()
   await expect(buy).toBeEnabled({timeout:25000})
   await buy.click()
-  await expect(page.getByText('PAPER BUY FILLED',{exact:true})).toBeVisible({timeout:30000})
+  await expect(page.locator('.trade-message').filter({hasText:/^PAPER BUY FILLED$/})).toBeVisible({timeout:30000})
   const sell=page.locator('.percentage-sell-button').filter({hasText:'25%'}).first()
   await expect(sell).toBeEnabled({timeout:25000})
   await sell.click()
-  await expect(page.getByText('PAPER SELL FILLED',{exact:true})).toBeVisible({timeout:30000})
+  await expect(page.locator('.trade-message').filter({hasText:/^PAPER SELL FILLED$/})).toBeVisible({timeout:30000})
 
   const quickTimeframes=page.locator('.axiom-quick-tfs')
   for(const timeframe of ['1s','5s','1m','5m']){
