@@ -269,3 +269,22 @@ html body>.feedback-root>.feedback-backdrop{
     padding:0 9px!important;
   }
 }
+
+/* Restored feature dock: keep the original bottom navigation available without
+   reintroducing duplicate profile/settings controls. */
+.restored-feature-dock{z-index:650!important;overflow-x:auto!important;overflow-y:visible!important;scrollbar-width:none}
+.restored-feature-dock::-webkit-scrollbar{display:none}
+.restored-feature-dock>a,.restored-feature-dock>.dock-preset-wrap,.restored-feature-dock>.dock-more-wrap{flex:0 0 auto}
+.dock-more-wrap{position:relative;flex:0 0 auto}
+.dock-more{height:28px;border-radius:5px;border:0;background:transparent;color:#8c94a3;display:flex;align-items:center;gap:6px;padding:0 9px;cursor:pointer;font-size:10px}
+.dock-more:hover,.dock-more.active{background:#10141b;color:#e4e7ed}
+.dock-more.active{color:#6e84ff}
+.dock-more-menu{position:absolute;right:0;bottom:36px;width:190px;background:#0e1117;border:1px solid #2a303c;border-radius:8px;padding:6px;box-shadow:0 15px 40px rgba(0,0,0,.55);z-index:900}
+.dock-more-menu a{min-height:34px;border-radius:5px;color:#a1a7b3;text-decoration:none;display:flex;align-items:center;gap:8px;padding:0 9px;font-size:10px}
+.dock-more-menu a:hover,.dock-more-menu a.active{background:#151a24;color:#fff}
+@media(max-width:760px){
+  .restored-feature-dock{height:44px!important;padding-bottom:env(safe-area-inset-bottom,0px)!important}
+  .restored-feature-dock>a span,.restored-feature-dock .dock-more span{display:none}
+  .restored-feature-dock>a,.dock-more{min-width:36px;justify-content:center;padding:0 8px}
+  .dock-paper-account small,.dock-live{display:none}
+}

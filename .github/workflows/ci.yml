@@ -64,11 +64,11 @@ jobs:
           cat /tmp/paper-next.log
           exit 1
 
-      - name: Verify PAPER token-table homepage
+      - name: Verify PAPER landing homepage
         run: |
-          grep -q "Market Cap" /tmp/paper-home.html
-          grep -q "Liquidity" /tmp/paper-home.html
-          grep -q "Action" /tmp/paper-home.html
+          grep -q "TRADE PAPER" /tmp/paper-home.html
+          grep -q "EARN REAL" /tmp/paper-home.html
+          grep -q "START TRADING" /tmp/paper-home.html
 
       - name: Verify live Solana market feed and CA lookup
         run: |
