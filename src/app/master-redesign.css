@@ -204,3 +204,25 @@ html body>.feedback-root>.feedback-backdrop{
     bottom:calc(18px + env(safe-area-inset-bottom,0px))!important;
   }
 }
+
+/* Mobile Feedback must live above the whole application stacking context. */
+@media(max-width:760px){
+  body>.ax-app{
+    position:relative!important;
+    z-index:0!important;
+    isolation:isolate!important;
+  }
+  body>.feedback-root{
+    position:fixed!important;
+    z-index:10000!important;
+    pointer-events:auto!important;
+  }
+  body>.feedback-root>.feedback-launcher{
+    position:absolute!important;
+    z-index:10001!important;
+    pointer-events:auto!important;
+  }
+  .pulse-card-terminal{
+    z-index:0!important;
+  }
+}
