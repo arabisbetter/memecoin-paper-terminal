@@ -119,7 +119,12 @@ export default function Terminal(){
   useEffect(()=>{setPresetDraft([...paperPresets] as PaperPresetValues)},[paperPresets])
   async function persistPresets(){
     setPresetSaving(true);setMessage('')
-    try{await savePaperPresets(presetDraft);setPresetEditorOpen(false);setAmount(presetDraft[0]);setMessage('Quick-buy presets saved.')}
+    try{
+      const saved=await savePaperPresets(presetDraft)
+      const selectedId=localStorage.getItem('paper.quickBuyPreset')
+      const index=selectedId&&/^P[1-4]$/.test(selectedId)?Number(selectedId.slice(1))-1:0
+      setPresetEditorOpen(false);setAmount(saved[index]||saved[0]);setMessage('Quick-buy presets saved.')
+    }
     catch(error){void logClientError('presets',error,{stage:'save',values:presetDraft});setMessage(error instanceof Error?error.message:'Could not save quick-buy presets.')}
     finally{setPresetSaving(false)}
   }

@@ -281,9 +281,10 @@ export default function CandleChart({
     renderedRef.current=null
     hasDataRef.current=false
     if(!poolAddress){activePoolRef.current=undefined;setCandles([]);setError('');setStatus('DEGRADED');return}
-    const tokenChanged=activePoolRef.current!==poolAddress
     activePoolRef.current=poolAddress
-    if(tokenChanged){setCandles([]);fittedKeyRef.current=''}
+    setCandles([])
+    fittedKeyRef.current=''
+    setStatus('DEGRADED')
     let alive=true,inFlight=false
     const generation=++chartRequestGeneration.current
     let activeController:AbortController|null=null
@@ -298,7 +299,8 @@ export default function CandleChart({
         const response=await fetch('/api/market/ohlcv/'+encodeURIComponent(poolAddress!)+'?tf='+tf,{cache:'no-store',signal:controller.signal})
         const json=await response.json()
         if(!response.ok)throw new Error(json.error||'chart unavailable')
-        if(alive&&generation===chartRequestGeneration.current&&Array.isArray(json.candles)&&json.candles.length){
+        if(!Array.isArray(json.candles)||!json.candles.length)throw new Error(json.error||'chart returned zero candles')
+        if(alive&&generation===chartRequestGeneration.current){
           setCandles(json.candles)
           setError(json.warning||'')
           setAsOf(Number(json.asOf||Date.now()))

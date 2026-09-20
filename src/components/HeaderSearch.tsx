@@ -17,11 +17,20 @@ function readLocal():HistoryItem[]{try{const rows=JSON.parse(localStorage.getIte
 function writeLocal(rows:HistoryItem[]){try{localStorage.setItem(LOCAL_KEY,JSON.stringify(rows.slice(0,20)))}catch{}}
 
 export default function HeaderSearch(){
-  const router=useRouter(),wrap=useRef<HTMLDivElement|null>(null),input=useRef<HTMLInputElement|null>(null)
+  const router=useRouter(),wrap=useRef<HTMLDivElement|null>(null),input=useRef<HTMLInputElement|null>(null),marketLoadedAt=useRef(0),marketBusy=useRef(false)
   const supabase=useMemo(()=>{try{return createClient()}catch{return null}},[])
   const [query,setQuery]=useState(''),[open,setOpen]=useState(false),[tokens,setTokens]=useState<MarketToken[]>([]),[history,setHistory]=useState<HistoryItem[]>([]),[loading,setLoading]=useState(false)
 
-  async function loadMarket(){if(tokens.length)return;setLoading(true);try{const r=await fetch('/api/market/latest',{cache:'no-store'}),j=await r.json();if(r.ok)setTokens((j.tokens||[]).slice(0,100))}catch(error){console.error('paper_search_market_error',error)}finally{setLoading(false)}}
+  async function loadMarket(){
+    if(marketBusy.current)return
+    if(tokens.length&&Date.now()-marketLoadedAt.current<20_000)return
+    marketBusy.current=true;setLoading(true)
+    try{
+      const r=await fetch('/api/market/latest',{cache:'no-store'}),j=await r.json()
+      if(r.ok){setTokens((j.tokens||[]).slice(0,100));marketLoadedAt.current=Date.now()}
+    }catch(error){console.error('paper_search_market_error',error)}
+    finally{marketBusy.current=false;setLoading(false)}
+  }
   async function loadHistory(){
     const local=readLocal();setHistory(local)
     if(!supabase)return

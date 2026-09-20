@@ -24,6 +24,12 @@ export function usePaperPresets(){
   const [ready,setReady]=useState(false)
 
   useEffect(()=>{
+    const changed=(event:Event)=>{const detail=(event as CustomEvent<{values?:unknown}>).detail;if(detail?.values)setValues(clean(detail.values))}
+    window.addEventListener('paper:presets-changed',changed)
+    return()=>window.removeEventListener('paper:presets-changed',changed)
+  },[])
+
+  useEffect(()=>{
     let alive=true
     try{
       const local=JSON.parse(localStorage.getItem('paper.quickBuyPresets.v2')||'null')
@@ -54,7 +60,9 @@ export function usePaperPresets(){
     const next=clean(nextValues)
     setValues(next)
     localStorage.setItem('paper.quickBuyPresets.v2',JSON.stringify(next))
-    localStorage.setItem('paper.quickBuySize',String(next[0]))
+    const selected=localStorage.getItem('paper.quickBuyPreset')
+    const index=selected&&/^P[1-4]$/.test(selected)?Number(selected.slice(1))-1:0
+    localStorage.setItem('paper.quickBuySize',String(next[index]||next[0]))
     window.dispatchEvent(new CustomEvent('paper:presets-changed',{detail:{values:next}}))
     if(!supabase||!userId)return next
     const {error}=await (supabase as any).from('paper_trade_presets').upsert({

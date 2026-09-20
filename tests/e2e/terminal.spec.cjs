@@ -47,6 +47,13 @@ test('presets save, reload, instant buy, and percentage sell work for a fresh an
   await expect(page.getByLabel('Preset P1 SOL')).toHaveValue('0.01')
   await page.getByRole('button',{name:'Done',exact:true}).click()
 
+  await page.evaluate(()=>localStorage.setItem('paper.quickBuyPreset','P3'))
+  await page.getByRole('button',{name:'Edit presets',exact:true}).click()
+  await page.getByLabel('Preset P3 SOL').fill('0.02')
+  await page.getByRole('button',{name:'Save presets',exact:true}).click()
+  await expect(page.getByLabel('Custom instant buy SOL')).toHaveValue('0.02')
+  expect(await page.evaluate(()=>localStorage.getItem('paper.quickBuySize'))).toBe('0.02')
+
   const p1Buy=page.locator('.instant-buy-preset').filter({hasText:'P1'}).first()
   await expect(p1Buy).toBeEnabled({timeout:25000})
   await p1Buy.click()
@@ -115,6 +122,10 @@ test('token search history persists and full Pulse boards remain available',asyn
   await expect(page.locator('.pulse-five-grid .pulse-board-column')).toHaveCount(5)
   await expect(page.getByRole('button',{name:'$25',exact:true})).toBeVisible()
   await expect(page.getByText(/INSTANT (ON|OFF)/)).toBeVisible()
+  await page.getByRole('button',{name:/Filters/}).click()
+  await expect(page.getByRole('dialog',{name:'Market filters'})).toBeVisible()
+  await page.keyboard.press('Escape')
+  await expect(page.getByRole('dialog',{name:'Market filters'})).toHaveCount(0)
   await page.evaluate(()=>{localStorage.setItem('paper.quickBuyPreset','P3');localStorage.setItem('paper.quickBuySize','1')})
   await page.getByRole('button',{name:'$50',exact:true}).click()
   const presetStorage=await page.evaluate(()=>({
