@@ -80,7 +80,13 @@ jobs:
           const body=JSON.parse(fs.readFileSync('/tmp/paper-market.json','utf8'))
           if(!Array.isArray(body.tokens) || body.tokens.length===0) throw new Error('live market feed returned zero tokens')
           const active=t=>t && t.mint && t.pairAddress && Number(t.priceUsd)>0 && Number(t.marketCap)>0 && (Number(t.buys5m||0)+Number(t.sells5m||0)>0)
-          const first=body.tokens.find(active)||body.tokens.find(t=>t && t.mint && t.pairAddress && Number(t.priceUsd)>0 && Number(t.marketCap)>0)
+          const usable=t=>t && t.mint && t.pairAddress && Number(t.priceUsd)>0 && Number(t.marketCap)>0
+          const createdMs=t=>{const v=Number(t?.pairCreatedAt||0);return v>1e12?v:v>1e9?v*1000:0}
+          const candidates=body.tokens.filter(active)
+          const mature=candidates.filter(t=>createdMs(t)>0 && Date.now()-createdMs(t)>=120000)
+          const poolCandidates=(mature.length?mature:candidates.length?candidates:body.tokens.filter(usable))
+            .sort((a,b)=>(createdMs(a)||Number.MAX_SAFE_INTEGER)-(createdMs(b)||Number.MAX_SAFE_INTEGER))
+          const first=poolCandidates[0]
           if(!first) throw new Error('live market feed has no usable priced token with market cap and a pool')
           fs.writeFileSync('/tmp/paper-mint.txt', String(first.mint))
           fs.writeFileSync('/tmp/paper-pool.txt', String(first.pairAddress))
