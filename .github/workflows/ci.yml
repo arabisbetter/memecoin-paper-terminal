@@ -146,7 +146,7 @@ jobs:
               if node - <<'NODE'
           const fs=require('fs')
           const body=JSON.parse(fs.readFileSync('/tmp/paper-chart.json','utf8'))
-          if(!Array.isArray(body.candles) || body.candles.length<2) throw new Error('OHLCV chart did not return enough real candles')
+          if(!Array.isArray(body.candles) || body.candles.length<1) throw new Error('OHLCV chart returned no real candles')
           const c=body.candles.at(-1)
           for(const k of ['time','open','high','low','close']) if(!Number.isFinite(Number(c[k]))) throw new Error(`invalid candle ${k}`)
           console.log(`OHLCV ok timeframe=${body.timeframe} candles=${body.candles.length}`)

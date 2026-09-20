@@ -52,8 +52,11 @@ test('exact deployed release works on the public PAPER hostname',async({page,req
   await sell.click()
   await expect(page.getByText('PAPER SELL FILLED',{exact:true})).toBeVisible({timeout:30000})
 
+  const quickTimeframes=page.locator('.axiom-quick-tfs')
   for(const timeframe of ['1s','5s','1m','5m']){
-    await page.getByRole('button',{name:timeframe,exact:true}).click()
+    const button=quickTimeframes.getByRole('button',{name:'Chart timeframe '+timeframe,exact:true})
+    await expect(button).toBeVisible()
+    await button.click()
     await expect(page.locator('.lw-chart-canvas canvas').first()).toBeVisible({timeout:25000})
   }
 
@@ -65,5 +68,5 @@ test('exact deployed release works on the public PAPER hostname',async({page,req
   await expect(page.getByText('RECENT',{exact:true})).toBeVisible()
 
   await page.goto('/pulse',{waitUntil:'domcontentloaded'})
-  for(const title of ['New Pairs','Final Stretch','Migrated'])await expect(page.locator('.pulse-board-head').filter({hasText:title})).toHaveCount(1)
+  for(const title of ['New Pairs','Final Stretch','Migrated','Trending','High Volume'])await expect(page.locator('.pulse-board-head').filter({hasText:title})).toHaveCount(1)
 })

@@ -6,8 +6,9 @@ test('mobile PAPER header, search, trade panes, and chart controls stay usable',
   await page.goto('/spot?mint='+encodeURIComponent(token.mint),{waitUntil:'domcontentloaded'})
   await completeOnboarding(page,'mobile')
 
-  await expect(page.getByRole('link',{name:'Spot',exact:true})).toBeVisible()
-  await expect(page.getByRole('link',{name:'Pulse',exact:true})).toBeVisible()
+  const primaryNav=page.getByRole('navigation',{name:'Primary navigation'})
+  await expect(primaryNav.getByRole('link',{name:'Trade',exact:true})).toBeVisible()
+  await expect(primaryNav.getByRole('link',{name:'Pulse',exact:true})).toBeVisible()
   await expect(page.getByRole('link',{name:'Profile',exact:true})).toBeVisible()
   const search=page.getByLabel('Search tokens')
   await expect(search).toBeVisible()
@@ -40,10 +41,13 @@ test('mobile PAPER header, search, trade panes, and chart controls stay usable',
   await expect(page.locator('.percentage-sell-button')).toHaveCount(4)
 })
 
-test('mobile Pulse remains a readable three-board experience',async({page})=>{
+test('mobile Pulse keeps all five boards readable',async({page})=>{
   await page.goto('/pulse',{waitUntil:'domcontentloaded'})
   await completeOnboarding(page,'pulse')
-  for(const title of ['New Pairs','Final Stretch','Migrated'])await expect(page.locator('.pulse-board-head').filter({hasText:title})).toHaveCount(1)
+  for(const title of ['New Pairs','Final Stretch','Migrated','Trending','High Volume'])await expect(page.locator('.pulse-board-head').filter({hasText:title})).toHaveCount(1)
+  await expect(page.locator('.pulse-five-grid .pulse-board-column')).toHaveCount(5)
+  const overflow=await page.evaluate(()=>({scrollWidth:document.documentElement.scrollWidth,innerWidth:window.innerWidth}))
+  expect(overflow.scrollWidth).toBeLessThanOrEqual(overflow.innerWidth+2)
   await expect(page.getByRole('button',{name:/Filters/})).toBeVisible()
   const feedback=page.getByRole('button',{name:'Feedback',exact:true})
   await expect(feedback).toBeVisible()

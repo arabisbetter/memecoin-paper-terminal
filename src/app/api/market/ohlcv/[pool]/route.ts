@@ -85,6 +85,12 @@ async function fetchTradeCandles(pool:string,bucketSeconds:number,signal:AbortSi
   return normalizeCandles(raw,bucketSeconds,300)
 }
 
+async function fetchRecentTradeFallback(pool:string,bucketSeconds:number){
+  const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),6_000)
+  try{return await fetchTradeCandles(pool,bucketSeconds,controller.signal)}
+  finally{clearTimeout(timer)}
+}
+
 export async function GET(req:NextRequest,ctx:{params:Promise<{pool:string}>}){
   const {pool}=await ctx.params
   if(!/^[1-9A-HJ-NP-Za-km-z]{32,60}$/.test(pool))return NextResponse.json({error:'Invalid pool address'},{status:400})
@@ -120,6 +126,12 @@ export async function GET(req:NextRequest,ctx:{params:Promise<{pool:string}>}){
     let candles=(json.data?.attributes?.ohlcv_list||[]).map(([time,open,high,low,close,volume])=>({time,open,high,low,close,volume})).filter(c=>[c.time,c.open,c.high,c.low,c.close].every(Number.isFinite)).sort((a,b)=>a.time-b.time)
     if(config.bucketSeconds)candles=aggregateCandles(candles,config.bucketSeconds)
     candles=normalizeCandles(candles,timeframeSeconds[tf]||60,tf==='1M'?90:420)
+    if(candles.length<2&&(timeframeSeconds[tf]||0)<=900){
+      try{
+        const recent=await fetchRecentTradeFallback(pool,timeframeSeconds[tf]||60)
+        if(recent.length>candles.length)candles=recent
+      }catch{}
+    }
     if(!candles.length)throw new Error('OHLCV returned no candles')
     const at=Date.now();cache.set(key,{at,candles})
     return NextResponse.json({candles,timeframe:tf,source:'geckoterminal',live:true,asOf:at},{headers:{'Cache-Control':`public, s-maxage=${config.cdnSeconds}, stale-while-revalidate=${Math.max(config.cdnSeconds*4,30)}`}})
@@ -128,6 +140,15 @@ export async function GET(req:NextRequest,ctx:{params:Promise<{pool:string}>}){
     if(previous)return NextResponse.json({candles:previous.candles,timeframe:tf,source:'geckoterminal',live:false,stale:true,asOf:previous.at,warning:error instanceof Error?error.message:'chart unavailable'})
     const minuteFallback=deriveFromMinuteCache(pool,tf)
     if(minuteFallback)return NextResponse.json({candles:minuteFallback.candles,timeframe:tf,source:'paper-1m-cache',live:false,stale:true,fallback:true,asOf:minuteFallback.at,warning:'Live '+tf+' provider refresh is temporarily limited. Showing candles derived from the latest real 1m feed.'},{headers:{'Cache-Control':'public, s-maxage=5, stale-while-revalidate=30'}})
+    if((timeframeSeconds[tf]||0)>0&&(timeframeSeconds[tf]||0)<=900){
+      try{
+        const candles=await fetchRecentTradeFallback(pool,timeframeSeconds[tf]||60)
+        if(candles.length){
+          const at=Date.now();cache.set(key,{at,candles})
+          return NextResponse.json({candles,timeframe:tf,source:'geckoterminal-trades',live:true,fallback:true,asOf:at,warning:'Primary OHLCV history is temporarily limited. Showing recent real trade candles.'},{headers:{'Cache-Control':'public, s-maxage=3, stale-while-revalidate=15'}})
+        }
+      }catch{}
+    }
     return NextResponse.json({candles:[],error:error instanceof Error?error.message:'chart unavailable'},{status:502})
   }finally{clearTimeout(timer)}
 }
