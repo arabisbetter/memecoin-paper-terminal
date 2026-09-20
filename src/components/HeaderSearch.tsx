@@ -27,7 +27,17 @@ export default function HeaderSearch(){
     marketBusy.current=true;setLoading(true)
     try{
       const r=await fetch('/api/market/latest',{cache:'no-store'}),j=await r.json()
-      if(r.ok){setTokens((j.tokens||[]).slice(0,100));marketLoadedAt.current=Date.now()}
+      if(r.ok){
+        let next=((j.tokens||[]) as MarketToken[]).slice(0,100)
+        const currentMint=(()=>{try{const value=new URLSearchParams(window.location.search).get('mint')?.trim()||'';return isMint(value)?value:''}catch{return''}})()
+        if(currentMint&&!next.some(t=>t.mint===currentMint)){
+          try{
+            const direct=await fetch('/api/market/token/'+encodeURIComponent(currentMint),{cache:'no-store'}),directBody=await direct.json()
+            if(direct.ok&&directBody.token)next=[directBody.token,...next.filter(t=>t.mint!==currentMint)].slice(0,100)
+          }catch(error){console.error('paper_search_current_token_error',error)}
+        }
+        setTokens(next);marketLoadedAt.current=Date.now()
+      }
     }catch(error){console.error('paper_search_market_error',error)}
     finally{marketBusy.current=false;setLoading(false)}
   }
