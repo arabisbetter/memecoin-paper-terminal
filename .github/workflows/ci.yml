@@ -179,7 +179,10 @@ jobs:
 
       - name: Verify live server indicators
         run: |
-          pool=$(cat /tmp/paper-pool.txt)
+          # Use a mature live Solana pool so 30-period indicators are mathematically possible.
+          # The market-feed smoke test above intentionally samples fresh memecoin pools, which
+          # can be only a few minutes old and therefore cannot honestly produce RSI14/MACD/EMA21.
+          pool="EyeeG5fzZEigSQv7jUdxydePnsPL382KyVfXAANXVmeD"
           ok=0
           for attempt in 1 2 3; do
             if curl -fsS "http://127.0.0.1:3000/api/market/indicators/$pool?tf=1m" -o /tmp/paper-indicators.json; then
