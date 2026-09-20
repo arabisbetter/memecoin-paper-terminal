@@ -10,10 +10,12 @@ const money=(n:number)=>Number.isFinite(n)?`$${n.toLocaleString(undefined,{minim
 
 export default function PortfolioEquityChart({points,startingEquity=1000}:{points:Point[];startingEquity?:number}){
   const wrap=useRef<HTMLDivElement|null>(null),chartRef=useRef<IChartApi|null>(null),seriesRef=useRef<ISeriesApi<'Area'>|null>(null)
-  const [range,setRange]=useState<Range>('7D'),[hover,setHover]=useState<Point|null>(null)
-  const filtered=useMemo(()=>{const ordered=[...points].filter(p=>Number.isFinite(p.time)&&Number.isFinite(p.equity)).sort((a,b)=>a.time-b.time);if(range==='MAX'||!ordered.length)return ordered;const span=range==='1D'?86400:range==='7D'?7*86400:30*86400,cutoff=Math.floor(Date.now()/1000)-span;return ordered.filter(p=>p.time>=cutoff)},[points,range])
+  const [range,setRange]=useState<Range>('7D'),[hover,setHover]=useState<Point|null>(null),[nowSec,setNowSec]=useState(0)
+  const filtered=useMemo(()=>{const ordered=[...points].filter(p=>Number.isFinite(p.time)&&Number.isFinite(p.equity)).sort((a,b)=>a.time-b.time);if(range==='MAX'||!ordered.length)return ordered;const span=range==='1D'?86400:range==='7D'?7*86400:30*86400,cutoff=nowSec-span;return nowSec>0?ordered.filter(p=>p.time>=cutoff):ordered},[points,range,nowSec])
   const visible=filtered.length?filtered:points.slice(-1)
   const last=hover||visible[visible.length-1],first=visible[0],change=last&&first?last.equity-first.equity:0,changePct=first?.equity?change/first.equity*100:0
+
+  useEffect(()=>{const tick=()=>setNowSec(Math.floor(Date.now()/1000)),start=window.setTimeout(tick,0),id=window.setInterval(tick,60000);return()=>{clearTimeout(start);clearInterval(id)}},[])
 
   useEffect(()=>{
     if(!wrap.current)return

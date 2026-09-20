@@ -44,7 +44,7 @@ export default function CommunityPage(){
     finally{setLoading(false)}
   },[supabase])
 
-  useEffect(()=>{void load();const id=window.setInterval(()=>{if(!document.hidden)void load()},12000);return()=>clearInterval(id)},[load])
+  useEffect(()=>{const start=window.setTimeout(()=>void load(),0);const id=window.setInterval(()=>{if(!document.hidden)void load()},12000);return()=>{clearTimeout(start);clearInterval(id)}},[load])
 
   const feed=useMemo(()=>{
     const allowed=(uid:string)=>mode==='global'||uid===me||following.includes(uid)

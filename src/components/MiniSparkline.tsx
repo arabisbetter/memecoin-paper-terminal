@@ -18,7 +18,7 @@ export default function MiniSparkline({pool,timeframe='5m'}:{pool?:string;timefr
   useEffect(()=>{
     const node=hostRef.current
     if(!node)return
-    if(typeof IntersectionObserver==='undefined'){setVisible(true);return}
+    if(typeof IntersectionObserver==='undefined'){const start=window.setTimeout(()=>setVisible(true),0);return()=>clearTimeout(start)}
     const observer=new IntersectionObserver(entries=>{
       if(entries.some(entry=>entry.isIntersecting)){setVisible(true);observer.disconnect()}
     },{rootMargin:'260px 0px'})
@@ -27,7 +27,7 @@ export default function MiniSparkline({pool,timeframe='5m'}:{pool?:string;timefr
   },[])
 
   useEffect(()=>{
-    if(!pool||!visible){if(!pool)setCandles([]);return}
+    if(!pool||!visible){if(!pool){const reset=window.setTimeout(()=>setCandles([]),0);return()=>clearTimeout(reset)}return}
     const key=`${pool}:${timeframe}`
     let alive=true
     let controller:AbortController|undefined
@@ -58,11 +58,11 @@ export default function MiniSparkline({pool,timeframe='5m'}:{pool?:string;timefr
     }
 
     applyCached()
-    void load()
+    const start=window.setTimeout(()=>void load(),0)
     const id=window.setInterval(()=>void load(true),60_000)
     const onVisible=()=>{if(!document.hidden)void load()}
     document.addEventListener('visibilitychange',onVisible)
-    return()=>{alive=false;controller?.abort();window.clearInterval(id);document.removeEventListener('visibilitychange',onVisible)}
+    return()=>{alive=false;clearTimeout(start);controller?.abort();window.clearInterval(id);document.removeEventListener('visibilitychange',onVisible)}
   },[pool,timeframe,visible])
 
   const graph=useMemo(()=>{

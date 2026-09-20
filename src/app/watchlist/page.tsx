@@ -67,7 +67,7 @@ export default function WatchlistPage(){
   const [addAddress,setAddAddress]=useState('')
   const [adding,setAdding]=useState(false)
   const [notificationPermission,setNotificationPermission]=useState<NotificationPermission>('default')
-  const notified=useMemo(()=>new Set<string>(),[])
+  const notified=useRef(new Set<string>())
   const loadSeq=useRef(0),alertSeq=useRef(0)
 
   const load=useCallback(async()=>{
@@ -141,30 +141,29 @@ export default function WatchlistPage(){
   },[supabase])
 
   useEffect(()=>{
-    void load()
+    const start=window.setTimeout(()=>void load(),0)
     const id=window.setInterval(()=>{if(!document.hidden)void load()},12000)
-    return()=>clearInterval(id)
+    return()=>{clearTimeout(start);clearInterval(id)}
   },[load])
 
   useEffect(()=>{
-    if(typeof Notification!=='undefined')setNotificationPermission(Notification.permission)
-    void loadAlerts()
+    const start=window.setTimeout(()=>{if(typeof Notification!=='undefined')setNotificationPermission(Notification.permission);void loadAlerts()},0)
     const id=window.setInterval(()=>void loadAlerts(),15000)
-    return()=>clearInterval(id)
+    return()=>{clearTimeout(start);clearInterval(id)}
   },[loadAlerts])
 
   useEffect(()=>{
     if(notificationPermission!=='granted'||typeof Notification==='undefined')return
     for(const event of alerts){
-      if(event.status!=='unread'||notified.has(event.id))continue
+      if(event.status!=='unread'||notified.current.has(event.id))continue
       const watch=items.find(row=>row.id===event.watchlist_id)
       if(!watch?.push_enabled)continue
-      notified.add(event.id)
+      notified.current.add(event.id)
       const label=event.alert_type==='price'?'price':event.alert_type.replaceAll('_',' ')
       const body='$'+(event.token_symbol||'TOKEN')+' · '+label+' alert triggered'
       new Notification('PAPER '+label+' alert',{body,tag:'paper-alert-'+event.id})
     }
-  },[alerts,items,notificationPermission,notified])
+  },[alerts,items,notificationPermission])
 
   async function add(event:FormEvent){
     event.preventDefault()

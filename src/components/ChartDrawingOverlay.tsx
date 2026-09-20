@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { PointerEvent as ReactPointerEvent } from 'react'
 import type { IChartApi, ISeriesApi, UTCTimestamp } from 'lightweight-charts'
 
@@ -8,6 +8,7 @@ export type DrawingTool='none'|'trend'|'ray'|'rectangle'|'fib'
 type Point={time:number;price:number}
 type Drawing={id:string;type:Exclude<DrawingTool,'none'>;mode:string;quote:string;start:Point;end:Point}
 type XY={x:number;y:number}
+type RenderRow={drawing:Drawing;a:XY;b:XY;width:number}
 const KEY='paper.chart.drawings.v1'
 
 function validDrawing(value:any):value is Drawing{
@@ -30,22 +31,21 @@ export default function ChartDrawingOverlay({
   const [draftStart,setDraftStart]=useState<Point|null>(null)
   const [draftEnd,setDraftEnd]=useState<Point|null>(null)
   const [version,setVersion]=useState(0)
+  const [rendered,setRendered]=useState<RenderRow[]>([])
+  const [renderedDraft,setRenderedDraft]=useState<RenderRow|null>(null)
   const hydrated=useRef(false)
 
   useEffect(()=>{
-    try{
-      const saved=JSON.parse(localStorage.getItem(KEY)||'[]')
-      if(Array.isArray(saved))setDrawings(saved.filter(validDrawing).slice(-100))
-    }catch{}
-    hydrated.current=true
+    const start=window.setTimeout(()=>{try{const saved=JSON.parse(localStorage.getItem(KEY)||'[]');if(Array.isArray(saved))setDrawings(saved.filter(validDrawing).slice(-100))}catch{}hydrated.current=true},0)
+    return()=>clearTimeout(start)
   },[])
   useEffect(()=>{
     if(hydrated.current)localStorage.setItem(KEY,JSON.stringify(drawings.slice(-100)))
   },[drawings])
   useEffect(()=>{
     if(clearSignal<=0)return
-    setDrawings([])
-    setDraftStart(null);setDraftEnd(null)
+    const start=window.setTimeout(()=>{setDrawings([]);setDraftStart(null);setDraftEnd(null)},0)
+    return()=>clearTimeout(start)
   },[clearSignal])
   useEffect(()=>{
     const chart=chartRef.current
@@ -106,16 +106,22 @@ export default function ChartDrawingOverlay({
     try{event.currentTarget.releasePointerCapture(event.pointerId)}catch{}
   }
 
-  const visible=useMemo(()=>drawings.filter(d=>d.mode===mode&&d.quote===quote),[drawings,mode,quote,version])
-  const draft=draftStart&&draftEnd&&tool!=='none'?{id:'draft',type:tool,mode,quote,start:draftStart,end:draftEnd} as Drawing:null
+  useEffect(()=>{
+    const start=window.setTimeout(()=>{
+      const width=svgRef.current?.clientWidth||1000
+      const rows=drawings.filter(d=>d.mode===mode&&d.quote===quote).map(d=>{const a=toXY(d.start),b=toXY(d.end);return a&&b?{drawing:d,a,b,width}:null}).filter((v):v is RenderRow=>Boolean(v))
+      setRendered(rows)
+      const draft=draftStart&&draftEnd&&tool!=='none'?{id:'draft',type:tool,mode,quote,start:draftStart,end:draftEnd} as Drawing:null
+      if(draft){const a=toXY(draft.start),b=toXY(draft.end);setRenderedDraft(a&&b?{drawing:draft,a,b,width}:null)}else setRenderedDraft(null)
+    },0)
+    return()=>clearTimeout(start)
+  },[drawings,draftStart,draftEnd,tool,mode,quote,version])
 
-  const renderDrawing=(drawing:Drawing)=>{
-    const a=toXY(drawing.start),b=toXY(drawing.end)
-    if(!a||!b)return null
+  const renderDrawing=(row:RenderRow)=>{
+    const {drawing,a,b,width}=row
     const common={stroke:'#8ea66a',strokeWidth:1.25,fill:'none',opacity:.92}
     if(drawing.type==='trend')return <line key={drawing.id} x1={a.x} y1={a.y} x2={b.x} y2={b.y} {...common}/>
     if(drawing.type==='ray'){
-      const width=svgRef.current?.clientWidth||1000
       const dx=b.x-a.x||1,dy=b.y-a.y
       const targetX=dx>=0?width:0
       const targetY=a.y+dy*((targetX-a.x)/dx)
@@ -139,8 +145,8 @@ export default function ChartDrawingOverlay({
     onPointerUp={up}
     aria-label="Chart drawing layer"
   >
-    {visible.map(renderDrawing)}
-    {draft&&renderDrawing(draft)}
+    {rendered.map(renderDrawing)}
+    {renderedDraft&&renderDrawing(renderedDraft)}
     {tool!=='none'&&<text x="10" y="18" fill="#9aaa7b" fontSize="9" fontWeight="700">{tool.toUpperCase()} · click-drag to draw · Esc cancels</text>}
   </svg>
 }

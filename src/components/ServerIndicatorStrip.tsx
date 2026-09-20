@@ -11,7 +11,7 @@ const num=(n:unknown,d=4)=>Number.isFinite(Number(n))?Number(n).toPrecision(d):'
 export default function ServerIndicatorStrip({pool,timeframe}:{pool?:string;timeframe:string}){
   const [data,setData]=useState<Data|null>(null)
   useEffect(()=>{
-    if(!pool){setData(null);return}
+    if(!pool){const reset=window.setTimeout(()=>setData(null),0);return()=>clearTimeout(reset)}
     let alive=true
     const tf=['5m','15m','1h'].includes(timeframe)?timeframe:'1m'
     async function load(){
@@ -19,8 +19,8 @@ export default function ServerIndicatorStrip({pool,timeframe}:{pool?:string;time
       catch(e){if(alive)setData({error:e instanceof Error?e.message:'indicators unavailable'})}
       finally{inFlight=false}
     }
-    void load();const id=window.setInterval(()=>{if(!document.hidden)void load()},30000)
-    return()=>{alive=false;clearInterval(id)}
+    const start=window.setTimeout(()=>void load(),0);const id=window.setInterval(()=>{if(!document.hidden)void load()},30000)
+    return()=>{alive=false;clearTimeout(start);clearInterval(id)}
   },[pool,timeframe])
   if(!pool)return null
   if(!data||data.error)return <div className="server-indicator-strip degraded"><span>SERVER INDICATORS</span><small>{data?.error||'SYNCING…'}</small></div>

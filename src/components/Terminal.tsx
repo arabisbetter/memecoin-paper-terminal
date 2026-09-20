@@ -50,7 +50,7 @@ export default function Terminal(){
   const [busy,setBusy]=useState(false),[message,setMessage]=useState(''),[copied,setCopied]=useState(false)
   const [selectedUpdatedAt,setSelectedUpdatedAt]=useState(0),[receipt,setReceipt]=useState<FillReceipt|null>(null),[statsWindow,setStatsWindow]=useState<StatsWindow>('5m'),[maxSlippagePct,setMaxSlippagePct]=useState(15)
   const [presetEditorOpen,setPresetEditorOpen]=useState(false),[presetSaving,setPresetSaving]=useState(false),[presetDraft,setPresetDraft]=useState<PaperPresetValues>([0.1,0.5,1,5])
-  const [feedSource,setFeedSource]=useState(''),[feedAsOf,setFeedAsOf]=useState(0),[feedWarning,setFeedWarning]=useState('')
+  const [feedSource,setFeedSource]=useState(''),[feedAsOf,setFeedAsOf]=useState(0),[feedWarning,setFeedWarning]=useState(''),[clockMs,setClockMs]=useState(0)
   const [tokenRailWidth,setTokenRailWidth]=useState(280),[tradePanelWidth,setTradePanelWidth]=useState(350),[mobilePane,setMobilePane]=useState<MobilePane>('chart')
   const feedBusy=useRef(false),accountBusy=useRef(false),tradeBusy=useRef(false)
 
@@ -91,8 +91,8 @@ export default function Terminal(){
     }catch(e){setFeedWarning((e instanceof Error?e.message:'Market feed unavailable')+' · Retrying automatically.')}finally{feedBusy.current=false}
   },[chooseToken])
 
-  useEffect(()=>{if(!supabase)return;let alive=true;void(async()=>{try{const user=await ensurePaperUser(supabase);if(alive)await loadAccount(user.id,true)}catch(e){if(alive)setMessage(e instanceof Error?e.message:'Could not start PAPER account')}})();void loadFeed(true);const feedId=window.setInterval(()=>void loadFeed(),10000),acctId=window.setInterval(()=>void loadAccount(),12000),onVisible=()=>{if(!document.hidden){void loadFeed(true);void loadAccount(undefined,true)}},onAccount=()=>void loadAccount(undefined,true);document.addEventListener('visibilitychange',onVisible);window.addEventListener('paper:account-changed',onAccount);return()=>{alive=false;clearInterval(feedId);clearInterval(acctId);document.removeEventListener('visibilitychange',onVisible);window.removeEventListener('paper:account-changed',onAccount)}},[supabase,loadAccount,loadFeed])
-  useEffect(()=>{const saved=Number(localStorage.getItem('paper.quickBuySize')),savedSlip=Number(localStorage.getItem('paper.maxSlippagePct'));if(saved>0)setAmount(saved);if(savedSlip>=.1&&savedSlip<=50)setMaxSlippagePct(savedSlip)},[])
+  useEffect(()=>{if(!supabase)return;let alive=true;const start=window.setTimeout(()=>{void(async()=>{try{const user=await ensurePaperUser(supabase);if(alive)await loadAccount(user.id,true)}catch(e){if(alive)setMessage(e instanceof Error?e.message:'Could not start PAPER account')}})();void loadFeed(true)},0);const feedId=window.setInterval(()=>void loadFeed(),10000),acctId=window.setInterval(()=>void loadAccount(),12000),onVisible=()=>{if(!document.hidden){void loadFeed(true);void loadAccount(undefined,true)}},onAccount=()=>void loadAccount(undefined,true);document.addEventListener('visibilitychange',onVisible);window.addEventListener('paper:account-changed',onAccount);return()=>{alive=false;clearTimeout(start);clearInterval(feedId);clearInterval(acctId);document.removeEventListener('visibilitychange',onVisible);window.removeEventListener('paper:account-changed',onAccount)}},[supabase,loadAccount,loadFeed])
+  useEffect(()=>{const start=window.setTimeout(()=>{const saved=Number(localStorage.getItem('paper.quickBuySize')),savedSlip=Number(localStorage.getItem('paper.maxSlippagePct'));if(saved>0)setAmount(saved);if(savedSlip>=.1&&savedSlip<=50)setMaxSlippagePct(savedSlip)},0);return()=>clearTimeout(start)},[])
   useEffect(()=>{
     const apply=(event:Event)=>{
       const detail=(event as CustomEvent<{id?:string;value?:number}>).detail
@@ -102,21 +102,22 @@ export default function Terminal(){
     window.addEventListener('paper:preset',apply)
     return()=>window.removeEventListener('paper:preset',apply)
   },[])
+  useEffect(()=>{const tick=()=>setClockMs(Date.now()),start=window.setTimeout(tick,0),id=window.setInterval(tick,1000);return()=>{clearTimeout(start);clearInterval(id)}},[])
   useEffect(()=>{localStorage.setItem('paper.quickBuySize',String(amount));localStorage.setItem('paper.maxSlippagePct',String(maxSlippagePct))},[amount,maxSlippagePct])
-  useEffect(()=>{try{const saved=JSON.parse(localStorage.getItem('paper.terminal.workspace.v1')||'{}');if(Number(saved.tokenRailWidth)>=220&&Number(saved.tokenRailWidth)<=420)setTokenRailWidth(Number(saved.tokenRailWidth));if(Number(saved.tradePanelWidth)>=300&&Number(saved.tradePanelWidth)<=520)setTradePanelWidth(Number(saved.tradePanelWidth));if(['chart','trade','positions','info'].includes(saved.mobilePane))setMobilePane(saved.mobilePane)}catch{}},[])
+  useEffect(()=>{const start=window.setTimeout(()=>{try{const saved=JSON.parse(localStorage.getItem('paper.terminal.workspace.v1')||'{}');if(Number(saved.tokenRailWidth)>=220&&Number(saved.tokenRailWidth)<=420)setTokenRailWidth(Number(saved.tokenRailWidth));if(Number(saved.tradePanelWidth)>=300&&Number(saved.tradePanelWidth)<=520)setTradePanelWidth(Number(saved.tradePanelWidth));if(['chart','trade','positions','info'].includes(saved.mobilePane))setMobilePane(saved.mobilePane)}catch{}},0);return()=>clearTimeout(start)},[])
   useEffect(()=>{localStorage.setItem('paper.terminal.workspace.v1',JSON.stringify({tokenRailWidth,tradePanelWidth,mobilePane,statsWindow,side,sellPct}))},[tokenRailWidth,tradePanelWidth,mobilePane,statsWindow,side,sellPct])
   useEffect(()=>{if(!selected)return;let alive=true;const refresh=async()=>{if(document.hidden)return;try{const r=await fetch(`/api/market/token/${encodeURIComponent(selected.mint)}`,{cache:'no-store'}),j=await r.json();if(r.ok&&j.token&&alive){setSelected(cur=>cur?{...cur,...j.token,description:j.token.description||cur.description,profileUrl:j.token.profileUrl||cur.profileUrl,buyUrl:j.token.buyUrl||cur.buyUrl}:j.token);setSelectedUpdatedAt(Number(j.asOf||Date.now()))}}catch{}};void refresh();const id=window.setInterval(()=>void refresh(),8000);return()=>{alive=false;clearInterval(id)}},[selected?.mint])
   useEffect(()=>{if(!supabase||!selected?.mint||!userId)return;let alive=true;void(async()=>{const key=`paper-view:${selected.mint}`;if(!sessionStorage.getItem(key)){const {error}=await supabase.from('token_view_events').insert({user_id:userId,mint_address:selected.mint});if(!error)sessionStorage.setItem(key,'1')}const {data}=await supabase.from('token_view_totals').select('views').eq('mint_address',selected.mint).maybeSingle();if(alive)setViewCount(Number(data?.views||0))})();return()=>{alive=false}},[supabase,userId,selected?.mint])
 
   const visible=useMemo(()=>{const q=query.trim().toLowerCase();if(!q)return tokens;return tokens.filter(t=>t.symbol.toLowerCase().includes(q)||t.name.toLowerCase().includes(q)||t.mint.toLowerCase().includes(q))},[tokens,query])
   const selectedPosition=selected?positions.find(p=>p.tokens?.mint_address===selected.mint):undefined
-  const dataAgeMs=selectedUpdatedAt?Date.now()-selectedUpdatedAt:Number.MAX_SAFE_INTEGER,dataStatus=dataAgeMs<=5000?'LIVE':dataAgeMs<=10000?'DEGRADED':'STALE'
+  const dataAgeMs=selectedUpdatedAt&&clockMs?clockMs-selectedUpdatedAt:Number.MAX_SAFE_INTEGER,dataStatus=dataAgeMs<=5000?'LIVE':dataAgeMs<=10000?'DEGRADED':'STALE'
   const cash=Number(account?.cash_usd||0),nativeEquivalent=solUsd>0?cash/solUsd:0,buySol=amount,buyUsd=amount*solUsd,estimatedFee=buyUsd*.01,totalDebit=buyUsd+estimatedFee
   const activeStats=statsFor(selected,statsWindow),txCount=activeStats.buys+activeStats.sells,buyPressure=txCount?activeStats.buys/txCount*100:0,liquidityRatio=selected?.marketCap?selected.liquidityUsd/selected.marketCap*100:0
   const description=selected?.description?.trim()||(selected?`${selected.symbol} is trading on ${selected.dexId||'a Solana DEX'} with ${money(selected.marketCap)} market cap and ${money(selected.liquidityUsd)} liquidity. Current activity shows ${money(Number(selected.volume5m||0))} in observed 5-minute volume. No verified project description was supplied by the current market source.`:'')
   const positionValue=selected&&selectedPosition?Number(selectedPosition.quantity_tokens||0)*Number(selected.priceUsd||0):0
   const positionCost=Number(selectedPosition?.cost_basis_usd||0),positionPnl=positionValue-positionCost,positionPnlPct=positionCost>0?positionPnl/positionCost*100:0
-  useEffect(()=>{setPresetDraft([...paperPresets] as PaperPresetValues)},[paperPresets])
+  useEffect(()=>{const start=window.setTimeout(()=>setPresetDraft([...paperPresets] as PaperPresetValues),0);return()=>clearTimeout(start)},[paperPresets])
   async function persistPresets(){
     setPresetSaving(true);setMessage('')
     try{

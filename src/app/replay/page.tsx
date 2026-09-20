@@ -36,7 +36,7 @@ export default function ReplayPage(){
     const id=window.setTimeout(()=>setIndex(v=>Math.min(candles.length-1,v+1)),Math.max(90,700/speed))
     return()=>clearTimeout(id)
   },[playing,index,candles.length,speed])
-  useEffect(()=>{if(index>=candles.length-1)setPlaying(false)},[index,candles.length])
+  useEffect(()=>{if(index<candles.length-1)return;const stop=window.setTimeout(()=>setPlaying(false),0);return()=>clearTimeout(stop)},[index,candles.length])
   useEffect(()=>()=>loadController.current?.abort(),[])
 
   const current=candles[index],marketValue=quantity*Number(current?.close||0),equity=cash+marketValue

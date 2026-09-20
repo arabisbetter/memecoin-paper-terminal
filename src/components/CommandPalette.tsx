@@ -49,12 +49,12 @@ export default function CommandPalette(){
   },[router])
   useEffect(()=>{
     if(!open)return
-    setActive(0);requestAnimationFrame(()=>inputRef.current?.focus())
+    const start=window.setTimeout(()=>{setActive(0);inputRef.current?.focus()},0)
     const controller=new AbortController()
     void(async()=>{try{const r=await fetch('/api/market/latest',{cache:'no-store',signal:controller.signal}),j=await r.json();if(r.ok)setTokens((j.tokens||[]).slice(0,80))}catch(e){if((e as Error)?.name!=='AbortError')setTokens([])}})()
-    return()=>controller.abort()
+    return()=>{clearTimeout(start);controller.abort()}
   },[open])
-  useEffect(()=>{if(!open){setQuery('');setActive(0)}},[open])
+  useEffect(()=>{if(open)return;const start=window.setTimeout(()=>{setQuery('');setActive(0)},0);return()=>clearTimeout(start)},[open])
 
   const results=useMemo(()=>{
     const q=query.trim().toLowerCase()

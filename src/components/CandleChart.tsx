@@ -127,7 +127,7 @@ export default function CandleChart({
   const [showTradeMarkers,setShowTradeMarkers]=useState(true)
   const [trades,setTrades]=useState<PaperTradeMarker[]>([])
   const [drawingTool,setDrawingTool]=useState<DrawingTool>('none'),[drawingClearSignal,setDrawingClearSignal]=useState(0)
-  const [levelVersion,setLevelVersion]=useState(0)
+  const [levelVersion,setLevelVersion]=useState(0),[undoCount,setUndoCount]=useState(0),[redoCount,setRedoCount]=useState(0)
 
   const impliedSupply=useMemo(()=>{
     const price=Number(currentPrice||0),mc=Number(currentMarketCap||0)
@@ -137,14 +137,12 @@ export default function CandleChart({
   const solUsd=Number(currentSolUsd||0)
   const solAvailable=solUsd>0
 
-  useEffect(()=>{
-    if(mcAvailable&&!userPickedMode.current)setMode('marketCap')
-    if(!mcAvailable&&mode==='marketCap')setMode('price')
-  },[mcAvailable,mode])
-  useEffect(()=>{if(quote==='sol'&&!solAvailable)setQuote('usd')},[quote,solAvailable])
-  useEffect(()=>{setHover(null)},[mode,quote])
+  useEffect(()=>{const start=window.setTimeout(()=>{if(mcAvailable&&!userPickedMode.current)setMode('marketCap');if(!mcAvailable&&mode==='marketCap')setMode('price')},0);return()=>clearTimeout(start)},[mcAvailable,mode])
+  useEffect(()=>{if(quote!=='sol'||solAvailable)return;const start=window.setTimeout(()=>setQuote('usd'),0);return()=>clearTimeout(start)},[quote,solAvailable])
+  useEffect(()=>{const start=window.setTimeout(()=>setHover(null),0);return()=>clearTimeout(start)},[mode,quote])
 
   useEffect(()=>{
+    const start=window.setTimeout(()=>{
     try{
       const saved=JSON.parse(localStorage.getItem('paper.chart.workspace.v2')||'{}')
       if(saved.tf&&timeframeGroups.flatMap(g=>g.items).some(i=>i.value===saved.tf)){const savedTf=saved.tf as Timeframe;setTf(savedTf==='1s'?'1m':savedTf)}
@@ -161,7 +159,9 @@ export default function CandleChart({
       if(Array.isArray(saved.levels))userLevels.current=saved.levels.filter((l:any)=>Number(l?.price)>0&&(l?.mode==='price'||l?.mode==='marketCap')&&(l?.quote==='usd'||l?.quote==='sol')).slice(0,25)
     }catch{}
     workspaceLoaded.current=true
-    setLevelVersion(v=>v+1)
+    setUndoCount(userLevels.current.length);setRedoCount(redoLevels.current.length);setLevelVersion(v=>v+1)
+    },0)
+    return()=>clearTimeout(start)
   },[])
 
   useEffect(()=>{
@@ -280,11 +280,9 @@ export default function CandleChart({
   useEffect(()=>{
     renderedRef.current=null
     hasDataRef.current=false
-    if(!poolAddress){activePoolRef.current=undefined;setCandles([]);setError('');setStatus('DEGRADED');return}
+    if(!poolAddress){activePoolRef.current=undefined;const reset=window.setTimeout(()=>{setCandles([]);setError('');setStatus('DEGRADED')},0);return()=>clearTimeout(reset)}
     activePoolRef.current=poolAddress
-    setCandles([])
     fittedKeyRef.current=''
-    setStatus('DEGRADED')
     let alive=true,inFlight=false
     const generation=++chartRequestGeneration.current
     let activeController:AbortController|null=null
@@ -316,17 +314,15 @@ export default function CandleChart({
         if(alive&&generation===chartRequestGeneration.current)setLoading(false)
       }
     }
-    setHover(null)
-    setError('')
-    void load(true)
+    const start=window.setTimeout(()=>{setCandles([]);setStatus('DEGRADED');setHover(null);setError('');void load(true)},0)
     const id=window.setInterval(()=>void load(),refreshMs(tf))
     const visible=()=>{if(!document.hidden)void load(true)}
     document.addEventListener('visibilitychange',visible)
-    return()=>{alive=false;activeController?.abort();clearInterval(id);document.removeEventListener('visibilitychange',visible)}
+    return()=>{alive=false;clearTimeout(start);activeController?.abort();clearInterval(id);document.removeEventListener('visibilitychange',visible)}
   },[poolAddress,tf])
 
   useEffect(()=>{
-    if(!supabase||!tokenId){setTrades([]);return}
+    if(!supabase||!tokenId){const reset=window.setTimeout(()=>setTrades([]),0);return()=>clearTimeout(reset)}
     let alive=true
     const loadTrades=async()=>{
       if(document.hidden)return
@@ -338,11 +334,11 @@ export default function CandleChart({
         if(alive)setTrades((data||[]) as PaperTradeMarker[])
       }catch{if(alive)setTrades([])}
     }
-    void loadTrades()
+    const start=window.setTimeout(()=>void loadTrades(),0)
     const id=window.setInterval(()=>void loadTrades(),8000)
     const changed=()=>void loadTrades()
     window.addEventListener('paper:account-changed',changed)
-    return()=>{alive=false;clearInterval(id);window.removeEventListener('paper:account-changed',changed)}
+    return()=>{alive=false;clearTimeout(start);clearInterval(id);window.removeEventListener('paper:account-changed',changed)}
   },[supabase,tokenId])
 
   useEffect(()=>{
@@ -540,7 +536,7 @@ export default function CandleChart({
     userPriceLines.current.push(line)
     userLevels.current.push(level)
     redoLevels.current=[]
-    setLevelVersion(v=>v+1)
+    setUndoCount(userLevels.current.length);setRedoCount(0);setLevelVersion(v=>v+1)
   }
   function undoLevel(){
     const series=candleRef.current
@@ -548,14 +544,14 @@ export default function CandleChart({
     const level=userLevels.current.pop()
     if(series&&line)series.removePriceLine(line)
     if(level)redoLevels.current.push(level)
-    setLevelVersion(v=>v+1)
+    setUndoCount(userLevels.current.length);setRedoCount(redoLevels.current.length);setLevelVersion(v=>v+1)
   }
   function redoLevel(){
     const series=candleRef.current
     const level=redoLevels.current.pop()
     if(!series||!level)return
     userLevels.current.push(level)
-    setLevelVersion(v=>v+1)
+    setUndoCount(userLevels.current.length);setRedoCount(redoLevels.current.length);setLevelVersion(v=>v+1)
   }
   function saveScreenshot(){
     const canvas=chartRef.current?.takeScreenshot()
@@ -606,8 +602,8 @@ export default function CandleChart({
       <button className="axiom-switch-button mode" disabled={!mcAvailable} onClick={()=>chooseMode(mode==='marketCap'?'price':'marketCap')}>{mode==='marketCap'?'MarketCap / Price':'Price / MarketCap'}</button>
 
       <div className="axiom-toolbar-separator"/>
-      <button className="axiom-icon-button" disabled={!userLevels.current.length} onClick={undoLevel} title="Undo level"><Undo2 size={14}/></button>
-      <button className="axiom-icon-button" disabled={!redoLevels.current.length} onClick={redoLevel} title="Redo level"><Redo2 size={14}/></button>
+      <button className="axiom-icon-button" disabled={!undoCount} onClick={undoLevel} title="Undo level"><Undo2 size={14}/></button>
+      <button className="axiom-icon-button" disabled={!redoCount} onClick={redoLevel} title="Redo level"><Redo2 size={14}/></button>
 
       <div className="axiom-chart-brand">PAPER</div>
       <button className="axiom-icon-button" onClick={()=>setExpanded(v=>!v)} title={expanded?'Exit fullscreen':'Fullscreen'}>{expanded?<Minimize2 size={14}/>:<Maximize2 size={14}/>}</button>

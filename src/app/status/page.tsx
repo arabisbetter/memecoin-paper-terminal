@@ -15,7 +15,7 @@ export default function StatusPage(){
   useEffect(()=>{let alive=true;async function load(){try{const r=await fetch('/api/status',{cache:'no-store'}),j=await r.json();if(alive)setData(j)}catch{if(alive)setData({status:'down',checkedAt:new Date().toISOString(),providers:[],components:[],error:'status unavailable'})}}void load();const id=setInterval(()=>{if(!document.hidden)void load()},15000);return()=>{alive=false;clearInterval(id)}},[])
   const status=data?.status||'degraded'
   return <div className="ax-app"><AppHeader active="status"/><main className="terminal-page"><div className="terminal-page-inner">
-    <div className="final-page-hero"><div><div className="terminal-eyebrow">PAPER SYSTEM STATUS</div><h1>Live provider and monitor health.</h1><p className="terminal-lead">Operational status from PAPER's server-side provider-health and heartbeat records. This page never exposes provider credentials or private error payloads.</p></div>{status==='ok'?<CheckCircle2 size={28}/>:<TriangleAlert size={28}/>}</div>
+    <div className="final-page-hero"><div><div className="terminal-eyebrow">PAPER SYSTEM STATUS</div><h1>Live provider and monitor health.</h1><p className="terminal-lead">Operational status from PAPER&apos;s server-side provider-health and heartbeat records. This page never exposes provider credentials or private error payloads.</p></div>{status==='ok'?<CheckCircle2 size={28}/>:<TriangleAlert size={28}/>}</div>
     <section className={'status-summary '+status}><span><i/><b>{status.toUpperCase()}</b></span><small>Checked {data?.checkedAt?new Date(data.checkedAt).toLocaleTimeString():'—'}</small></section>
     {data?.error&&<div className="error-card">{data.error}</div>}
     <section className="status-grid">

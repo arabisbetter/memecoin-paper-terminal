@@ -61,7 +61,7 @@ export default function FundedPage(){
     }catch(e){setMessage(e instanceof Error?e.message:'Funded status unavailable')}finally{setLoading(false)}
   },[supabase])
 
-  useEffect(()=>{void load();const id=window.setInterval(()=>{if(!document.hidden)void load()},7000);return()=>clearInterval(id)},[load])
+  useEffect(()=>{const start=window.setTimeout(()=>void load(),0);const id=window.setInterval(()=>{if(!document.hidden)void load()},7000);return()=>{clearTimeout(start);clearInterval(id)}},[load])
 
   async function getKycToken(){
     if(!supabase)throw new Error('PAPER account service is unavailable')

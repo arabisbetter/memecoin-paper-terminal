@@ -18,7 +18,7 @@ export default function WorkspacesPage(){
   const [slots,setSlots]=useState<Slot[]>([blank(),blank(),blank(),blank()]),[layout,setLayout]=useState<2|4>(4),[saved,setSaved]=useState<Saved[]>([]),[name,setName]=useState('Research layout'),[error,setError]=useState('')
   const slotSeq=useRef([0,0,0,0]),applySeq=useRef(0)
   async function loadSaved(){if(!supabase)return;try{const u=await ensurePaperUser(supabase);const {data}=await supabase.from('paper_workspaces').select('id,name,layout').eq('user_id',u.id).order('updated_at',{ascending:false});setSaved((data||[]) as Saved[])}catch{}}
-  useEffect(()=>{void loadSaved()},[])
+  useEffect(()=>{const start=window.setTimeout(()=>void loadSaved(),0);return()=>clearTimeout(start)},[])
   async function setMint(i:number,mint:string){
     const clean=mint.trim(),seq=++slotSeq.current[i]
     setSlots(v=>v.map((s,x)=>x===i?{...s,mint:clean,token:undefined}:s))

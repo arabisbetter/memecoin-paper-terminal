@@ -43,25 +43,14 @@ export default function AdvancedOrderPanel({
   const actionLock=useRef(false),loadSeq=useRef(0)
 
   useEffect(()=>{
-    try{
-      const raw=localStorage.getItem('paper.advancedOrderPrefs.v1')
-      if(raw){
-        const saved=JSON.parse(raw)
-        if(['limit','stop_loss','take_profit'].includes(saved.mode))setMode(saved.mode)
-        if([6,24,72,168].includes(Number(saved.expiresHours)))setExpiresHours(Number(saved.expiresHours))
-      }
-    }catch{}
+    const start=window.setTimeout(()=>{try{const raw=localStorage.getItem('paper.advancedOrderPrefs.v1');if(raw){const saved=JSON.parse(raw);if(['limit','stop_loss','take_profit'].includes(saved.mode))setMode(saved.mode);if([6,24,72,168].includes(Number(saved.expiresHours)))setExpiresHours(Number(saved.expiresHours))}}catch{}},0)
+    return()=>clearTimeout(start)
   },[])
   useEffect(()=>{
     localStorage.setItem('paper.advancedOrderPrefs.v1',JSON.stringify({mode,expiresHours}))
   },[mode,expiresHours])
-  useEffect(()=>{
-    if(side==='buy'&&mode!=='limit')setMode('limit')
-  },[side,mode])
-  useEffect(()=>{
-    const price=Number(token?.priceUsd||0)
-    if(price>0)setTrigger(String(price))
-  },[token?.mint])
+  useEffect(()=>{if(side!=='buy'||mode==='limit')return;const start=window.setTimeout(()=>setMode('limit'),0);return()=>clearTimeout(start)},[side,mode])
+  useEffect(()=>{const price=Number(token?.priceUsd||0);if(price<=0)return;const start=window.setTimeout(()=>setTrigger(String(price)),0);return()=>clearTimeout(start)},[token?.mint,token?.priceUsd])
 
   async function load(){
     if(!supabase)return
@@ -74,11 +63,11 @@ export default function AdvancedOrderPanel({
     }catch{}
   }
   useEffect(()=>{
-    void load()
+    const start=window.setTimeout(()=>void load(),0)
     const id=window.setInterval(()=>{if(!document.hidden)void load()},5000)
     const handler=()=>void load()
     window.addEventListener('paper:account-changed',handler)
-    return()=>{clearInterval(id);window.removeEventListener('paper:account-changed',handler)}
+    return()=>{clearTimeout(start);clearInterval(id);window.removeEventListener('paper:account-changed',handler)}
   },[supabase])
 
   async function create(){
@@ -125,13 +114,13 @@ export default function AdvancedOrderPanel({
       await load()
       setMessage('Conditional order cancelled.')
     }catch(e){setMessage(e instanceof Error?e.message:'Could not cancel order.')}
-    finally{setBusy(false)}
+    finally{actionLock.current=false;setBusy(false)}
   }
 
   const tokenOrders=orders.filter(o=>o.token_address===token?.mint&&['pending','processing'].includes(o.status))
   const currentPrice=Number(token?.priceUsd||0)
   const triggerPresets=mode==='stop_loss'?[-5,-10,-20]:mode==='take_profit'?[5,10,25,50]:side==='buy'?[-5,-10,-20]:[5,10,20]
-  function useTriggerPreset(percent:number){
+  function applyTriggerPreset(percent:number){
     if(currentPrice<=0)return
     setTrigger(String(currentPrice*(1+percent/100)))
   }
@@ -151,7 +140,7 @@ export default function AdvancedOrderPanel({
       <label><span>TRIGGER PRICE</span><div><b>$</b><input type="number" step="any" min="0" value={trigger} onChange={e=>setTrigger(e.target.value)}/></div></label>
       <label><span>EXPIRES</span><select value={expiresHours} onChange={e=>setExpiresHours(Number(e.target.value))}><option value={6}>6 hours</option><option value={24}>24 hours</option><option value={72}>3 days</option><option value={168}>7 days</option></select></label>
     </div>
-    <div className="advanced-trigger-presets"><span>FROM LIVE PRICE</span>{triggerPresets.map(value=><button key={value} type="button" disabled={currentPrice<=0} onClick={()=>useTriggerPreset(value)}>{value>0?'+':''}{value}%</button>)}</div>
+    <div className="advanced-trigger-presets"><span>FROM LIVE PRICE</span>{triggerPresets.map(value=><button key={value} type="button" disabled={currentPrice<=0} onClick={()=>applyTriggerPreset(value)}>{value>0?'+':''}{value}%</button>)}</div>
     <div className="advanced-order-helper"><Target size={11}/><span>{helper}</span></div>
     <button className={'advanced-order-submit '+(side==='sell'?'sell':'buy')} disabled={busy||!token||Number(trigger)<=0||(side==='buy'&&amountSol<=0)||(side==='sell'&&!hasPosition)} onClick={()=>void create()}>
       {busy?'WORKING…':'ARM '+(mode==='limit'?'LIMIT':mode==='stop_loss'?'STOP LOSS':'TAKE PROFIT')+' · PAPER'}

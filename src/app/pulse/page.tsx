@@ -31,7 +31,7 @@ export default function PulsePage(){
   const loadBusy=useRef(false),buyLock=useRef(false),router=useRouter(),supabase=useMemo(()=>{try{return createClient()}catch{return null}},[]),[instantMode]=useInstantMode(),filterCount=activeFilterCount(filters)
 
   async function load(force=false){if(loadBusy.current||document.hidden&&!force)return;loadBusy.current=true;if(force)setRefreshing(true);try{const r=await fetch('/api/market/latest',{cache:'no-store'}),j=await r.json();if(!r.ok)throw new Error(j.error||`market feed ${r.status}`);const next=(j.tokens||[]) as MarketToken[];if(!next.length)throw new Error('Market feed returned zero Solana tokens.');setTokens(next);setSource(j.source||'market feed');setFeedError(j.warning||'');setDataStatus(j.stale?'STALE':j.warning||j.fallback||j.live===false?'DEGRADED':'LIVE')}catch(e){setFeedError(e instanceof Error?e.message:'Live market feed unavailable');setDataStatus('DEGRADED')}finally{if(force)setRefreshing(false);loadBusy.current=false}}
-  useEffect(()=>{void load(true);const id=setInterval(()=>void load(),1800),onVisible=()=>{if(!document.hidden)void load(true)};document.addEventListener('visibilitychange',onVisible);return()=>{clearInterval(id);document.removeEventListener('visibilitychange',onVisible)}},[])
+  useEffect(()=>{const start=window.setTimeout(()=>void load(true),0),id=setInterval(()=>void load(),1800),onVisible=()=>{if(!document.hidden)void load(true)};document.addEventListener('visibilitychange',onVisible);return()=>{clearTimeout(start);clearInterval(id);document.removeEventListener('visibilitychange',onVisible)}},[])
   useEffect(()=>{
     let alive=true
     const refreshBuyingPower=async()=>{
@@ -52,6 +52,7 @@ export default function PulsePage(){
     return()=>{alive=false;clearInterval(id);window.removeEventListener('paper:account-changed',changed)}
   },[supabase])
   useEffect(()=>{
+    const start=window.setTimeout(()=>{
     const legacyId=localStorage.getItem('paper.quickBuyPreset')
     const legacySize=Number(localStorage.getItem('paper.quickBuySize'))
     let savedId=localStorage.getItem('paper.pulse.quickBuyPreset')
@@ -66,8 +67,10 @@ export default function PulsePage(){
     }
     if(savedId&&(presets.some(p=>p.id===savedId)||savedId==='MAX'))setPresetId(savedId)
     if(savedSize>0)setBuySize(savedSize)
+    },0)
+    return()=>clearTimeout(start)
   },[])
-  useEffect(()=>{try{const saved=JSON.parse(localStorage.getItem('paper.pulse.workspace.v1')||'{}');if(saved.venue&&['all','pump','raydium','meteora','other'].includes(saved.venue))setVenue(saved.venue);if(typeof saved.compact==='boolean')setCompact(saved.compact);if(typeof saved.hideLowLiquidity==='boolean')setHideLowLiquidity(saved.hideLowLiquidity);if(saved.queries&&typeof saved.queries==='object')setQueries(cur=>({...cur,...saved.queries}));if(saved.filters&&typeof saved.filters==='object')setFilters(cur=>({...cur,...saved.filters}))}catch{}},[])
+  useEffect(()=>{const start=window.setTimeout(()=>{try{const saved=JSON.parse(localStorage.getItem('paper.pulse.workspace.v1')||'{}');if(saved.venue&&['all','pump','raydium','meteora','other'].includes(saved.venue))setVenue(saved.venue);if(typeof saved.compact==='boolean')setCompact(saved.compact);if(typeof saved.hideLowLiquidity==='boolean')setHideLowLiquidity(saved.hideLowLiquidity);if(saved.queries&&typeof saved.queries==='object')setQueries(cur=>({...cur,...saved.queries}));if(saved.filters&&typeof saved.filters==='object')setFilters(cur=>({...cur,...saved.filters}))}catch{}},0);return()=>clearTimeout(start)},[])
   useEffect(()=>{localStorage.setItem('paper.pulse.workspace.v1',JSON.stringify({venue,compact,hideLowLiquidity,queries,filters}))},[venue,compact,hideLowLiquidity,queries,filters])
   useEffect(()=>{if(!notice)return;const id=setTimeout(()=>setNotice(''),4200);return()=>clearTimeout(id)},[notice])
   function choosePreset(id:string,value:number){setPresetId(id);setBuySize(value);localStorage.setItem('paper.pulse.quickBuyPreset',id);localStorage.setItem('paper.pulse.quickBuyUsd',String(value))}

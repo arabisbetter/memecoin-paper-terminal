@@ -23,7 +23,7 @@ function Ring({value,label,detail,tone='cyan'}:{value:number;label:string;detail
 
 export default function EvaluationPage(){
   const supabase=useMemo(()=>{try{return createClient()}catch{return null}},[])
-  const [payload,setPayload]=useState<StatusPayload|null>(null),[loading,setLoading]=useState(true),[starting,setStarting]=useState(false),[email,setEmail]=useState(''),[emailBusy,setEmailBusy]=useState(false),[emailSent,setEmailSent]=useState(false),[message,setMessage]=useState(''),[now,setNow]=useState(Date.now())
+  const [payload,setPayload]=useState<StatusPayload|null>(null),[loading,setLoading]=useState(true),[starting,setStarting]=useState(false),[email,setEmail]=useState(''),[emailBusy,setEmailBusy]=useState(false),[emailSent,setEmailSent]=useState(false),[message,setMessage]=useState(''),[now,setNow]=useState(0)
 
   const load=useCallback(async()=>{
     if(!supabase){setMessage('PAPER account service is not configured.');setLoading(false);return}
@@ -35,7 +35,7 @@ export default function EvaluationPage(){
     }catch(e){setMessage(e instanceof Error?e.message:'Evaluation service unavailable')}finally{setLoading(false)}
   },[supabase])
 
-  useEffect(()=>{void load();const poll=window.setInterval(()=>{if(!document.hidden)void load()},3500),tick=window.setInterval(()=>setNow(Date.now()),1000);return()=>{clearInterval(poll);clearInterval(tick)}},[load])
+  useEffect(()=>{const start=window.setTimeout(()=>{setNow(Date.now());void load()},0),poll=window.setInterval(()=>{if(!document.hidden)void load()},3500),tick=window.setInterval(()=>setNow(Date.now()),1000);return()=>{clearTimeout(start);clearInterval(poll);clearInterval(tick)}},[load])
 
   async function secureAccount(){
     if(!supabase)return

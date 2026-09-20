@@ -31,12 +31,10 @@ export function usePaperPresets(){
 
   useEffect(()=>{
     let alive=true
-    try{
-      const local=JSON.parse(localStorage.getItem('paper.quickBuyPresets.v2')||'null')
-      if(local&&alive)setValues(clean(local))
-    }catch{}
-    if(!supabase){setReady(true);return}
-    void(async()=>{
+    const start=window.setTimeout(()=>{
+      try{const local=JSON.parse(localStorage.getItem('paper.quickBuyPresets.v2')||'null');if(local&&alive)setValues(clean(local))}catch{}
+      if(!supabase){if(alive)setReady(true);return}
+      void(async()=>{
       try{
         const user=await ensurePaperUser(supabase)
         if(!alive)return
@@ -52,8 +50,9 @@ export function usePaperPresets(){
       }catch(error){
         void logClientError('presets',error,{stage:'load'})
       }finally{if(alive)setReady(true)}
-    })()
-    return()=>{alive=false}
+      })()
+    },0)
+    return()=>{alive=false;clearTimeout(start)}
   },[supabase])
 
   const save=useCallback(async(nextValues:PaperPresetValues)=>{

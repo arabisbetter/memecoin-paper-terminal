@@ -71,7 +71,7 @@ export default function AdminPage(){
     }
   },[supabase,invoke])
 
-  useEffect(()=>{void load()},[load])
+  useEffect(()=>{void load()return()=>clearTimeout(start)},[load])
 
   async function mutate(action:string,payload:Record<string,unknown>={}){
     setSaving(action)

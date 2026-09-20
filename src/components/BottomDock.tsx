@@ -45,8 +45,8 @@ export default function BottomDock(_props:{active:string}){
   const presetRef=useRef<HTMLDivElement|null>(null),moreRef=useRef<HTMLDivElement|null>(null)
 
   useEffect(()=>{
-    const saved=localStorage.getItem('paper.quickBuyPreset')
-    if(saved&&/^P[1-4]$/.test(saved))setPreset(saved)
+    const start=window.setTimeout(()=>{const saved=localStorage.getItem('paper.quickBuyPreset');if(saved&&/^P[1-4]$/.test(saved))setPreset(saved)},0)
+    return()=>clearTimeout(start)
   },[])
 
   useEffect(()=>{

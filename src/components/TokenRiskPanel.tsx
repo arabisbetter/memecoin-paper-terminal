@@ -37,8 +37,7 @@ export default function TokenRiskPanel({mint}:{mint:string}){
   useEffect(()=>{
     if(!supabase||!mint)return
     let live=true
-    setData(null);setBusy(true);setError('')
-    void(async()=>{
+    const start=window.setTimeout(()=>{setData(null);setBusy(true);setError('');void(async()=>{
       try{
         const {data:body,error:invokeError}=await supabase.functions.invoke('market-risk-scan',{body:{mint}})
         if(invokeError)throw invokeError
@@ -47,8 +46,8 @@ export default function TokenRiskPanel({mint}:{mint:string}){
       }catch(e){
         if(live){setData(null);setError(e instanceof Error?e.message:'Risk scan unavailable')}
       }finally{if(live)setBusy(false)}
-    })()
-    return()=>{live=false}
+    })()},0)
+    return()=>{live=false;clearTimeout(start)}
   },[supabase,mint])
 
   if(busy&&!data)return <section className="p23-risk-panel loading-risk"><Radar size={15}/><span>Scanning verified token risk data…</span></section>

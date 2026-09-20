@@ -26,7 +26,7 @@ function activityDays(events:Event[]){return new Set(events.map(e=>new Date(e.cr
 
 export default function RewardsPage(){
   const supabase=useMemo(()=>{try{return createClient()}catch{return null}},[])
-  const [total,setTotal]=useState<Total|null>(null),[events,setEvents]=useState<Event[]>([]),[leaders,setLeaders]=useState<Total[]>([]),[badges,setBadges]=useState<Badge[]>([]),[error,setError]=useState(''),[loading,setLoading]=useState(true)
+  const [total,setTotal]=useState<Total|null>(null),[events,setEvents]=useState<Event[]>([]),[leaders,setLeaders]=useState<Total[]>([]),[badges,setBadges]=useState<Badge[]>([]),[error,setError]=useState(''),[loading,setLoading]=useState(true),[loadedAt,setLoadedAt]=useState(0)
   useEffect(()=>{if(!supabase)return;let alive=true;async function load(){try{
     const user=await ensurePaperUser(supabase)
     const [{data:t,error:te},{data:e,error:ee},{data:l,error:le},{data:b,error:be}]=await Promise.all([
@@ -36,14 +36,14 @@ export default function RewardsPage(){
       supabase.from('paper_reward_badges').select('user_id,badge_key,earned_at').eq('user_id',user.id).order('earned_at',{ascending:true})
     ])
     if(te)throw te;if(ee)throw ee;if(le)throw le;if(be)throw be;if(!alive)return
-    setTotal((t as Total|null)||{user_id:user.id,points:0,qualifying_trades:0,last_earned_at:null});setEvents((e||[]) as Event[]);setLeaders((l||[]) as Total[]);setBadges((b||[]) as Badge[]);setError('')
+    setTotal((t as Total|null)||{user_id:user.id,points:0,qualifying_trades:0,last_earned_at:null});setEvents((e||[]) as Event[]);setLeaders((l||[]) as Total[]);setBadges((b||[]) as Badge[]);setLoadedAt(Date.now());setError('')
   }catch(err){if(alive)setError(err instanceof Error?err.message:'Rewards unavailable')}finally{if(alive)setLoading(false)}}
-  void load();const id=window.setInterval(()=>{if(!document.hidden)void load()},10000);return()=>{alive=false;clearInterval(id)}
+  const start=window.setTimeout(()=>void load(),0),id=window.setInterval(()=>{if(!document.hidden)void load()},10000);return()=>{alive=false;clearTimeout(start);clearInterval(id)}
   },[supabase])
 
   const points=Number(total?.points||0),fills=Number(total?.qualifying_trades||0),tier=tierFor(points),next=nextTier(points),progress=next?Math.max(0,Math.min(100,(points-tier.min)/(next.min-tier.min)*100)):100
   const badgeSet=useMemo(()=>new Set(badges.map(x=>x.badge_key)),[badges]),days=activityDays(events)
-  const last7=events.filter(e=>Date.now()-new Date(e.created_at).getTime()<=7*86400000),weekPoints=last7.reduce((s,e)=>s+Number(e.points||0),0)
+  const last7=events.filter(e=>loadedAt>0&&loadedAt-new Date(e.created_at).getTime()<=7*86400000),weekPoints=last7.reduce((s,e)=>s+Number(e.points||0),0)
   function share(){const text='I have '+points.toLocaleString()+' PAPER Points, '+fills.toLocaleString()+' qualifying fills, and '+badges.length+' badges on PAPER. Real market data. PAPER trading only.';window.open('https://x.com/intent/tweet?text='+encodeURIComponent(text),'_blank','noopener,noreferrer')}
 
   return <div className="ax-app"><AppHeader active="rewards"/><main className="terminal-page rewards-page"><div className="terminal-page-inner">

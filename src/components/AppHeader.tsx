@@ -57,12 +57,12 @@ export default function AppHeader({active}:{active:Active}){
   }
 
   useEffect(()=>{
-    if(!supabase){setStarting(false);setMessage('PAPER account service is not configured.');return}
     let alive=true
-    void(async()=>{
-      try{const user=await ensurePaperUser(supabase);if(!alive)return;setUid(user.id);await readAll(user.id)}catch(e){if(alive)setMessage(e instanceof Error?e.message:'Could not start PAPER account')}finally{if(alive)setStarting(false)}
-    })()
-    return()=>{alive=false}
+    const start=window.setTimeout(()=>{
+      if(!supabase){if(alive){setStarting(false);setMessage('PAPER account service is not configured.')}return}
+      void(async()=>{try{const user=await ensurePaperUser(supabase);if(!alive)return;setUid(user.id);await readAll(user.id)}catch(e){if(alive)setMessage(e instanceof Error?e.message:'Could not start PAPER account')}finally{if(alive)setStarting(false)}})()
+    },0)
+    return()=>{alive=false;clearTimeout(start)}
   },[supabase])
 
   useEffect(()=>{if(!uid)return;const refresh=()=>void readAll(uid);window.addEventListener('paper:account-changed',refresh);const id=window.setInterval(()=>{if(!document.hidden)refresh()},7000);return()=>{window.clearInterval(id);window.removeEventListener('paper:account-changed',refresh)}},[uid])

@@ -14,6 +14,7 @@ export default function FastPulseStrip({tokens}:{tokens:MarketToken[]}){
 
   useEffect(()=>{
     if(!tokens.length)return
+    const start=window.setTimeout(()=>{
     const nextMap=new Map(tokens.map(t=>[t.mint,t]))
     const fresh:PulseEvent[]=[]
     for(const token of tokens){
@@ -29,6 +30,8 @@ export default function FastPulseStrip({tokens}:{tokens:MarketToken[]}){
     }
     previous.current=nextMap
     if(fresh.length)setEvents(old=>[...fresh.sort((a,b)=>Math.abs(b.change)-Math.abs(a.change)),...old].slice(0,100))
+    },0)
+    return()=>clearTimeout(start)
   },[tokens])
 
   useEffect(()=>{

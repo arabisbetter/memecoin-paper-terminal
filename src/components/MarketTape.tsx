@@ -10,10 +10,10 @@ const short=(s:string)=>s.length>12?`${s.slice(0,5)}…${s.slice(-4)}`:s
 export default function MarketTape({poolAddress}:{poolAddress?:string}){
   const [trades,setTrades]=useState<MarketTrade[]>([]),[error,setError]=useState(''),[loading,setLoading]=useState(false),[asOf,setAsOf]=useState(0),[stale,setStale]=useState(false)
   useEffect(()=>{
-    if(!poolAddress){setTrades([]);setError('');setAsOf(0);setStale(false);return}
+    if(!poolAddress){const reset=window.setTimeout(()=>{setTrades([]);setError('');setAsOf(0);setStale(false)},0);return()=>clearTimeout(reset)}
     let alive=true,inFlight=false
     let controller:AbortController|null=null
-    setTrades([]);setError('');setAsOf(0);setStale(false);setLoading(true)
+    const reset=window.setTimeout(()=>{setTrades([]);setError('');setAsOf(0);setStale(false);setLoading(true)},0)
     const load=async(force=false)=>{
       if(inFlight||(!force&&document.hidden))return
       inFlight=true
@@ -23,8 +23,8 @@ export default function MarketTape({poolAddress}:{poolAddress?:string}){
         if(alive){setTrades((j.trades||[]) as MarketTrade[]);setError(j.warning||'');setAsOf(Number(j.asOf||Date.now()));setStale(Boolean(j.stale||j.live===false))}
       }catch(e){if(alive&&(e as Error)?.name!=='AbortError'){setError(e instanceof Error?e.message:'trade tape unavailable');setStale(true)}}finally{inFlight=false;if(alive)setLoading(false)}
     }
-    void load(true);const id=window.setInterval(()=>void load(),5_000),onVisible=()=>{if(!document.hidden)void load(true)};document.addEventListener('visibilitychange',onVisible)
-    return()=>{alive=false;controller?.abort();window.clearInterval(id);document.removeEventListener('visibilitychange',onVisible)}
+    const start=window.setTimeout(()=>void load(true),0);const id=window.setInterval(()=>void load(),5_000),onVisible=()=>{if(!document.hidden)void load(true)};document.addEventListener('visibilitychange',onVisible)
+    return()=>{alive=false;clearTimeout(reset);clearTimeout(start);controller?.abort();window.clearInterval(id);document.removeEventListener('visibilitychange',onVisible)}
   },[poolAddress])
 
   const rows=useMemo(()=>trades.slice(0,28),[trades])
