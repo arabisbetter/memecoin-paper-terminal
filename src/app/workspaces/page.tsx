@@ -37,7 +37,7 @@ export default function WorkspacesPage(){
     const resolved=await Promise.all([0,1,2,3].map(async i=>{
       const mint=m[i]||''
       if(!mint)return blank()
-      try{const r=await fetch('/api/market/token/'+encodeURIComponent(mint),{cache:'no-store'}),j=await r.json();return r.ok&&j.token?{mint:j.token.mint,token:j.token}:{mint}}catch{return{mint}}
+      try{const r=await fetch('/api/market/token/'+encodeURIComponent(mint),{cache:'no-store'}),j=await r.json();return r.ok&&j.token?{mint:j.token.mint,token:j.token}:{mint,token:null}}catch{return{mint,token:null}}
     }))
     if(seq===applySeq.current)setSlots(resolved)
   }

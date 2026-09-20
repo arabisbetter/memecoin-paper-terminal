@@ -12,9 +12,11 @@ export default function ServerIndicatorStrip({pool,timeframe}:{pool?:string;time
   const [data,setData]=useState<Data|null>(null)
   useEffect(()=>{
     if(!pool){const reset=window.setTimeout(()=>setData(null),0);return()=>clearTimeout(reset)}
-    let alive=true
+    let alive=true,inFlight=false
     const tf=['5m','15m','1h'].includes(timeframe)?timeframe:'1m'
     async function load(){
+      if(inFlight)return
+      inFlight=true
       try{const r=await fetch('/api/market/indicators/'+encodeURIComponent(pool!)+'?tf='+tf,{cache:'no-store'}),j=await r.json();if(alive)setData(r.ok?j:{error:j.error||'indicators unavailable'})}
       catch(e){if(alive)setData({error:e instanceof Error?e.message:'indicators unavailable'})}
       finally{inFlight=false}
