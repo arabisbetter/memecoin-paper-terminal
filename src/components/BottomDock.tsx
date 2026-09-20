@@ -40,14 +40,9 @@ const more=[
 
 export default function BottomDock(_props:{active:string}){
   const pathname=usePathname()
-  const {values}=usePaperPresets()
-  const [preset,setPreset]=useState('P1'),[presetOpen,setPresetOpen]=useState(false),[moreOpen,setMoreOpen]=useState(false)
+  const {values,selectedId:preset,selectPreset}=usePaperPresets()
+  const [presetOpen,setPresetOpen]=useState(false),[moreOpen,setMoreOpen]=useState(false)
   const presetRef=useRef<HTMLDivElement|null>(null),moreRef=useRef<HTMLDivElement|null>(null)
-
-  useEffect(()=>{
-    const start=window.setTimeout(()=>{const saved=localStorage.getItem('paper.quickBuyPreset');if(saved&&/^P[1-4]$/.test(saved))setPreset(saved)},0)
-    return()=>clearTimeout(start)
-  },[])
 
   useEffect(()=>{
     if(!presetOpen&&!moreOpen)return
@@ -63,12 +58,8 @@ export default function BottomDock(_props:{active:string}){
   },[presetOpen,moreOpen])
 
   function choosePreset(index:number){
-    const id='P'+(index+1),value=Number(values[index]||0)
-    if(!value)return
-    setPreset(id);setPresetOpen(false)
-    localStorage.setItem('paper.quickBuyPreset',id)
-    localStorage.setItem('paper.quickBuySize',String(value))
-    window.dispatchEvent(new CustomEvent('paper:preset',{detail:{id,value}}))
+    const value=selectPreset(index)
+    if(value>0)setPresetOpen(false)
   }
   const active=(href:string)=>href==='/'?pathname==='/' : pathname===href||pathname.startsWith(href+'/')
 

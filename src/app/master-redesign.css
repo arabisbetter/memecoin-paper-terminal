@@ -1035,3 +1035,18 @@ html,body{
     padding:6px 7px calc(6px + env(safe-area-inset-bottom,0px))!important;
   }
 }
+
+
+/* Preset/viewer interaction repair. */
+.instant-buy-preset.active{
+  border-color:rgba(34,197,94,.68)!important;
+  background:rgba(34,197,94,.13)!important;
+  box-shadow:inset 0 0 0 1px rgba(34,197,94,.16)!important;
+}
+.pulse-view-count{
+  display:inline-flex!important;
+  align-items:center!important;
+  gap:3px!important;
+  white-space:nowrap!important;
+  color:var(--text-1)!important;
+}

@@ -43,7 +43,7 @@ function statsFor(token:MarketToken|null,window:StatsWindow):WindowStats{
 
 export default function Terminal(){
   const supabase=useMemo(()=>{try{return createClient()}catch{return null}},[])
-  const {values:paperPresets,save:savePaperPresets}=usePaperPresets()
+  const {values:paperPresets,save:savePaperPresets,selectedId:selectedPresetId,selectPreset}=usePaperPresets()
   const [tokens,setTokens]=useState<MarketToken[]>([]),[selected,setSelected]=useState<MarketToken|null>(null),[positions,setPositions]=useState<LivePosition[]>([])
   const [account,setAccount]=useState<Account|null>(null),[solUsd,setSolUsd]=useState(0),[userId,setUserId]=useState(''),[viewCount,setViewCount]=useState(0)
   const [query,setQuery]=useState(''),[side,setSide]=useState<Side>('buy'),[amount,setAmount]=useState(.1),[sellPct,setSellPct]=useState(100)
@@ -107,7 +107,33 @@ export default function Terminal(){
   useEffect(()=>{const start=window.setTimeout(()=>{try{const saved=JSON.parse(localStorage.getItem('paper.terminal.workspace.v1')||'{}');if(Number(saved.tokenRailWidth)>=220&&Number(saved.tokenRailWidth)<=420)setTokenRailWidth(Number(saved.tokenRailWidth));if(Number(saved.tradePanelWidth)>=300&&Number(saved.tradePanelWidth)<=520)setTradePanelWidth(Number(saved.tradePanelWidth));if(['chart','trade','positions','info'].includes(saved.mobilePane))setMobilePane(saved.mobilePane)}catch{}},0);return()=>clearTimeout(start)},[])
   useEffect(()=>{localStorage.setItem('paper.terminal.workspace.v1',JSON.stringify({tokenRailWidth,tradePanelWidth,mobilePane,statsWindow,side,sellPct}))},[tokenRailWidth,tradePanelWidth,mobilePane,statsWindow,side,sellPct])
   useEffect(()=>{if(!selected)return;let alive=true;const refresh=async()=>{if(document.hidden)return;try{const r=await fetch(`/api/market/token/${encodeURIComponent(selected.mint)}`,{cache:'no-store'}),j=await r.json();if(r.ok&&j.token&&alive){setSelected(cur=>cur?{...cur,...j.token,description:j.token.description||cur.description,profileUrl:j.token.profileUrl||cur.profileUrl,buyUrl:j.token.buyUrl||cur.buyUrl}:j.token);setSelectedUpdatedAt(Number(j.asOf||Date.now()))}}catch{}};void refresh();const id=window.setInterval(()=>void refresh(),8000);return()=>{alive=false;clearInterval(id)}},[selected?.mint])
-  useEffect(()=>{if(!supabase||!selected?.mint||!userId)return;let alive=true;void(async()=>{const key=`paper-view:${selected.mint}`;if(!sessionStorage.getItem(key)){const {error}=await supabase.from('token_view_events').insert({user_id:userId,mint_address:selected.mint});if(!error)sessionStorage.setItem(key,'1')}const {data}=await supabase.from('token_view_totals').select('views').eq('mint_address',selected.mint).maybeSingle();if(alive)setViewCount(Number(data?.views||0))})();return()=>{alive=false}},[supabase,userId,selected?.mint])
+  useEffect(()=>{
+    if(!supabase||!selected?.mint||!userId)return
+    let alive=true,busy=false
+    const mint=selected.mint,key=`paper-view:${mint}`
+    setViewCount(0)
+    const refresh=async(record=false)=>{
+      if(busy)return
+      busy=true
+      try{
+        if(record&&!sessionStorage.getItem(key)){
+          const {error}=await supabase.from('token_view_events').insert({user_id:userId,mint_address:mint})
+          if(error)throw error
+          sessionStorage.setItem(key,'1')
+          window.dispatchEvent(new CustomEvent('paper:token-view-changed',{detail:{mint}}))
+        }
+        const {data,error}=await supabase.from('token_view_totals').select('views').eq('mint_address',mint).maybeSingle()
+        if(error)throw error
+        if(alive)setViewCount(Number(data?.views||0))
+      }catch(error){void logClientError('views',error,{mint})}
+      finally{busy=false}
+    }
+    void refresh(true)
+    const id=window.setInterval(()=>{if(!document.hidden)void refresh(false)},10000)
+    const changed=(event:Event)=>{const detail=(event as CustomEvent<{mint?:string}>).detail;if(!detail?.mint||detail.mint===mint)void refresh(false)}
+    window.addEventListener('paper:token-view-changed',changed)
+    return()=>{alive=false;clearInterval(id);window.removeEventListener('paper:token-view-changed',changed)}
+  },[supabase,userId,selected?.mint])
 
   const visible=useMemo(()=>{const q=query.trim().toLowerCase();if(!q)return tokens;return tokens.filter(t=>t.symbol.toLowerCase().includes(q)||t.name.toLowerCase().includes(q)||t.mint.toLowerCase().includes(q))},[tokens,query])
   const selectedPosition=selected?positions.find(p=>p.tokens?.mint_address===selected.mint):undefined
@@ -122,8 +148,7 @@ export default function Terminal(){
     setPresetSaving(true);setMessage('')
     try{
       const saved=await savePaperPresets(presetDraft)
-      const selectedId=localStorage.getItem('paper.quickBuyPreset')
-      const index=selectedId&&/^P[1-4]$/.test(selectedId)?Number(selectedId.slice(1))-1:0
+      const index=Number(selectedPresetId.slice(1))-1
       setPresetEditorOpen(false);setAmount(saved[index]||saved[0]);setMessage('Quick-buy presets saved.')
     }
     catch(error){void logClientError('presets',error,{stage:'save',values:presetDraft});setMessage(error instanceof Error?error.message:'Could not save quick-buy presets.')}
@@ -132,7 +157,9 @@ export default function Terminal(){
   const presets=paperPresets,canBuy=Boolean(selected&&buySol>0&&solUsd>0&&totalDebit<=cash&&dataStatus!=='STALE')
 
   async function executeTrade(target=selected,action:Side=side,override?:{amountSol?:number;sellPct?:number}){
-    if(!target||!supabase||!userId)return
+    if(!target){setMessage('Select a token first.');return}
+    if(!supabase){setMessage('PAPER account service is unavailable.');return}
+    if(!userId){setMessage('PAPER account is still starting. Try again in a moment.');return}
     const orderBuySol=Number(override?.amountSol??buySol),orderBuyUsd=orderBuySol*solUsd,orderDebit=orderBuyUsd*1.01
     const orderSellPct=Number(override?.sellPct??sellPct)
     if(action==='buy'&&(!orderBuySol||orderBuySol<=0))return
@@ -206,7 +233,7 @@ export default function Terminal(){
       {selectedPosition&&<div className="current-position-card"><div><span>YOUR POSITION</span><b>{Number(selectedPosition.quantity_tokens).toLocaleString()} {selected?'$'+selected.symbol:''}</b></div><div><span>AVG ENTRY</span><b>{money(Number(selectedPosition.average_entry_price_usd))}</b></div><div><span>VALUE</span><b>{money(positionValue)}</b></div><div><span>PNL</span><b className={positionPnl>=0?'gain':'loss'}>{money(positionPnl)} · {pct(positionPnlPct)}</b></div></div>}
       <div className="quick-buy-title"><span>QUICK BUY PRESETS</span><button type="button" className="preset-edit-button" onClick={()=>setPresetEditorOpen(v=>!v)}>{presetEditorOpen?'Done':'Edit presets'}</button></div>
       {presetEditorOpen&&<div className="preset-editor">{presetDraft.map((value,index)=><label key={index}><span>{'P'+(index+1)}</span><div><input aria-label={'Preset P'+(index+1)+' SOL'} type="number" min=".001" max="100" step=".001" value={value} onChange={e=>{const next=[...presetDraft] as PaperPresetValues;next[index]=Math.max(.001,Math.min(100,Number(e.target.value)||.001));setPresetDraft(next)}}/><b>SOL</b></div></label>)}<button type="button" disabled={presetSaving} onClick={()=>void persistPresets()}>{presetSaving?'Saving…':'Save presets'}</button></div>}
-      <div className="instant-buy-grid">{presets.map((value,index)=>{const debit=value*solUsd*1.01;return <button key={index} type="button" className="instant-buy-preset" disabled={busy||!selected||!solUsd||debit>cash||dataStatus==='STALE'} onClick={()=>void executeTrade(selected,'buy',{amountSol:value})}><span>{'P'+(index+1)}</span><b>{value} SOL</b><small>{solUsd?money(value*solUsd):'price loading'}</small></button>})}</div>
+      <div className="instant-buy-grid">{presets.map((value,index)=>{const id='P'+(index+1),debit=value*solUsd*1.01,blocked=Boolean(solUsd&&debit>cash);return <button key={index} type="button" className={'instant-buy-preset '+(selectedPresetId===id?'active':'')} aria-pressed={selectedPresetId===id} disabled={busy||!selected} title={dataStatus==='STALE'?'Click to see market-data status':blocked?'Click to see buying-power status':`Buy with ${id}`} onClick={()=>{selectPreset(index);setAmount(value);void executeTrade(selected,'buy',{amountSol:value})}}><span>{id}</span><b>{value} SOL</b><small>{blocked?'over buying power':solUsd?money(value*solUsd):'price loading'}</small></button>})}</div>
       <div className="custom-buy-row"><label><span>CUSTOM BUY</span><div><input aria-label="Custom instant buy SOL" className="amount" type="number" min=".001" max="100" step=".001" value={amount} onChange={e=>setAmount(Math.max(.001,Math.min(100,Number(e.target.value)||.001)))}/><b>SOL</b></div></label><button type="button" className="paper-buy custom-paper-buy" disabled={busy||!selected||!canBuy||dataStatus==='STALE'} onClick={()=>void executeTrade(selected,'buy',{amountSol:amount})}>{busy?'WORKING…':'BUY '+(selected?'$'+selected.symbol:'TOKEN')+' · PAPER'}</button></div>
       <div className="trade-estimate-card compact"><div><span>Buying power</span><b>{money(cash)}</b></div><div><span>Custom notional</span><b>{money(buyUsd)}</b></div><div><span>Est. fee</span><b>{money(estimatedFee)}</b></div><div><span>Est. debit</span><b>{money(totalDebit)}</b></div></div>
       <div className="meme-sell-head"><div><span><b>SELL POSITION</b><small>Choose a percentage of your current position</small></span></div><span>{selectedPosition?money(positionValue):'No position'}</span></div>
