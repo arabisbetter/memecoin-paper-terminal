@@ -321,3 +321,26 @@ html body>.feedback-root>.feedback-backdrop{
   .ax-bottom-dock.final-dock>a span{display:none!important}
   .ax-bottom-dock.final-dock .dock-live{display:none!important}
 }
+
+
+/* Full primary navigation restored without letting the header squeeze the app. */
+.final-header.master-header{min-width:0!important;display:flex!important;align-items:center!important;flex-wrap:nowrap!important;gap:10px!important}
+.master-header .ax-logo,.master-header .ax-balance-pill,.ax-profile-entry{flex:0 0 auto!important}
+.master-nav{flex:0 1 auto!important;min-width:0!important;max-width:min(660px,48vw)!important;overflow-x:auto!important;overflow-y:hidden!important;white-space:nowrap!important;scrollbar-width:none!important}
+.master-nav::-webkit-scrollbar{display:none}
+.master-nav a{flex:0 0 auto!important;padding:0 10px!important;font-size:13px!important}
+.header-token-search{flex:1 1 280px!important;min-width:180px!important;max-width:420px!important}
+.master-header .ax-header-spacer{flex:1 1 12px!important;min-width:0!important}
+.master-pulse{width:100%!important;max-width:none!important;overflow-x:hidden!important}
+.master-pulse-grid{width:100%!important;min-width:0!important}
+.pulse-board-column,.pulse-board-scroll,.pulse-card-body{min-width:0!important}
+@media(max-width:1240px){
+  .final-header.master-header{flex-wrap:wrap!important}
+  .master-nav{order:2;max-width:calc(100vw - 32px)!important;width:100%!important}
+  .header-token-search{order:3;flex:1 1 100%!important;max-width:none!important}
+  .master-header .ax-header-spacer{display:none!important}
+}
+@media(max-width:760px){
+  .final-header.master-header{display:grid!important}
+  .master-nav{width:auto!important;max-width:100%!important;overflow-x:auto!important}
+}

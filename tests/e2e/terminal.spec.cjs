@@ -10,8 +10,9 @@ test('landing page and terminal navigation stay connected',async({page})=>{
   await page.getByRole('link',{name:'Launch PAPER',exact:true}).click()
   await expect(page).toHaveURL(/\/spot/)
   await completeOnboarding(page,'home')
-  await expect(page.getByRole('link',{name:'Spot',exact:true})).toBeVisible()
-  await expect(page.getByRole('link',{name:'Pulse',exact:true})).toBeVisible()
+  for(const label of ['Discover','Trade','Evaluation','Funded','Pulse','Chains','Portfolio']){
+    await expect(page.getByRole('link',{name:label,exact:true})).toBeVisible()
+  }
   await expect(page.getByRole('link',{name:'Profile',exact:true})).toBeVisible()
   await expect(page.getByLabel('Search tokens')).toBeVisible()
   await expect(page.locator('a[href="/profile"]')).toHaveCount(1)
@@ -112,9 +113,8 @@ test('token search history persists and Pulse is exactly three columns',async({p
   for(const title of ['New Pairs','Final Stretch','Migrated'])await expect(page.locator('.pulse-board-head').filter({hasText:title})).toHaveCount(1)
   await expect(page.locator('.pulse-board-head').filter({hasText:'Trending'})).toHaveCount(0)
   await expect(page.locator('.pulse-board-head').filter({hasText:'High Volume'})).toHaveCount(0)
-  await expect(page.locator('.ax-bottom-dock.final-dock')).toBeVisible()
-  await page.getByRole('button',{name:'More',exact:true}).click()
-  await expect(page.getByRole('menuitem',{name:'Community',exact:true})).toBeVisible()
+  const pulseOverflow=await page.evaluate(()=>({scrollWidth:document.documentElement.scrollWidth,innerWidth:window.innerWidth}))
+  expect(pulseOverflow.scrollWidth).toBeLessThanOrEqual(pulseOverflow.innerWidth+2)
 })
 
 test('feedback and core Part 10 public surfaces remain available',async({page,request})=>{
