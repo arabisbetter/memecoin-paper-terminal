@@ -12,7 +12,7 @@ export function useTokenViews(mints:string[],refreshMs=10000){
 
   useEffect(()=>{
     const list=mintKey?mintKey.split('|'):[]
-    if(!supabase||!list.length){setViews({});return}
+    if(!supabase||!list.length)return
     let alive=true,busy=false
     const refresh=async()=>{
       if(busy||document.hidden)return

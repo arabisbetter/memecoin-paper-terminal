@@ -111,7 +111,6 @@ export default function Terminal(){
     if(!supabase||!selected?.mint||!userId)return
     let alive=true,busy=false
     const mint=selected.mint,key=`paper-view:${mint}`
-    setViewCount(0)
     const refresh=async(record=false)=>{
       if(busy)return
       busy=true
