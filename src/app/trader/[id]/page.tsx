@@ -48,7 +48,7 @@ export default function TraderPage(){
     }catch(e){setError(e instanceof Error?e.message:'Trader not found')}
   },[supabase,params.id])
 
-  useEffect(()=>{void load()return()=>clearTimeout(start)},[load])
+  useEffect(()=>{const start=window.setTimeout(()=>void load(),0);return()=>clearTimeout(start)},[load])
 
   async function toggleFollow(){
     if(!supabase||!me||me===params.id)return
