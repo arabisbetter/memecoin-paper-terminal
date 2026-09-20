@@ -1,17 +1,22 @@
 const { expect, test } = require('@playwright/test')
 const { completeOnboarding, liveToken, relativeDiff } = require('./helpers.cjs')
 
-test.describe.configure({mode:'serial'})
-
-test('homepage, header, search, and buttons match the simplified PAPER product',async({page})=>{
+test('landing page and terminal navigation stay connected',async({page})=>{
   await page.goto('/',{waitUntil:'domcontentloaded'})
+  await expect(page.getByRole('link',{name:'Trade',exact:true})).toBeVisible()
+  await expect(page.getByRole('link',{name:'Pulse',exact:true})).toBeVisible()
+  await expect(page.getByRole('link',{name:'Launch PAPER',exact:true})).toBeVisible()
+
+  await page.getByRole('link',{name:'Launch PAPER',exact:true}).click()
+  await expect(page).toHaveURL(/\/spot/)
   await completeOnboarding(page,'home')
   await expect(page.getByRole('link',{name:'Spot',exact:true})).toBeVisible()
   await expect(page.getByRole('link',{name:'Pulse',exact:true})).toBeVisible()
   await expect(page.getByRole('link',{name:'Profile',exact:true})).toBeVisible()
   await expect(page.getByLabel('Search tokens')).toBeVisible()
   await expect(page.locator('a[href="/profile"]')).toHaveCount(1)
-  await expect(page.locator('.terminal-table-row').first()).toBeVisible({timeout:25000})
+  await expect(page.locator('.token-row-shell').first()).toBeVisible({timeout:25000})
+  await expect(page.locator('.lw-chart-canvas').first()).toBeVisible({timeout:25000})
 
   const searchBox=await page.getByLabel('Search tokens').boundingBox()
   const profileBox=await page.getByRole('link',{name:'Profile',exact:true}).boundingBox()
@@ -107,6 +112,9 @@ test('token search history persists and Pulse is exactly three columns',async({p
   for(const title of ['New Pairs','Final Stretch','Migrated'])await expect(page.locator('.pulse-board-head').filter({hasText:title})).toHaveCount(1)
   await expect(page.locator('.pulse-board-head').filter({hasText:'Trending'})).toHaveCount(0)
   await expect(page.locator('.pulse-board-head').filter({hasText:'High Volume'})).toHaveCount(0)
+  await expect(page.locator('.ax-bottom-dock.final-dock')).toBeVisible()
+  await page.getByRole('button',{name:'More',exact:true}).click()
+  await expect(page.getByRole('menuitem',{name:'Community',exact:true})).toBeVisible()
 })
 
 test('feedback and core Part 10 public surfaces remain available',async({page,request})=>{

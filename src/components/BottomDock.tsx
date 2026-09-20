@@ -4,13 +4,14 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useEffect, useRef, useState } from 'react'
 import {
-  BarChart3, BriefcaseBusiness, CircleDollarSign, Gift, Gauge, Layers3,
-  Radio, ShieldCheck, SlidersHorizontal, Star, Trophy, WalletCards
+  BarChart3, BookOpen, BriefcaseBusiness, CircleDollarSign, Gift, Gauge,
+  Grid2X2, Layers3, MoreHorizontal, Radio, ScanSearch, ShieldCheck,
+  SlidersHorizontal, Star, Trophy, WalletCards, Waves, Activity, RotateCcw
 } from 'lucide-react'
 import PaperAccountChip from '@/components/PaperAccountChip'
 import { usePaperPresets } from '@/lib/use-paper-presets'
 
-const links=[
+const primary=[
   ['/discover','Markets',Gauge],
   ['/spot','Trade',CircleDollarSign],
   ['/evaluation','Evaluation',Trophy],
@@ -25,11 +26,23 @@ const links=[
   ['/coin','Coin',CircleDollarSign],
 ] as const
 
+const more=[
+  ['/community','Community',Waves],
+  ['/scanner','Scanner',ScanSearch],
+  ['/heatmap','Heatmap',Grid2X2],
+  ['/compare','Compare',Activity],
+  ['/journal','Journal',BookOpen],
+  ['/replay','Replay',RotateCcw],
+  ['/smart-money','Smart Money',Activity],
+  ['/workspaces','Workspaces',Grid2X2],
+  ['/status','Status',Activity],
+] as const
+
 export default function BottomDock(_props:{active:string}){
   const pathname=usePathname()
   const {values}=usePaperPresets()
-  const [open,setOpen]=useState(false),[preset,setPreset]=useState('P1')
-  const wrapRef=useRef<HTMLDivElement|null>(null)
+  const [preset,setPreset]=useState('P1'),[presetOpen,setPresetOpen]=useState(false),[moreOpen,setMoreOpen]=useState(false)
+  const presetRef=useRef<HTMLDivElement|null>(null),moreRef=useRef<HTMLDivElement|null>(null)
 
   useEffect(()=>{
     const saved=localStorage.getItem('paper.quickBuyPreset')
@@ -37,40 +50,39 @@ export default function BottomDock(_props:{active:string}){
   },[])
 
   useEffect(()=>{
-    if(!open)return
+    if(!presetOpen&&!moreOpen)return
     const onPointer=(event:PointerEvent)=>{
-      if(wrapRef.current&&!wrapRef.current.contains(event.target as Node))setOpen(false)
+      const node=event.target as Node
+      if(presetOpen&&presetRef.current&&!presetRef.current.contains(node))setPresetOpen(false)
+      if(moreOpen&&moreRef.current&&!moreRef.current.contains(node))setMoreOpen(false)
     }
-    const onKey=(event:KeyboardEvent)=>{if(event.key==='Escape')setOpen(false)}
+    const onKey=(event:KeyboardEvent)=>{if(event.key==='Escape'){setPresetOpen(false);setMoreOpen(false)}}
     window.addEventListener('pointerdown',onPointer)
     window.addEventListener('keydown',onKey)
     return()=>{window.removeEventListener('pointerdown',onPointer);window.removeEventListener('keydown',onKey)}
-  },[open])
+  },[presetOpen,moreOpen])
 
-  function choose(index:number){
-    const id=`P${index+1}`,value=Number(values[index]||0)
+  function choosePreset(index:number){
+    const id='P'+(index+1),value=Number(values[index]||0)
     if(!value)return
-    setPreset(id);setOpen(false)
+    setPreset(id);setPresetOpen(false)
     localStorage.setItem('paper.quickBuyPreset',id)
     localStorage.setItem('paper.quickBuySize',String(value))
     window.dispatchEvent(new CustomEvent('paper:preset',{detail:{id,value}}))
   }
+  const active=(href:string)=>href==='/'?pathname==='/' : pathname===href||pathname.startsWith(href+'/')
 
-  const active=(href:string)=>pathname===href||pathname.startsWith(href+'/')
-
-  return <footer className="ax-bottom-dock final-dock">
-    <div className="dock-preset-wrap" ref={wrapRef}>
-      <button className="dock-preset" aria-expanded={open} aria-haspopup="menu" title="Quick-buy presets" onClick={()=>setOpen(v=>!v)}>
-        <SlidersHorizontal size={14}/><b>{preset}</b>
-      </button>
-      {open&&<div className="dock-preset-menu" role="menu">
-        {values.map((value,index)=><button key={index} role="menuitem" className={preset===`P${index+1}`?'active':''} onClick={()=>choose(index)}>
-          <span>{`P${index+1}`}</span><b>{value} SOL</b>
-        </button>)}
-      </div>}
+  return <footer className="ax-bottom-dock final-dock restored-feature-dock">
+    <div className="dock-preset-wrap" ref={presetRef}>
+      <button className="dock-preset" aria-expanded={presetOpen} aria-haspopup="menu" title="Quick-buy presets" onClick={()=>{setPresetOpen(v=>!v);setMoreOpen(false)}}><SlidersHorizontal size={14}/><b>{preset}</b></button>
+      {presetOpen&&<div className="dock-preset-menu" role="menu">{values.map((value,index)=><button key={index} role="menuitem" className={preset===`P${index+1}`?'active':''} onClick={()=>choosePreset(index)}><span>{`P${index+1}`}</span><b>{value} SOL</b></button>)}</div>}
     </div>
     <div className="dock-divider"/>
-    {links.map(([href,label,Icon])=><Link key={href} className={active(href)?'active':''} href={href}><Icon size={14}/><span>{label}</span></Link>)}
+    {primary.map(([href,label,Icon])=><Link key={href} className={active(href)?'active':''} href={href}><Icon size={14}/><span>{label}</span></Link>)}
+    <div className="dock-more-wrap" ref={moreRef}>
+      <button className={`dock-more ${more.some(([href])=>active(href))?'active':''}`} aria-expanded={moreOpen} aria-haspopup="menu" onClick={()=>{setMoreOpen(v=>!v);setPresetOpen(false)}}><MoreHorizontal size={14}/><span>More</span></button>
+      {moreOpen&&<div className="dock-more-menu" role="menu">{more.map(([href,label,Icon])=><Link key={href} role="menuitem" className={active(href)?'active':''} href={href} onClick={()=>setMoreOpen(false)}><Icon size={14}/><span>{label}</span></Link>)}</div>}
+    </div>
     <div className="dock-spacer"/>
     <PaperAccountChip/>
     <span className="dock-live"><i/> LIVE</span>
