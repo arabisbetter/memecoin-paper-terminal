@@ -12,7 +12,6 @@ import {
 import { createClient } from '@/lib/supabase/client'
 import { logClientError } from '@/lib/client-telemetry'
 import ChartDrawingOverlay, { type DrawingTool } from '@/components/ChartDrawingOverlay'
-import ServerIndicatorStrip from '@/components/ServerIndicatorStrip'
 
 type Candle={time:number;open:number;high:number;low:number;close:number;volume:number}
 type Timeframe='1s'|'5s'|'15s'|'30s'|'1m'|'3m'|'5m'|'15m'|'30m'|'1h'|'4h'|'6h'|'12h'|'24h'|'1M'
@@ -223,8 +222,8 @@ export default function CandleChart({
         vertLine:{color:'#677181',width:1,labelBackgroundColor:'#262d36'},
         horzLine:{color:'#677181',width:1,labelBackgroundColor:'#262d36'}
       },
-      rightPriceScale:{borderColor:'#242a32',scaleMargins:{top:.04,bottom:.17},entireTextOnly:true},
-      timeScale:{borderColor:'#242a32',timeVisible:true,secondsVisible:true,rightOffset:8,barSpacing:6,minBarSpacing:1.4,fixLeftEdge:false,fixRightEdge:false},
+      rightPriceScale:{borderColor:'#242a32',scaleMargins:{top:.07,bottom:.16},entireTextOnly:true,ticksVisible:true,minimumWidth:86},
+      timeScale:{borderColor:'#242a32',timeVisible:true,secondsVisible:true,rightOffset:8,barSpacing:9,minBarSpacing:2,maxBarSpacing:14,fixLeftEdge:false,fixRightEdge:false},
       handleScroll:{mouseWheel:true,pressedMouseMove:true,horzTouchDrag:true,vertTouchDrag:false},
       handleScale:{axisPressedMouseMove:true,mouseWheel:true,pinch:true},
     })
@@ -291,7 +290,7 @@ export default function CandleChart({
   useEffect(()=>{
     chartRef.current?.timeScale().applyOptions({
       timeVisible:true,secondsVisible:isSecondTf(tf),rightOffset:isSecondTf(tf)?8:6,
-      barSpacing:isSecondTf(tf)?5:7
+      barSpacing:isSecondTf(tf)?7:9,minBarSpacing:2,maxBarSpacing:14
     })
   },[tf])
 
@@ -484,8 +483,13 @@ export default function CandleChart({
       requestAnimationFrame(()=>{
         const scale=chartRef.current?.timeScale()
         if(!scale)return
-        if(displayCandles.length>100)scale.setVisibleLogicalRange({from:Math.max(0,displayCandles.length-100),to:displayCandles.length+4})
-        else scale.fitContent()
+        if(displayCandles.length<48){
+          scale.setVisibleLogicalRange({from:displayCandles.length-72,to:displayCandles.length+8})
+        }else if(displayCandles.length>110){
+          scale.setVisibleLogicalRange({from:displayCandles.length-105,to:displayCandles.length+6})
+        }else{
+          scale.fitContent()
+        }
       })
     }
   },[displayCandles,mode,quote,showEma9,showEma21,showEma50,showSma20,showSma50,showVwap,showBollinger,poolAddress,tf])
@@ -547,7 +551,6 @@ export default function CandleChart({
     window.addEventListener('keydown',key)
     return()=>{document.body.style.overflow=old;window.removeEventListener('keydown',key)}
   },[expanded])
-  useEffect(()=>{requestAnimationFrame(()=>chartRef.current?.timeScale().fitContent())},[expanded])
 
   const latest=hover||displayCandles[displayCandles.length-1]
   const summary=useMemo(()=>{
@@ -706,7 +709,6 @@ export default function CandleChart({
           </>}
         </div>
 
-        <ServerIndicatorStrip pool={poolAddress} timeframe={tf}/>
 
         <div className="axiom-live-strip">
           <span className={'chart-live-badge '+status.toLowerCase()}><i/>{loading?'SYNCING':status}</span>
