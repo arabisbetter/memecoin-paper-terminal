@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Clock3, Target, Trash2 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import type { MarketToken } from '@/lib/types'
@@ -40,6 +40,7 @@ export default function AdvancedOrderPanel({
   const [orders,setOrders]=useState<ConditionalOrder[]>([])
   const [busy,setBusy]=useState(false)
   const [message,setMessage]=useState('')
+  const actionLock=useRef(false),loadSeq=useRef(0)
 
   useEffect(()=>{
     try{
@@ -64,11 +65,12 @@ export default function AdvancedOrderPanel({
 
   async function load(){
     if(!supabase)return
+    const seq=++loadSeq.current
     try{
       const {data,error}=await supabase.functions.invoke('paper-advanced-orders',{body:{action:'list'}})
       if(error)throw error
       if(data?.error)throw new Error(data.error)
-      setOrders((data?.orders||[]) as ConditionalOrder[])
+      if(seq===loadSeq.current)setOrders((data?.orders||[]) as ConditionalOrder[])
     }catch{}
   }
   useEffect(()=>{
@@ -84,6 +86,8 @@ export default function AdvancedOrderPanel({
     const triggerPriceUsd=Number(trigger)
     if(!Number.isFinite(triggerPriceUsd)||triggerPriceUsd<=0){setMessage('Enter a valid trigger price.');return}
     if(side==='sell'&&!hasPosition){setMessage('No open PAPER position for this token.');return}
+    if(actionLock.current)return
+    actionLock.current=true
     setBusy(true);setMessage('')
     try{
       const body={
@@ -107,11 +111,12 @@ export default function AdvancedOrderPanel({
       onChanged?.()
     }catch(e){
       setMessage(e instanceof Error?e.message:'Could not place conditional PAPER order.')
-    }finally{setBusy(false)}
+    }finally{actionLock.current=false;setBusy(false)}
   }
 
   async function cancel(id:string){
-    if(!supabase)return
+    if(!supabase||actionLock.current)return
+    actionLock.current=true
     setBusy(true)
     try{
       const {data,error}=await supabase.functions.invoke('paper-advanced-orders',{body:{action:'cancel',id}})

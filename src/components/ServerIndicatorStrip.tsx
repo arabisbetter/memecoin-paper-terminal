@@ -17,6 +17,7 @@ export default function ServerIndicatorStrip({pool,timeframe}:{pool?:string;time
     async function load(){
       try{const r=await fetch('/api/market/indicators/'+encodeURIComponent(pool!)+'?tf='+tf,{cache:'no-store'}),j=await r.json();if(alive)setData(r.ok?j:{error:j.error||'indicators unavailable'})}
       catch(e){if(alive)setData({error:e instanceof Error?e.message:'indicators unavailable'})}
+      finally{inFlight=false}
     }
     void load();const id=window.setInterval(()=>{if(!document.hidden)void load()},30000)
     return()=>{alive=false;clearInterval(id)}

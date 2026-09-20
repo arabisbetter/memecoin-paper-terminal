@@ -1,6 +1,6 @@
 'use client'
 
-import { FormEvent, useEffect, useMemo, useState } from 'react'
+import { FormEvent, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { Filter, Radar, Save, ScanSearch, Zap } from 'lucide-react'
 import AppHeader from '@/components/AppHeader'
@@ -19,9 +19,10 @@ export default function ScannerPage(){
   const supabase=useMemo(()=>{try{return createClient()}catch{return null}},[])
   const [tokens,setTokens]=useState<MarketToken[]>([]),[filters,setFilters]=useState<Filters>(defaults),[loading,setLoading]=useState(true),[error,setError]=useState(''),[name,setName]=useState('Launch scanner'),[saved,setSaved]=useState<{id:string;name:string;filters:Filters}[]>([])
   const [deep,setDeep]=useState<Record<string,Deep>>({}),[deepBusy,setDeepBusy]=useState(false),[deepAt,setDeepAt]=useState(0)
-  async function load(){setLoading(true);try{const r=await fetch('/api/market/latest',{cache:'no-store'}),j=await r.json();if(!r.ok)throw new Error(j.error||'Market feed unavailable');setTokens(j.tokens||[]);setError('')}catch(e){setError(e instanceof Error?e.message:'Market feed unavailable')}finally{setLoading(false)}}
+  const loadBusy=useRef(false),alive=useRef(true)
+  async function load(){if(loadBusy.current)return;loadBusy.current=true;setLoading(true);try{const r=await fetch('/api/market/latest',{cache:'no-store'}),j=await r.json();if(!r.ok)throw new Error(j.error||'Market feed unavailable');if(alive.current){setTokens(j.tokens||[]);setError('')}}catch(e){if(alive.current)setError(e instanceof Error?e.message:'Market feed unavailable')}finally{loadBusy.current=false;if(alive.current)setLoading(false)}}
   async function loadSaved(){if(!supabase)return;try{const u=await ensurePaperUser(supabase);const {data}=await supabase.from('paper_saved_scanners').select('id,name,filters').eq('user_id',u.id).order('updated_at',{ascending:false});setSaved((data||[]) as any)}catch{}}
-  useEffect(()=>{void load();void loadSaved();const id=setInterval(()=>{if(!document.hidden)void load()},4000);return()=>clearInterval(id)},[])
+  useEffect(()=>{alive.current=true;void load();void loadSaved();const id=setInterval(()=>{if(!document.hidden)void load()},4000);return()=>{alive.current=false;clearInterval(id)}},[])
 
   const baseRows=useMemo(()=>tokens.map(t=>{const buys=Number(t.buys5m||0),sells=Number(t.sells5m||0),buyPct=buys/Math.max(1,buys+sells)*100,ageMin=t.pairCreatedAt?(Date.now()-t.pairCreatedAt)/60000:999999,liqMcPct=t.marketCap>0?t.liquidityUsd/t.marketCap*100:0;const velocity=Number(t.volume5m||0)/5+buys*200+Math.max(0,Number(t.priceChange5m||0))*800;return{...t,buyPct,ageMin,liqMcPct,velocity}}).filter(t=>t.ageMin<=filters.maxAgeMin&&t.liquidityUsd>=filters.minLiquidity&&t.marketCap<=filters.maxMarketCap&&Number(t.volume5m||0)>=filters.minVolume5m&&Number(t.buys5m||0)>=filters.minBuys5m&&t.buyPct>=filters.minBuyPct&&Number(t.priceChange5m||0)>=filters.minMove5m&&t.liqMcPct>=filters.minLiqMcPct).sort((a,b)=>b.velocity-a.velocity),[tokens,filters])
 

@@ -56,8 +56,11 @@ test('presets save, reload, instant buy, and percentage sell work for a fresh an
 
   const p1Buy=page.locator('.instant-buy-preset').filter({hasText:'P1'}).first()
   await expect(p1Buy).toBeEnabled({timeout:25000})
-  await p1Buy.click()
+  let tradeRequests=0
+  page.on('request',request=>{if(request.url().includes('/functions/v1/paper-trade'))tradeRequests++})
+  await p1Buy.evaluate(button=>{button.click();button.click()})
   await expect(page.locator('.trade-message').filter({hasText:/^PAPER BUY FILLED$/})).toBeVisible({timeout:30000})
+  expect(tradeRequests).toBe(1)
 
   const sell25=page.locator('.percentage-sell-button').filter({hasText:'25%'}).first()
   await expect(sell25).toBeEnabled({timeout:25000})

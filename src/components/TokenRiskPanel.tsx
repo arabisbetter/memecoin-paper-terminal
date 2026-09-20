@@ -37,7 +37,7 @@ export default function TokenRiskPanel({mint}:{mint:string}){
   useEffect(()=>{
     if(!supabase||!mint)return
     let live=true
-    setBusy(true);setError('')
+    setData(null);setBusy(true);setError('')
     void(async()=>{
       try{
         const {data:body,error:invokeError}=await supabase.functions.invoke('market-risk-scan',{body:{mint}})

@@ -34,6 +34,9 @@ jobs:
       - name: Audit production dependencies
         run: npm audit --omit=dev --audit-level=high
 
+      - name: Lint application
+        run: npm run lint
+
       - run: npm run build
         env:
           NEXT_PUBLIC_SUPABASE_URL: https://bpnhybmptjenrjntvmsz.supabase.co
@@ -311,7 +314,7 @@ jobs:
       - name: Verify PAPER PWA shell
         run: |
           curl -fsS http://127.0.0.1:3000/sw.js -o /tmp/paper-sw.js
-          grep -q "paper-shell-v10-6" /tmp/paper-sw.js
+          grep -q "paper-shell-v10-7" /tmp/paper-sw.js
           grep -q "url.pathname.startsWith('/api/')" /tmp/paper-sw.js
           curl -fsS http://127.0.0.1:3000/manifest.webmanifest -o /tmp/paper-manifest.json
           node - <<'NODE'

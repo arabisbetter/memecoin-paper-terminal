@@ -13,7 +13,7 @@ const money=(n:number)=>!Number.isFinite(n)?'—':'$'+n.toLocaleString(undefined
 const isMint=(s:string)=>/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(s.trim())
 
 export default function ReplayPage(){
-  const host=useRef<HTMLDivElement|null>(null),chart=useRef<IChartApi|null>(null),series=useRef<ISeriesApi<'Candlestick'>|null>(null)
+  const host=useRef<HTMLDivElement|null>(null),chart=useRef<IChartApi|null>(null),series=useRef<ISeriesApi<'Candlestick'>|null>(null),loadSeq=useRef(0),loadController=useRef<AbortController|null>(null)
   const [query,setQuery]=useState(''),[token,setToken]=useState<MarketToken|null>(null),[candles,setCandles]=useState<Candle[]>([]),[index,setIndex]=useState(0),[playing,setPlaying]=useState(false),[speed,setSpeed]=useState(1),[loading,setLoading]=useState(false),[error,setError]=useState('')
   const [cash,setCash]=useState(1000),[quantity,setQuantity]=useState(0),[cost,setCost]=useState(0),[amount,setAmount]=useState(100),[trades,setTrades]=useState<ReplayTrade[]>([])
 
@@ -37,24 +37,29 @@ export default function ReplayPage(){
     return()=>clearTimeout(id)
   },[playing,index,candles.length,speed])
   useEffect(()=>{if(index>=candles.length-1)setPlaying(false)},[index,candles.length])
+  useEffect(()=>()=>loadController.current?.abort(),[])
 
-  const current=candles[index],marketValue=quantity*Number(current?.close||0),equity=cash+marketValue,unrealized=marketValue-cost,realized=trades.filter(t=>t.side==='sell').reduce((s,t)=>s,0)
+  const current=candles[index],marketValue=quantity*Number(current?.close||0),equity=cash+marketValue
   const pnl=equity-1000,roi=pnl/1000*100
 
   async function loadReplay(event?:FormEvent){
     event?.preventDefault()
     const q=query.trim()
     if(!isMint(q)){setError('Paste a valid Solana contract address.');return}
+    const seq=++loadSeq.current
+    loadController.current?.abort()
+    const controller=new AbortController();loadController.current=controller
     setLoading(true);setError('')
     try{
-      const tr=await fetch('/api/market/token/'+encodeURIComponent(q),{cache:'no-store'}),tj=await tr.json()
+      const tr=await fetch('/api/market/token/'+encodeURIComponent(q),{cache:'no-store',signal:controller.signal}),tj=await tr.json()
       if(!tr.ok||!tj.token?.pairAddress)throw new Error(tj.error||'No active replay market found.')
       const tok=tj.token as MarketToken
-      const cr=await fetch('/api/market/ohlcv/'+encodeURIComponent(tok.pairAddress!)+'?tf=1m',{cache:'no-store'}),cj=await cr.json()
+      const cr=await fetch('/api/market/ohlcv/'+encodeURIComponent(tok.pairAddress!)+'?tf=1m',{cache:'no-store',signal:controller.signal}),cj=await cr.json()
       if(!cr.ok||!Array.isArray(cj.candles)||cj.candles.length<20)throw new Error(cj.error||'Not enough historical candles for replay.')
       const rows=(cj.candles as Candle[]).sort((a,b)=>a.time-b.time)
+      if(seq!==loadSeq.current)return
       setToken(tok);setCandles(rows);setIndex(Math.min(20,rows.length-1));setCash(1000);setQuantity(0);setCost(0);setTrades([]);setPlaying(false)
-    }catch(e){setError(e instanceof Error?e.message:'Replay could not load')}finally{setLoading(false)}
+    }catch(e){if(seq===loadSeq.current&&(e as Error)?.name!=='AbortError')setError(e instanceof Error?e.message:'Replay could not load')}finally{if(seq===loadSeq.current)setLoading(false)}
   }
 
   function reset(){if(!candles.length)return;setIndex(Math.min(20,candles.length-1));setCash(1000);setQuantity(0);setCost(0);setTrades([]);setPlaying(false)}

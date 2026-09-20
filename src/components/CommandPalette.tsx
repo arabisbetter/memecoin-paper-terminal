@@ -47,7 +47,13 @@ export default function CommandPalette(){
     window.addEventListener('keydown',key)
     return()=>window.removeEventListener('keydown',key)
   },[router])
-  useEffect(()=>{if(open){setActive(0);requestAnimationFrame(()=>inputRef.current?.focus());void fetch('/api/market/latest',{cache:'no-store'}).then(r=>r.json()).then(j=>setTokens((j.tokens||[]).slice(0,80))).catch(()=>{})}},[open])
+  useEffect(()=>{
+    if(!open)return
+    setActive(0);requestAnimationFrame(()=>inputRef.current?.focus())
+    const controller=new AbortController()
+    void(async()=>{try{const r=await fetch('/api/market/latest',{cache:'no-store',signal:controller.signal}),j=await r.json();if(r.ok)setTokens((j.tokens||[]).slice(0,80))}catch(e){if((e as Error)?.name!=='AbortError')setTokens([])}})()
+    return()=>controller.abort()
+  },[open])
   useEffect(()=>{if(!open){setQuery('');setActive(0)}},[open])
 
   const results=useMemo(()=>{

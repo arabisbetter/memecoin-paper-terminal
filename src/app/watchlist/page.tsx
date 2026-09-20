@@ -1,6 +1,6 @@
 'use client'
 
-import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react'
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { Bell, ExternalLink, Plus, Save, Star, Trash2 } from 'lucide-react'
 import AppHeader from '@/components/AppHeader'
@@ -68,9 +68,11 @@ export default function WatchlistPage(){
   const [adding,setAdding]=useState(false)
   const [notificationPermission,setNotificationPermission]=useState<NotificationPermission>('default')
   const notified=useMemo(()=>new Set<string>(),[])
+  const loadSeq=useRef(0),alertSeq=useRef(0)
 
   const load=useCallback(async()=>{
     if(!supabase)return
+    const seq=++loadSeq.current
     try{
       const user=await ensurePaperUser(supabase)
       const result=await supabase.from('token_watchlist')
@@ -79,6 +81,7 @@ export default function WatchlistPage(){
         .order('created_at',{ascending:false})
       if(result.error)throw result.error
       const rows=(result.data||[]) as Item[]
+      if(seq!==loadSeq.current)return
       setItems(rows)
       setDrafts(cur=>{
         const next={...cur}
@@ -112,17 +115,19 @@ export default function WatchlistPage(){
       }))
       const map:Record<string,MarketToken>={}
       for(const item of lookups)if(item)map[item[0]]=item[1]
+      if(seq!==loadSeq.current)return
       setLive(map)
       setError('')
     }catch(e){
       setError(e instanceof Error?e.message:'Watchlist unavailable')
     }finally{
-      setLoading(false)
+      if(seq===loadSeq.current)setLoading(false)
     }
   },[supabase])
 
   const loadAlerts=useCallback(async()=>{
     if(!supabase)return
+    const seq=++alertSeq.current
     try{
       const user=await ensurePaperUser(supabase)
       const result=await supabase.from('paper_alert_events')
@@ -131,7 +136,7 @@ export default function WatchlistPage(){
         .order('created_at',{ascending:false})
         .limit(40)
       if(result.error)throw result.error
-      setAlerts((result.data||[]) as AlertEvent[])
+      if(seq===alertSeq.current)setAlerts((result.data||[]) as AlertEvent[])
     }catch{}
   },[supabase])
 
@@ -332,7 +337,7 @@ export default function WatchlistPage(){
             const draft=drafts[row.id]||{above:'',below:'',volume:'',move:'',liquidity:'',holders:'',list:'Main',notes:''}
             const href=row.chain_id==='solana'?'/spot?mint='+row.address:token?.pairUrl||token?.buyUrl||'#'
             return <div className={'watchlist-row '+(trigger?'triggered':'')} key={row.id}>
-              <Link href={href} target={row.chain_id==='solana'?undefined:'_blank'} className="watch-token">
+              <Link href={href} target={row.chain_id==='solana'?undefined:'_blank'} rel={row.chain_id==='solana'?undefined:'noreferrer'} className="watch-token">
                 <span className="pair-avatar-terminal">{token?.image||row.image_url?<img src={token?.image||row.image_url||''} alt=""/>:<b>{(token?.symbol||row.symbol||'??').slice(0,2)}</b>}</span>
                 <span><b>{'$'+(token?.symbol||row.symbol||'TOKEN')}</b><small>{token?.name||row.name||short(row.address)}</small></span>
                 {row.chain_id!=='solana'&&<ExternalLink size={11}/>}

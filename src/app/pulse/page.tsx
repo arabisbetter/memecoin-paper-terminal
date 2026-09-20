@@ -28,7 +28,7 @@ function PulseCard({t,compact,buySize,buying,disabled,instantMode,onOpen,onActio
 
 export default function PulsePage(){
   const [tokens,setTokens]=useState<MarketToken[]>([]),[queries,setQueries]=useState({new:'',final:'',migrated:'',trending:'',volume:''}),[refreshing,setRefreshing]=useState(false),[feedError,setFeedError]=useState(''),[source,setSource]=useState(''),[dataStatus,setDataStatus]=useState<'LIVE'|'DEGRADED'|'STALE'>('DEGRADED'),[compact,setCompact]=useState(false),[hideLowLiquidity,setHideLowLiquidity]=useState(false),[venue,setVenue]=useState<Venue>('all'),[buySize,setBuySize]=useState(25),[presetId,setPresetId]=useState('$25'),[buying,setBuying]=useState(''),[notice,setNotice]=useState(''),[filters,setFilters]=useState<MarketFilters>(defaultMarketFilters),[filterOpen,setFilterOpen]=useState(false),[solUsd,setSolUsd]=useState(0),[paperCash,setPaperCash]=useState(0)
-  const loadBusy=useRef(false),router=useRouter(),supabase=useMemo(()=>{try{return createClient()}catch{return null}},[]),[instantMode]=useInstantMode(),filterCount=activeFilterCount(filters)
+  const loadBusy=useRef(false),buyLock=useRef(false),router=useRouter(),supabase=useMemo(()=>{try{return createClient()}catch{return null}},[]),[instantMode]=useInstantMode(),filterCount=activeFilterCount(filters)
 
   async function load(force=false){if(loadBusy.current||document.hidden&&!force)return;loadBusy.current=true;if(force)setRefreshing(true);try{const r=await fetch('/api/market/latest',{cache:'no-store'}),j=await r.json();if(!r.ok)throw new Error(j.error||`market feed ${r.status}`);const next=(j.tokens||[]) as MarketToken[];if(!next.length)throw new Error('Market feed returned zero Solana tokens.');setTokens(next);setSource(j.source||'market feed');setFeedError(j.warning||'');setDataStatus(j.stale?'STALE':j.warning||j.fallback||j.live===false?'DEGRADED':'LIVE')}catch(e){setFeedError(e instanceof Error?e.message:'Live market feed unavailable');setDataStatus('DEGRADED')}finally{if(force)setRefreshing(false);loadBusy.current=false}}
   useEffect(()=>{void load(true);const id=setInterval(()=>void load(),1800),onVisible=()=>{if(!document.hidden)void load(true)};document.addEventListener('visibilitychange',onVisible);return()=>{clearInterval(id);document.removeEventListener('visibilitychange',onVisible)}},[])
@@ -73,8 +73,9 @@ export default function PulsePage(){
   function choosePreset(id:string,value:number){setPresetId(id);setBuySize(value);localStorage.setItem('paper.pulse.quickBuyPreset',id);localStorage.setItem('paper.pulse.quickBuyUsd',String(value))}
   async function quickBuy(t:MarketToken){
     if(!supabase){setNotice('PAPER account service is unavailable.');return}
-    if(buying)return
+    if(buyLock.current)return
     if(dataStatus==='STALE'){setNotice('Live market data is stale. Refresh Pulse before using instant buy.');return}
+    buyLock.current=true
     try{
       setBuying(t.mint);setNotice('')
       const user=await ensurePaperUser(supabase)
@@ -94,7 +95,7 @@ export default function PulsePage(){
       if(nextAcct)setPaperCash(Number(nextAcct.cash_usd||0))
       window.dispatchEvent(new Event('paper:account-changed'))
     }catch(e){setNotice(e instanceof Error?e.message:'PAPER buy failed')}
-    finally{setBuying('')}
+    finally{buyLock.current=false;setBuying('')}
   }
 
   const base=useMemo(()=>{let list=[...tokens].filter(t=>tokenMatchesFilters(t,filters));if(venue==='pump')list=list.filter(t=>/pump/i.test(t.dexId||''));if(venue==='raydium')list=list.filter(t=>/raydium/i.test(t.dexId||''));if(venue==='meteora')list=list.filter(t=>/meteora/i.test(t.dexId||''));if(venue==='other')list=list.filter(t=>!/(pump|raydium|meteora)/i.test(t.dexId||''));if(hideLowLiquidity)list=list.filter(t=>t.liquidityUsd>=10000);return list},[tokens,venue,hideLowLiquidity,filters])

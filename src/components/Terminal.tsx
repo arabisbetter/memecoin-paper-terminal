@@ -52,7 +52,7 @@ export default function Terminal(){
   const [presetEditorOpen,setPresetEditorOpen]=useState(false),[presetSaving,setPresetSaving]=useState(false),[presetDraft,setPresetDraft]=useState<PaperPresetValues>([0.1,0.5,1,5])
   const [feedSource,setFeedSource]=useState(''),[feedAsOf,setFeedAsOf]=useState(0),[feedWarning,setFeedWarning]=useState('')
   const [tokenRailWidth,setTokenRailWidth]=useState(280),[tradePanelWidth,setTradePanelWidth]=useState(350),[mobilePane,setMobilePane]=useState<MobilePane>('chart')
-  const feedBusy=useRef(false),accountBusy=useRef(false)
+  const feedBusy=useRef(false),accountBusy=useRef(false),tradeBusy=useRef(false)
 
   const chooseToken=useCallback((token:MarketToken,syncUrl=true,clearFeedback=true)=>{
     setSelected(token);setSelectedUpdatedAt(Date.now());if(clearFeedback){setReceipt(null);setMessage('')}
@@ -138,6 +138,8 @@ export default function Terminal(){
     if(action==='buy'&&orderDebit>cash){setMessage('Not enough PAPER buying power for this order and estimated fee.');return}
     if(action==='sell'&&(!selectedPosition||target.mint!==selected?.mint)){setMessage('No open PAPER position for this token.');return}
     if(target.mint===selected?.mint&&dataStatus==='STALE'){setMessage('Live pricing is stale. New PAPER orders are temporarily paused.');return}
+    if(tradeBusy.current)return
+    tradeBusy.current=true
     setBusy(true);setMessage('');setReceipt(null)
     try{
       const idempotencyKey=crypto.randomUUID(),body=action==='buy'?{mint:target.mint,side:'buy',amountSol:orderBuySol,idempotencyKey,maxSlippagePct}:{mint:target.mint,side:'sell',sellPct:orderSellPct,idempotencyKey,maxSlippagePct}
@@ -146,7 +148,7 @@ export default function Terminal(){
       chooseToken(target,true,false)
       setReceipt({side:action,symbol:target.symbol,amountUsd:Number(fill.requestedAmountUsd||result.gross_usd||0),referencePrice:Number(market.referencePriceUsd||0),executionReferencePrice:Number(market.executionReferencePriceUsd||0),fillPrice:Number(fill.simulatedFillPriceUsd||0),impactPct:Number(fill.priceImpactPct||0),totalSlippagePct:Number(fill.totalSlippagePct||0),marketMovePct:Number(market.marketMovePct||0),latencyMs:Number(market.simulatedLatencyMs||0),maxSlippagePct:Number(market.maxSlippagePct||maxSlippagePct),feeUsd:Number(fill.paperFeeUsd||0),quality:String(fill.executionQuality||'estimated'),ageMs:Number(market.marketDataAgeMs||0),orderId:String(result.order_id||''),replayed:Boolean(result.replayed)})
       setMessage(`${action==='buy'?'PAPER BUY':'PAPER SELL'} FILLED`);await loadAccount(userId,true);window.dispatchEvent(new Event('paper:account-changed'))
-    }catch(e){void logClientError('trade',e,{mint:target.mint,side:action,amountSol:orderBuySol,sellPct:orderSellPct});setMessage(e instanceof Error?e.message:'PAPER order rejected')}finally{setBusy(false)}
+    }catch(e){void logClientError('trade',e,{mint:target.mint,side:action,amountSol:orderBuySol,sellPct:orderSellPct});setMessage(e instanceof Error?e.message:'PAPER order rejected')}finally{tradeBusy.current=false;setBusy(false)}
   }
 
   async function copyMint(){if(!selected)return;try{await navigator.clipboard.writeText(selected.mint);setCopied(true);setTimeout(()=>setCopied(false),1000)}catch{}}
