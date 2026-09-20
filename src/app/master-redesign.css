@@ -156,3 +156,51 @@ a,button{outline-offset:2px}a:focus-visible,button:focus-visible,input:focus-vis
     bottom:calc(18px + env(safe-area-inset-bottom,0px))!important;
   }
 }
+
+/* Final cross-browser hit-testing fixes.
+   Undo the older axiom-chart.css nth-child rule that hid the 4th quick TF (5m). */
+@media (min-width:761px){
+  .axiom-quick-tfs>button{
+    display:inline-flex!important;
+    align-items:center!important;
+    justify-content:center!important;
+  }
+}
+
+/* Make Feedback own a real fixed hit target instead of allowing the Pulse card
+   beneath it to receive the pointer event in mobile Chromium. */
+html body>.feedback-root{
+  position:fixed!important;
+  right:16px!important;
+  bottom:16px!important;
+  width:104px!important;
+  height:44px!important;
+  z-index:2147483646!important;
+  pointer-events:auto!important;
+  isolation:isolate!important;
+}
+html body>.feedback-root>.feedback-launcher{
+  position:absolute!important;
+  inset:0!important;
+  width:100%!important;
+  height:100%!important;
+  min-width:0!important;
+  min-height:44px!important;
+  margin:0!important;
+  pointer-events:auto!important;
+  z-index:1!important;
+}
+html body>.feedback-root>.feedback-backdrop{
+  position:fixed!important;
+  inset:0!important;
+  width:100vw!important;
+  height:100vh!important;
+  z-index:2!important;
+  pointer-events:auto!important;
+}
+@media(max-width:760px){
+  html body>.feedback-root{
+    right:12px!important;
+    bottom:calc(18px + env(safe-area-inset-bottom,0px))!important;
+  }
+}
