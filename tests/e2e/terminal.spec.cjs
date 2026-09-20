@@ -92,7 +92,7 @@ test('candle API fills gaps and chart survives repeated timeframe changes',async
   }
 })
 
-test('token search history persists and Pulse is exactly three columns',async({page,request})=>{
+test('token search history persists and full Pulse boards remain available',async({page,request})=>{
   const token=await liveToken(request)
   await page.goto('/spot',{waitUntil:'domcontentloaded'})
   await completeOnboarding(page,'search')
@@ -110,9 +110,10 @@ test('token search history persists and Pulse is exactly three columns',async({p
 
   await page.goto('/pulse',{waitUntil:'domcontentloaded'})
   await completeOnboarding(page,'search')
-  for(const title of ['New Pairs','Final Stretch','Migrated'])await expect(page.locator('.pulse-board-head').filter({hasText:title})).toHaveCount(1)
-  await expect(page.locator('.pulse-board-head').filter({hasText:'Trending'})).toHaveCount(0)
-  await expect(page.locator('.pulse-board-head').filter({hasText:'High Volume'})).toHaveCount(0)
+  for(const title of ['New Pairs','Final Stretch','Migrated','Trending','High Volume'])await expect(page.locator('.pulse-board-head').filter({hasText:title})).toHaveCount(1)
+  await expect(page.locator('.pulse-five-grid .pulse-board-column')).toHaveCount(5)
+  await expect(page.getByRole('button',{name:'$25',exact:true})).toBeVisible()
+  await expect(page.getByText(/INSTANT (ON|OFF)/)).toBeVisible()
   const pulseOverflow=await page.evaluate(()=>({scrollWidth:document.documentElement.scrollWidth,innerWidth:window.innerWidth}))
   expect(pulseOverflow.scrollWidth).toBeLessThanOrEqual(pulseOverflow.innerWidth+2)
 })
