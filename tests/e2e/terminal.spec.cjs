@@ -115,6 +115,15 @@ test('token search history persists and full Pulse boards remain available',asyn
   await expect(page.locator('.pulse-five-grid .pulse-board-column')).toHaveCount(5)
   await expect(page.getByRole('button',{name:'$25',exact:true})).toBeVisible()
   await expect(page.getByText(/INSTANT (ON|OFF)/)).toBeVisible()
+  await page.evaluate(()=>{localStorage.setItem('paper.quickBuyPreset','P3');localStorage.setItem('paper.quickBuySize','1')})
+  await page.getByRole('button',{name:'$50',exact:true}).click()
+  const presetStorage=await page.evaluate(()=>({
+    terminalPreset:localStorage.getItem('paper.quickBuyPreset'),
+    terminalSize:localStorage.getItem('paper.quickBuySize'),
+    pulsePreset:localStorage.getItem('paper.pulse.quickBuyPreset'),
+    pulseUsd:localStorage.getItem('paper.pulse.quickBuyUsd'),
+  }))
+  expect(presetStorage).toEqual({terminalPreset:'P3',terminalSize:'1',pulsePreset:'$50',pulseUsd:'50'})
   const pulseOverflow=await page.evaluate(()=>({scrollWidth:document.documentElement.scrollWidth,innerWidth:window.innerWidth}))
   expect(pulseOverflow.scrollWidth).toBeLessThanOrEqual(pulseOverflow.innerWidth+2)
 })

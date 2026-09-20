@@ -311,7 +311,7 @@ jobs:
       - name: Verify PAPER PWA shell
         run: |
           curl -fsS http://127.0.0.1:3000/sw.js -o /tmp/paper-sw.js
-          grep -q "paper-shell-v10-4" /tmp/paper-sw.js
+          grep -q "paper-shell-v10-5" /tmp/paper-sw.js
           grep -q "url.pathname.startsWith('/api/')" /tmp/paper-sw.js
           curl -fsS http://127.0.0.1:3000/manifest.webmanifest -o /tmp/paper-manifest.json
           node - <<'NODE'
