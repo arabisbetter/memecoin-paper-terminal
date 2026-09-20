@@ -40,7 +40,7 @@ export default function AdvancedOrderPanel({
   const [orders,setOrders]=useState<ConditionalOrder[]>([])
   const [busy,setBusy]=useState(false)
   const [message,setMessage]=useState('')
-  const actionLock=useRef(false),loadSeq=useRef(0)
+  const actionLock=useRef(false),loadSeq=useRef(0),triggerToken=useRef(''),triggerInitialized=useRef(false)
 
   useEffect(()=>{
     const start=window.setTimeout(()=>{try{const raw=localStorage.getItem('paper.advancedOrderPrefs.v1');if(raw){const saved=JSON.parse(raw);if(['limit','stop_loss','take_profit'].includes(saved.mode))setMode(saved.mode);if([6,24,72,168].includes(Number(saved.expiresHours)))setExpiresHours(Number(saved.expiresHours))}}catch{}},0)
@@ -50,7 +50,11 @@ export default function AdvancedOrderPanel({
     localStorage.setItem('paper.advancedOrderPrefs.v1',JSON.stringify({mode,expiresHours}))
   },[mode,expiresHours])
   useEffect(()=>{if(side!=='buy'||mode==='limit')return;const start=window.setTimeout(()=>setMode('limit'),0);return()=>clearTimeout(start)},[side,mode])
-  useEffect(()=>{const price=Number(token?.priceUsd||0);if(price<=0)return;const start=window.setTimeout(()=>setTrigger(String(price)),0);return()=>clearTimeout(start)},[token?.mint,token?.priceUsd])
+  useEffect(()=>{
+    const mint=token?.mint||'',price=Number(token?.priceUsd||0)
+    if(triggerToken.current!==mint){triggerToken.current=mint;triggerInitialized.current=false;setTrigger('')}
+    if(!triggerInitialized.current&&price>0){triggerInitialized.current=true;setTrigger(String(price))}
+  },[token?.mint,token?.priceUsd])
 
   async function load(){
     if(!supabase)return
@@ -137,7 +141,7 @@ export default function AdvancedOrderPanel({
       <button className={mode==='take_profit'?'active':''} disabled={side==='buy'} onClick={()=>setMode('take_profit')}>Take Profit</button>
     </div>
     <div className="advanced-order-grid">
-      <label><span>TRIGGER PRICE</span><div><b>$</b><input type="number" step="any" min="0" value={trigger} onChange={e=>setTrigger(e.target.value)}/></div></label>
+      <label><span>TRIGGER PRICE</span><div><b>$</b><input aria-label="Advanced order trigger price" type="number" step="any" min="0" value={trigger} onChange={e=>setTrigger(e.target.value)}/></div></label>
       <label><span>EXPIRES</span><select value={expiresHours} onChange={e=>setExpiresHours(Number(e.target.value))}><option value={6}>6 hours</option><option value={24}>24 hours</option><option value={72}>3 days</option><option value={168}>7 days</option></select></label>
     </div>
     <div className="advanced-trigger-presets"><span>FROM LIVE PRICE</span>{triggerPresets.map(value=><button key={value} type="button" disabled={currentPrice<=0} onClick={()=>applyTriggerPreset(value)}>{value>0?'+':''}{value}%</button>)}</div>

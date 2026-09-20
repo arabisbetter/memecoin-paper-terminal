@@ -29,7 +29,7 @@ const isMint=(s:string)=>/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(s.trim())
 
 export default function CommandPalette(){
   const router=useRouter()
-  const inputRef=useRef<HTMLInputElement|null>(null)
+  const inputRef=useRef<HTMLInputElement|null>(null),triggerRef=useRef<HTMLButtonElement|null>(null)
   const [open,setOpen]=useState(false),[query,setQuery]=useState(''),[tokens,setTokens]=useState<MarketToken[]>([]),[active,setActive]=useState(0)
 
   useEffect(()=>{
@@ -55,6 +55,7 @@ export default function CommandPalette(){
     return()=>{clearTimeout(start);controller.abort()}
   },[open])
   useEffect(()=>{if(open)return;const start=window.setTimeout(()=>{setQuery('');setActive(0)},0);return()=>clearTimeout(start)},[open])
+  useEffect(()=>{if(!open)return;const previous=document.body.style.overflow;document.body.style.overflow='hidden';return()=>{document.body.style.overflow=previous;requestAnimationFrame(()=>triggerRef.current?.focus())}},[open])
 
   const results=useMemo(()=>{
     const q=query.trim().toLowerCase()
@@ -76,10 +77,10 @@ export default function CommandPalette(){
   }
 
   return <>
-    <button className="paper-command-trigger" onClick={()=>setOpen(true)} title="Command palette"><Command size={13}/><span>Search</span><kbd>⌘K</kbd></button>
+    <button ref={triggerRef} className="paper-command-trigger" aria-haspopup="dialog" aria-expanded={open} onClick={()=>setOpen(true)} title="Command palette"><Command size={13}/><span>Search</span><kbd>⌘K</kbd></button>
     {open&&<div className="paper-command-backdrop" onMouseDown={e=>{if(e.target===e.currentTarget)setOpen(false)}}>
-      <div className="paper-command-palette">
-        <div className="paper-command-input"><Search size={16}/><input ref={inputRef} value={query} onChange={e=>{setQuery(e.target.value);setActive(0)}} onKeyDown={onKey} placeholder="Search token, CA, community, leaderboard, scanner…"/><kbd>ESC</kbd></div>
+      <div className="paper-command-palette" role="dialog" aria-modal="true" aria-label="Command palette">
+        <div className="paper-command-input"><Search size={16}/><input ref={inputRef} aria-label="Command search" value={query} onChange={e=>{setQuery(e.target.value);setActive(0)}} onKeyDown={onKey} placeholder="Search token, CA, community, leaderboard, scanner…"/><kbd>ESC</kbd></div>
         <div className="paper-command-results">{results.length?results.map((row,index)=><button key={row.id} className={index===active?'active':''} onMouseEnter={()=>setActive(index)} onClick={()=>go(row.href)}><span>{row.icon}</span><div><b>{row.label}</b><small>{row.hint}</small></div><em>↵</em></button>):<div className="paper-command-empty">No match. Paste a Solana contract address to open it directly.</div>}</div>
         <div className="paper-command-foot"><span>↑↓ navigate</span><span>↵ open</span><span>⌘K toggle</span><span>⇧S scanner · ⇧G community · ⇧L leaderboard</span></div>
       </div>

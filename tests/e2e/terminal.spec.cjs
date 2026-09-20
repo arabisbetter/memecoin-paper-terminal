@@ -142,6 +142,12 @@ test('token search history persists and full Pulse boards remain available',asyn
   expect(pulseOverflow.scrollWidth).toBeLessThanOrEqual(pulseOverflow.innerWidth+2)
 })
 
+test('Discover uses all four shared PAPER presets',async({page})=>{
+  await page.goto('/discover',{waitUntil:'domcontentloaded'})
+  await completeOnboarding(page,'discover')
+  for(const id of ['P1','P2','P3','P4'])await expect(page.getByRole('button',{name:id,exact:true}).first()).toBeVisible()
+})
+
 test('feedback and core Part 10 public surfaces remain available',async({page,request})=>{
   await page.goto('/spot',{waitUntil:'domcontentloaded'})
   await completeOnboarding(page,'feedback')
