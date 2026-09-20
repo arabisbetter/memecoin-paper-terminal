@@ -23,6 +23,25 @@ function rsi(values:number[],period=14){
   return 100-100/(1+rs)
 }
 function std(values:number[]){if(!values.length)return 0;const m=values.reduce((a,b)=>a+b,0)/values.length;return Math.sqrt(values.reduce((s,v)=>s+(v-m)*(v-m),0)/values.length)}
+function atr(rows:Candle[],period=14){
+  if(rows.length<period+1)return null
+  const ranges:number[]=[]
+  for(let i=1;i<rows.length;i++)ranges.push(Math.max(rows[i].high-rows[i].low,Math.abs(rows[i].high-rows[i-1].close),Math.abs(rows[i].low-rows[i-1].close)))
+  let value=ranges.slice(0,period).reduce((a,b)=>a+b,0)/period
+  for(let i=period;i<ranges.length;i++)value=(value*(period-1)+ranges[i])/period
+  return value
+}
+function stochastic(rows:Candle[],period=14){
+  if(rows.length<period)return{k:null,d:null}
+  const ks:number[]=[]
+  for(let end=Math.max(period-1,rows.length-3);end<rows.length;end++){
+    const window=rows.slice(end-period+1,end+1)
+    const high=Math.max(...window.map(x=>x.high)),low=Math.min(...window.map(x=>x.low)),close=rows[end].close
+    ks.push(high===low?50:((close-low)/(high-low))*100)
+  }
+  return{k:ks.at(-1)??null,d:ks.length?ks.reduce((a,b)=>a+b,0)/ks.length:null}
+}
+function roc(values:number[],period=12){if(values.length<=period)return null;const before=values[values.length-1-period],last=values.at(-1)!;return before===0?null:((last-before)/before)*100}
 function tfSpec(tf:string){if(tf==='5m')return['minute',5] as const;if(tf==='15m')return['minute',15] as const;if(tf==='1h')return['hour',1] as const;return['minute',1] as const}
 
 export async function GET(req:NextRequest,ctx:{params:Promise<{pool:string}>}){
@@ -58,7 +77,7 @@ export async function GET(req:NextRequest,ctx:{params:Promise<{pool:string}>}){
     }
     const closes=rows.map(x=>x.close),e9=ema(closes,9),e21=ema(closes,21),e12=ema(closes,12),e26=ema(closes,26)
     const macd=e12.map((v,i)=>v-e26[i]),signal=ema(macd,9),last=rows.at(-1)!
-    const window20=closes.slice(-20),mid=window20.reduce((a,b)=>a+b,0)/window20.length,sd=std(window20)
+    const window20=closes.slice(-20),mid=window20.reduce((a,b)=>a+b,0)/window20.length,sd=std(window20),stoch=stochastic(rows,14)
     let cumVol=0,cumPv=0
     for(const row of rows){const v=Math.max(0,row.volume),typ=(row.high+row.low+row.close)/3;cumVol+=v;cumPv+=typ*v}
     const body={
@@ -67,7 +86,8 @@ export async function GET(req:NextRequest,ctx:{params:Promise<{pool:string}>}){
       indicators:{
         ema9:e9.at(-1),ema21:e21.at(-1),vwap:cumVol>0?cumPv/cumVol:last.close,rsi14:rsi(closes,14),
         macd:{line:macd.at(-1),signal:signal.at(-1),histogram:Number(macd.at(-1)||0)-Number(signal.at(-1)||0)},
-        bollinger20:{upper:mid+2*sd,middle:mid,lower:mid-2*sd}
+        bollinger20:{upper:mid+2*sd,middle:mid,lower:mid-2*sd},
+        atr14:atr(rows,14),stochastic14:stoch,roc12:roc(closes,12)
       }
     }
     cache.set(key,{at:Date.now(),body})

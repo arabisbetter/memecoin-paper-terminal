@@ -6,7 +6,7 @@ import {
   Minus, Plus, Redo2, RotateCcw, SlidersHorizontal, Undo2, TrendingUp, Square, MoveRight, Trash2
 } from 'lucide-react'
 import {
-  CandlestickSeries, ColorType, CrosshairMode, HistogramSeries, LineSeries, PriceScaleMode,
+  CandlestickSeries, ColorType, CrosshairMode, HistogramSeries, LineSeries, LineStyle, PriceScaleMode,
   createChart, createSeriesMarkers, type IChartApi, type ISeriesApi, type UTCTimestamp
 } from 'lightweight-charts'
 import { createClient } from '@/lib/supabase/client'
@@ -57,6 +57,32 @@ const ema=(rows:Candle[],period:number)=>{
     return{time:row.time as UTCTimestamp,value}
   })
 }
+const sma=(rows:Candle[],period:number)=>{
+  if(period<=0||rows.length<period)return[]
+  const points:{time:UTCTimestamp;value:number}[]=[]
+  let sum=0
+  for(let i=0;i<rows.length;i++){
+    sum+=rows[i].close
+    if(i>=period)sum-=rows[i-period].close
+    if(i>=period-1)points.push({time:rows[i].time as UTCTimestamp,value:sum/period})
+  }
+  return points
+}
+const bollinger=(rows:Candle[],period=20,deviations=2)=>{
+  const upper:{time:UTCTimestamp;value:number}[]=[],middle:{time:UTCTimestamp;value:number}[]=[],lower:{time:UTCTimestamp;value:number}[]=[]
+  if(period<=0||rows.length<period)return{upper,middle,lower}
+  for(let i=period-1;i<rows.length;i++){
+    const window=rows.slice(i-period+1,i+1).map(row=>row.close)
+    const mean=window.reduce((sum,value)=>sum+value,0)/period
+    const variance=window.reduce((sum,value)=>sum+(value-mean)*(value-mean),0)/period
+    const sd=Math.sqrt(variance)
+    const time=rows[i].time as UTCTimestamp
+    middle.push({time,value:mean})
+    upper.push({time,value:mean+deviations*sd})
+    lower.push({time,value:mean-deviations*sd})
+  }
+  return{upper,middle,lower}
+}
 const vwap=(rows:Candle[])=>{
   let cumulativeVolume=0,cumulativeValue=0
   return rows.map(row=>{
@@ -90,6 +116,12 @@ export default function CandleChart({
   const ema9Ref=useRef<ISeriesApi<'Line'>|null>(null)
   const ema21Ref=useRef<ISeriesApi<'Line'>|null>(null)
   const vwapRef=useRef<ISeriesApi<'Line'>|null>(null)
+  const ema50Ref=useRef<ISeriesApi<'Line'>|null>(null)
+  const sma20Ref=useRef<ISeriesApi<'Line'>|null>(null)
+  const sma50Ref=useRef<ISeriesApi<'Line'>|null>(null)
+  const bbUpperRef=useRef<ISeriesApi<'Line'>|null>(null)
+  const bbMiddleRef=useRef<ISeriesApi<'Line'>|null>(null)
+  const bbLowerRef=useRef<ISeriesApi<'Line'>|null>(null)
   const priceLineRef=useRef<any>(null)
   const costLineRef=useRef<any>(null)
   const tradeMarkersRef=useRef<any>(null)
@@ -124,6 +156,10 @@ export default function CandleChart({
   const [showEma9,setShowEma9]=useState(false)
   const [showEma21,setShowEma21]=useState(false)
   const [showVwap,setShowVwap]=useState(false)
+  const [showEma50,setShowEma50]=useState(false)
+  const [showSma20,setShowSma20]=useState(false)
+  const [showSma50,setShowSma50]=useState(false)
+  const [showBollinger,setShowBollinger]=useState(false)
   const [showTradeMarkers,setShowTradeMarkers]=useState(true)
   const [trades,setTrades]=useState<PaperTradeMarker[]>([])
   const [drawingTool,setDrawingTool]=useState<DrawingTool>('none'),[drawingClearSignal,setDrawingClearSignal]=useState(0)
@@ -155,6 +191,10 @@ export default function CandleChart({
       if(typeof saved.showEma9==='boolean')setShowEma9(saved.showEma9)
       if(typeof saved.showEma21==='boolean')setShowEma21(saved.showEma21)
       if(typeof saved.showVwap==='boolean')setShowVwap(saved.showVwap)
+      if(typeof saved.showEma50==='boolean')setShowEma50(saved.showEma50)
+      if(typeof saved.showSma20==='boolean')setShowSma20(saved.showSma20)
+      if(typeof saved.showSma50==='boolean')setShowSma50(saved.showSma50)
+      if(typeof saved.showBollinger==='boolean')setShowBollinger(saved.showBollinger)
       if(typeof saved.showTradeMarkers==='boolean')setShowTradeMarkers(saved.showTradeMarkers)
       if(Array.isArray(saved.levels))userLevels.current=saved.levels.filter((l:any)=>Number(l?.price)>0&&(l?.mode==='price'||l?.mode==='marketCap')&&(l?.quote==='usd'||l?.quote==='sol')).slice(0,25)
     }catch{}
@@ -167,10 +207,10 @@ export default function CandleChart({
   useEffect(()=>{
     if(!workspaceLoaded.current)return
     localStorage.setItem('paper.chart.workspace.v2',JSON.stringify({
-      tf,mode,quote,scaleMode,showVolume,showGrid,showCrosshair,showEma9,showEma21,showVwap,showTradeMarkers,
+      tf,mode,quote,scaleMode,showVolume,showGrid,showCrosshair,showEma9,showEma21,showEma50,showSma20,showSma50,showVwap,showBollinger,showTradeMarkers,
       levels:userLevels.current
     }))
-  },[tf,mode,quote,scaleMode,showVolume,showGrid,showCrosshair,showEma9,showEma21,showVwap,showTradeMarkers,levelVersion])
+  },[tf,mode,quote,scaleMode,showVolume,showGrid,showCrosshair,showEma9,showEma21,showEma50,showSma20,showSma50,showVwap,showBollinger,showTradeMarkers,levelVersion])
 
   useEffect(()=>{
     if(!wrap.current)return
@@ -201,6 +241,12 @@ export default function CandleChart({
     const ema9Series=chart.addSeries(LineSeries,{color:'#f2b84b',lineWidth:1,lastValueVisible:false,priceLineVisible:false,crosshairMarkerVisible:false})
     const ema21Series=chart.addSeries(LineSeries,{color:'#a875ff',lineWidth:1,lastValueVisible:false,priceLineVisible:false,crosshairMarkerVisible:false})
     const vwapSeries=chart.addSeries(LineSeries,{color:'#55a8ff',lineWidth:1,lastValueVisible:false,priceLineVisible:false,crosshairMarkerVisible:false})
+    const ema50Series=chart.addSeries(LineSeries,{color:'#ff7b72',lineWidth:1,lastValueVisible:false,priceLineVisible:false,crosshairMarkerVisible:false})
+    const sma20Series=chart.addSeries(LineSeries,{color:'#4dd0a8',lineWidth:1,lastValueVisible:false,priceLineVisible:false,crosshairMarkerVisible:false})
+    const sma50Series=chart.addSeries(LineSeries,{color:'#f0d45c',lineWidth:1,lastValueVisible:false,priceLineVisible:false,crosshairMarkerVisible:false})
+    const bbUpperSeries=chart.addSeries(LineSeries,{color:'#7f8c9f',lineWidth:1,lineStyle:LineStyle.Dashed,lastValueVisible:false,priceLineVisible:false,crosshairMarkerVisible:false})
+    const bbMiddleSeries=chart.addSeries(LineSeries,{color:'#657286',lineWidth:1,lineStyle:LineStyle.Dotted,lastValueVisible:false,priceLineVisible:false,crosshairMarkerVisible:false})
+    const bbLowerSeries=chart.addSeries(LineSeries,{color:'#7f8c9f',lineWidth:1,lineStyle:LineStyle.Dashed,lastValueVisible:false,priceLineVisible:false,crosshairMarkerVisible:false})
 
     chart.subscribeCrosshairMove(param=>{
       const value=param.seriesData.get(candle) as unknown as Candle|undefined
@@ -215,6 +261,12 @@ export default function CandleChart({
     ema9Ref.current=ema9Series
     ema21Ref.current=ema21Series
     vwapRef.current=vwapSeries
+    ema50Ref.current=ema50Series
+    sma20Ref.current=sma20Series
+    sma50Ref.current=sma50Series
+    bbUpperRef.current=bbUpperSeries
+    bbMiddleRef.current=bbMiddleSeries
+    bbLowerRef.current=bbLowerSeries
     return()=>{
       chart.remove()
       chartRef.current=null
@@ -223,6 +275,12 @@ export default function CandleChart({
       ema9Ref.current=null
       ema21Ref.current=null
       vwapRef.current=null
+      ema50Ref.current=null
+      sma20Ref.current=null
+      sma50Ref.current=null
+      bbUpperRef.current=null
+      bbMiddleRef.current=null
+      bbLowerRef.current=null
       priceLineRef.current=null
       costLineRef.current=null
       tradeMarkersRef.current=null
@@ -409,7 +467,14 @@ export default function CandleChart({
 
     ema9Ref.current?.setData(showEma9?ema(displayCandles,9):[])
     ema21Ref.current?.setData(showEma21?ema(displayCandles,21):[])
+    ema50Ref.current?.setData(showEma50?ema(displayCandles,50):[])
+    sma20Ref.current?.setData(showSma20?sma(displayCandles,20):[])
+    sma50Ref.current?.setData(showSma50?sma(displayCandles,50):[])
     vwapRef.current?.setData(showVwap?vwap(displayCandles):[])
+    const bands=showBollinger?bollinger(displayCandles,20,2):{upper:[],middle:[],lower:[]}
+    bbUpperRef.current?.setData(bands.upper)
+    bbMiddleRef.current?.setData(bands.middle)
+    bbLowerRef.current?.setData(bands.lower)
 
     renderedRef.current={first,last,mode,quote}
     hasDataRef.current=true
@@ -423,7 +488,7 @@ export default function CandleChart({
         else scale.fitContent()
       })
     }
-  },[displayCandles,mode,quote,showEma9,showEma21,showVwap,poolAddress,tf])
+  },[displayCandles,mode,quote,showEma9,showEma21,showEma50,showSma20,showSma50,showVwap,showBollinger,poolAddress,tf])
 
   const currentDisplayValue=useMemo(()=>{
     const raw=mode==='marketCap'?Number(currentMarketCap||0):Number(currentPrice||0)
@@ -582,7 +647,11 @@ export default function CandleChart({
           <b>INDICATORS</b>
           <label><input type="checkbox" checked={showEma9} onChange={e=>setShowEma9(e.target.checked)}/>EMA 9 <i className="ema9-dot"/></label>
           <label><input type="checkbox" checked={showEma21} onChange={e=>setShowEma21(e.target.checked)}/>EMA 21 <i className="ema21-dot"/></label>
+          <label><input type="checkbox" checked={showEma50} onChange={e=>setShowEma50(e.target.checked)}/>EMA 50 <i className="ema50-dot"/></label>
+          <label><input type="checkbox" checked={showSma20} onChange={e=>setShowSma20(e.target.checked)}/>SMA 20 <i className="sma20-dot"/></label>
+          <label><input type="checkbox" checked={showSma50} onChange={e=>setShowSma50(e.target.checked)}/>SMA 50 <i className="sma50-dot"/></label>
           <label><input type="checkbox" checked={showVwap} onChange={e=>setShowVwap(e.target.checked)}/>VWAP <i className="vwap-dot"/></label>
+          <label><input type="checkbox" checked={showBollinger} onChange={e=>setShowBollinger(e.target.checked)}/>Bollinger 20 <i className="bollinger-dot"/></label>
         </div>}
       </div>
 

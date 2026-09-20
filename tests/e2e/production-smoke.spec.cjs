@@ -52,6 +52,14 @@ test('exact deployed release works on the public PAPER hostname',async({page,req
   await sell.click()
   await expect(page.locator('.trade-message').filter({hasText:/^PAPER SELL FILLED$/})).toBeVisible({timeout:30000})
 
+  await page.getByRole('button',{name:'Indicators',exact:true}).click()
+  for(const name of ['EMA 50','SMA 20','SMA 50','Bollinger 20']){
+    const box=page.getByRole('checkbox',{name,exact:true})
+    await expect(box).toBeVisible()
+    await box.check()
+  }
+  await page.keyboard.press('Escape')
+
   const quickTimeframes=page.locator('.axiom-quick-tfs')
   for(const timeframe of ['1s','5s','1m','5m']){
     const button=quickTimeframes.getByRole('button',{name:'Chart timeframe '+timeframe,exact:true})

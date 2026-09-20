@@ -101,8 +101,8 @@
 }
 .axiom-popover label:hover{background:#171d24}
 .axiom-popover input{accent-color:#6278ef}
-.ema9-dot,.ema21-dot,.vwap-dot{width:7px;height:7px;border-radius:50%;margin-left:auto}
-.ema9-dot{background:#f2b84b}.ema21-dot{background:#a875ff}.vwap-dot{background:#55a8ff}
+.ema9-dot,.ema21-dot,.ema50-dot,.sma20-dot,.sma50-dot,.vwap-dot,.bollinger-dot{width:7px;height:7px;border-radius:50%;margin-left:auto}
+.ema9-dot{background:#f2b84b}.ema21-dot{background:#a875ff}.ema50-dot{background:#ff7b72}.sma20-dot{background:#4dd0a8}.sma50-dot{background:#f0d45c}.vwap-dot{background:#55a8ff}.bollinger-dot{background:#7f8c9f}
 .axiom-chart-body{display:grid;grid-template-columns:42px minmax(0,1fr);min-width:0;background:#080b0f}
 .axiom-draw-rail{
   display:flex;

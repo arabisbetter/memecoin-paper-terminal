@@ -155,7 +155,7 @@ export default function AdvancedOrderPanel({
       {tokenOrders.map(order=><div className="advanced-order-row" key={order.id}>
         <span><b>{order.order_type.replace('_',' ').toUpperCase()}</b><small>{order.side.toUpperCase()} · {order.side==='buy'?Number(order.amount_sol||0).toFixed(3)+' SOL':Number(order.sell_pct||0).toFixed(0)+'%'}</small></span>
         <strong>{money(Number(order.trigger_price_usd))}</strong>
-        <button title="Cancel order" disabled={busy||order.status==='processing'} onClick={()=>void cancel(order.id)}><Trash2 size={12}/></button>
+        <button aria-label="Cancel order" title="Cancel order" disabled={busy||order.status==='processing'} onClick={()=>void cancel(order.id)}><Trash2 size={12}/></button>
       </div>)}
     </div>}
   </section>
