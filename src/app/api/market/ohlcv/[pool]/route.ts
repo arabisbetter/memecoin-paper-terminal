@@ -8,12 +8,12 @@ type GeckoTradesResponse={data?:GeckoTrade[]}
 type Config={unit:'minute'|'hour'|'day';aggregate:string;limit:number;bucketSeconds?:number;cacheMs:number;cdnSeconds:number}
 
 const configs:Record<string,Config>={
-  '1m':{unit:'minute',aggregate:'1',limit:300,cacheMs:15_000,cdnSeconds:12},
-  '3m':{unit:'minute',aggregate:'1',limit:540,bucketSeconds:180,cacheMs:12_000,cdnSeconds:9},
-  '5m':{unit:'minute',aggregate:'5',limit:300,cacheMs:14_000,cdnSeconds:10},
-  '15m':{unit:'minute',aggregate:'15',limit:300,cacheMs:20_000,cdnSeconds:15},
-  '30m':{unit:'minute',aggregate:'15',limit:360,bucketSeconds:1800,cacheMs:25_000,cdnSeconds:20},
-  '1h':{unit:'hour',aggregate:'1',limit:300,cacheMs:30_000,cdnSeconds:25},
+  '1m':{unit:'minute',aggregate:'1',limit:300,cacheMs:30_000,cdnSeconds:20},
+  '3m':{unit:'minute',aggregate:'1',limit:540,bucketSeconds:180,cacheMs:45_000,cdnSeconds:30},
+  '5m':{unit:'minute',aggregate:'5',limit:300,cacheMs:60_000,cdnSeconds:30},
+  '15m':{unit:'minute',aggregate:'15',limit:300,cacheMs:90_000,cdnSeconds:45},
+  '30m':{unit:'minute',aggregate:'15',limit:360,bucketSeconds:1800,cacheMs:120_000,cdnSeconds:60},
+  '1h':{unit:'hour',aggregate:'1',limit:300,cacheMs:180_000,cdnSeconds:90},
   '4h':{unit:'hour',aggregate:'4',limit:300,cacheMs:60_000,cdnSeconds:45},
   '6h':{unit:'hour',aggregate:'1',limit:720,bucketSeconds:21600,cacheMs:60_000,cdnSeconds:45},
   '12h':{unit:'hour',aggregate:'1',limit:720,bucketSeconds:43200,cacheMs:90_000,cdnSeconds:60},
