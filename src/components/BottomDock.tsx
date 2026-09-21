@@ -7,7 +7,7 @@ import { createPortal } from 'react-dom'
 import {
   Activity, Award, BarChart3, BookOpen, BriefcaseBusiness, CircleDollarSign, Gauge,
   Grid2X2, HeartHandshake, Layers3, MoreHorizontal, Radio, RotateCcw, ScanSearch,
-  SlidersHorizontal, Star, Target, UserRound, WalletCards, Waves
+  SlidersHorizontal, Star, UserRound, WalletCards, Waves
 } from 'lucide-react'
 import PaperAccountChip from '@/components/PaperAccountChip'
 import { usePaperPresets } from '@/lib/use-paper-presets'
@@ -24,7 +24,6 @@ const primary=[
 ] as const
 
 const more=[
-  ['/evaluation','Evaluation',Target],
   ['/rewards','Rewards',Award],
   ['/wallets','Wallet Tracker',WalletCards],
   ['/charity','Charity',HeartHandshake],
