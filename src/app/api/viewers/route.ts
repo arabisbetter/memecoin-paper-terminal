@@ -13,8 +13,8 @@ export async function GET(request:NextRequest){
   const secret=process.env.SUPABASE_SERVICE_ROLE_KEY
   if(!url||!secret){
     return NextResponse.json(
-      {viewerTotal:0,byMint:{},windowMinutes:WINDOW_MINUTES,error:'viewer service unavailable'},
-      {status:503,headers:{'Cache-Control':'no-store'}}
+      {viewerTotal:0,byMint:{},windowMinutes:WINDOW_MINUTES,available:false,warning:'viewer service unavailable'},
+      {headers:{'Cache-Control':'private, max-age=5'}}
     )
   }
 
