@@ -33,6 +33,9 @@ const landing=fs.readFileSync('src/components/LandingHome.tsx','utf8')
 assert.doesNotMatch(landing,/EARN REAL/i)
 assert.match(landing,/PAPER SOL/)
 assert.match(landing,/NO REIMBURSEMENT/)
+assert.match(landing,/paper-charity/)
+assert.match(landing,/DRAFT - ATTORNEY REVIEW REQUIRED/)
+assert.match(landing,/real prizes and payouts are OFF/i)
 
 for(const p of [
   'supabase/functions/payout-wallet-link/index.ts',
