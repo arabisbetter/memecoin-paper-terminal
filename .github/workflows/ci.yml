@@ -70,8 +70,12 @@ jobs:
       - name: Verify PAPER landing homepage
         run: |
           grep -q "TRADE PAPER" /tmp/paper-home.html
-          grep -q "EARN REAL" /tmp/paper-home.html
-          grep -q "START TRADING" /tmp/paper-home.html
+          grep -q "LEARN FAST" /tmp/paper-home.html
+          if grep -q "EARN REAL" /tmp/paper-home.html; then echo "Inactive earnings promise found"; exit 1; fi
+          grep -q "PAPER SOL" /tmp/paper-home.html
+
+      - name: Verify Phase 1 safety source guards
+        run: node tests/phase1-source-guards.cjs
 
       - name: Verify live Solana market feed and CA lookup
         run: |

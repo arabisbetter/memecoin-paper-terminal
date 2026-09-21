@@ -3,6 +3,7 @@ import RecoveryNudge from "@/components/RecoveryNudge";
 import NetworkStatus from "@/components/NetworkStatus";
 import TerminalPreferences from "@/components/TerminalPreferences";
 import PwaRegistrar from "@/components/PwaRegistrar";
+import GlobalLegalFooter from "@/components/GlobalLegalFooter";
 import "./globals.css";
 import "./product-polish.css";
 import "./spot-polish.css";
@@ -37,14 +38,14 @@ import "./landing.css";
 export const metadata: Metadata = {
   metadataBase: new URL("https://memecoin-paper-terminal.vercel.app"),
   applicationName: "PAPER",
-  title: "PAPER — Trade PAPER. Earn real.",
-  description: "Start with $1,000 PAPER, trade real Solana memecoin market conditions with simulated execution, and prove your trading discipline in a free evaluation.",
+  title: "PAPER — Solana memecoin paper trading",
+  description: "Practice Solana memecoin trading with 1,000 PAPER SOL, real market inputs, and simulated execution. No wallet, deposits, or real-money trades.",
   keywords: ["memecoin paper trading", "Solana paper trading", "crypto trading simulator", "memecoin simulator", "paper trading", "Solana memecoins"],
   category: "finance",
   alternates: { canonical: "/" },
   openGraph: {
     title: "PAPER — Trade PAPER. Earn real.",
-    description: "$1,000 PAPER. Real memecoin markets. Simulated execution. Free evaluation.",
+    description: "1,000 PAPER SOL. Real Solana memecoin market inputs. Simulated execution only.",
     siteName: "PAPER",
     type: "website",
     url: "/",
@@ -52,7 +53,7 @@ export const metadata: Metadata = {
   twitter: {
     card: "summary_large_image",
     title: "PAPER — Trade PAPER. Earn real.",
-    description: "$1,000 PAPER. Real memecoin markets. Simulated execution. Free evaluation.",
+    description: "1,000 PAPER SOL. Real Solana memecoin market inputs. Simulated execution only.",
   },
 };
 
@@ -64,7 +65,7 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en">
-      <body>{children}<PwaRegistrar/><TerminalPreferences/><NetworkStatus/><RecoveryNudge/></body>
+      <body>{children}<GlobalLegalFooter/><PwaRegistrar/><TerminalPreferences/><NetworkStatus/><RecoveryNudge/></body>
     </html>
   );
 }

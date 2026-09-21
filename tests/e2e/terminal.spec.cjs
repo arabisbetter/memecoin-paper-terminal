@@ -11,8 +11,11 @@ test('landing page and terminal navigation stay connected',async({page})=>{
   await expect(page).toHaveURL(/\/spot/)
   await completeOnboarding(page,'home')
   const primaryNav=page.getByRole('navigation',{name:'Primary navigation'})
-  for(const label of ['Discover','Trade','Evaluation','Funded','Pulse','Chains','Portfolio']){
+  for(const label of ['Spot','Pulse']){
     await expect(primaryNav.getByRole('link',{name:label,exact:true})).toBeVisible()
+  }
+  for(const label of ['Discover','Evaluation','Funded','Chains','Portfolio']){
+    await expect(primaryNav.getByRole('link',{name:label,exact:true})).toHaveCount(0)
   }
   await expect(page.getByRole('link',{name:'Profile',exact:true})).toBeVisible()
   await expect(page.getByLabel('Search tokens')).toBeVisible()
@@ -258,4 +261,57 @@ test('feedback and core Part 10 public surfaces remain available',async({page,re
   const status=await request.get('/api/status')
   expect(status.ok()).toBeTruthy()
   expect((await status.json()).status).toBe('ok')
+})
+
+
+test('phase 1 keeps public beta scope and legal links explicit',async({page})=>{
+  await page.goto('/',{waitUntil:'domcontentloaded'})
+  await expect(page.getByRole('heading',{name:/TRADE PAPER/i})).toBeVisible()
+  await expect(page.getByText(/EARN REAL/i)).toHaveCount(0)
+  await expect(page.getByText(/no real-money trades/i)).toBeVisible()
+  const legalFooter=page.getByRole('contentinfo',{name:'Legal links'})
+  for(const name of ['Terms','Privacy','Risk','Contest Rules'])await expect(legalFooter.getByRole('link',{name,exact:true})).toBeVisible()
+  for(const route of ['/funded','/evaluation','/chains','/portfolio','/community','/leaderboards']){
+    await page.goto(route,{waitUntil:'domcontentloaded'})
+    await expect(page).toHaveURL(/\/spot$/)
+  }
+})
+
+
+test('phase 1 legal acceptance uses the server endpoint',async({page})=>{
+  let accepts=0
+  page.on('request',r=>{if(r.url().includes('/api/legal/accept')&&r.method()==='POST')accepts++})
+  await page.goto('/spot',{waitUntil:'domcontentloaded'})
+  const profile=page.getByRole('heading',{name:'Create your trader profile'})
+  if(await profile.isVisible().catch(()=>false)){
+    const suffix=String(Date.now()).slice(-8)
+    await page.getByLabel('Username').fill(('legal_'+suffix).slice(0,24))
+    const display=page.getByLabel(/Display name/i)
+    if(await display.isVisible().catch(()=>false))await display.fill('PAPER LEGAL E2E')
+    await page.getByRole('button',{name:'Continue',exact:true}).click()
+    await profile.waitFor({state:'hidden',timeout:20000})
+  }
+  const legalGate=page.getByRole('heading',{name:'Current PAPER terms'})
+  await expect(legalGate).toBeVisible({timeout:20000})
+  await page.getByRole('checkbox').check()
+  await page.getByRole('button',{name:'Accept & enter PAPER',exact:true}).click()
+  await legalGate.waitFor({state:'hidden',timeout:20000})
+  expect(accepts).toBe(1)
+  await page.goto('/legal',{waitUntil:'domcontentloaded'})
+  await expect(page.getByText('DRAFT - ATTORNEY REVIEW REQUIRED.',{exact:false}).first()).toBeVisible()
+  await expect(page.getByRole('heading',{name:/Contest Rules/})).toBeVisible()
+})
+
+
+test('phase 1 hard-disables funded execution, custody and payout surfaces',async({page,request})=>{
+  for(const route of ['/api/funded/execute','/api/funded/payout']){
+    const response=await request.post(route,{data:{}})
+    expect(response.status(),route).toBe(410)
+    const body=await response.json()
+    expect(body.code).toBe('REAL_MONEY_DISABLED_PAPER_BETA')
+  }
+  await page.goto('/profile',{waitUntil:'domcontentloaded'})
+  await completeOnboarding(page,'profilebeta')
+  await expect(page.getByText(/LINK SOLANA PAYOUT ADDRESS/i)).toHaveCount(0)
+  await expect(page.getByText(/funded real-sol prize/i)).toHaveCount(0)
 })
