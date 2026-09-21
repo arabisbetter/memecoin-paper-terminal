@@ -146,9 +146,11 @@ jobs:
 
       - name: Verify real OHLCV, one-second candles, and market tape
         run: |
-          pool=$(cat /tmp/paper-pool.txt)
+          # Use the same mature Solana pool as the indicator smoke. Dynamic discovery
+          # intentionally surfaces brand-new pools that can have no provider history yet.
+          pool="EyeeG5fzZEigSQv7jUdxydePnsPL382KyVfXAANXVmeD"
           chart_ok=0
-          for attempt in 1 2 3; do
+          for attempt in 1 2 3 4 5; do
             if curl -fsS "http://127.0.0.1:3000/api/market/ohlcv/$pool?tf=1m" -o /tmp/paper-chart.json; then
               if node - <<'NODE'
           const fs=require('fs')
@@ -160,12 +162,12 @@ jobs:
           NODE
               then chart_ok=1; break; fi
             fi
-            sleep 5
+            sleep $((attempt * 4))
           done
           if [ "$chart_ok" -ne 1 ]; then cat /tmp/paper-chart.json 2>/dev/null || true; exit 1; fi
 
           seconds_ok=0
-          for attempt in 1 2 3; do
+          for attempt in 1 2 3 4 5; do
             if curl -fsS "http://127.0.0.1:3000/api/market/ohlcv/$pool?tf=1s" -o /tmp/paper-1s.json; then
               if node - <<'NODE'
           const fs=require('fs')
@@ -178,7 +180,7 @@ jobs:
           NODE
               then seconds_ok=1; break; fi
             fi
-            sleep 4
+            sleep $((attempt * 3))
           done
           if [ "$seconds_ok" -ne 1 ]; then cat /tmp/paper-1s.json 2>/dev/null || true; exit 1; fi
 
