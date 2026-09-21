@@ -33,7 +33,7 @@ test('exact deployed release works on the public PAPER hostname',async({page,req
   await expect(page.getByText('INSTANT BUY',{exact:true})).toBeVisible()
   const primaryNav=page.getByRole('navigation',{name:'Primary navigation'})
   await expect(primaryNav.getByRole('link',{name:'Funded',exact:true})).toHaveCount(0)
-  for(const name of ['Discover','Spot','Pulse','Chains','Portfolio','Watchlist','Leaderboard'])await expect(primaryNav.getByRole('link',{name,exact:true})).toBeVisible()
+  for(const name of ['Discover','Spot','Pulse','Evaluation','Chains','Portfolio','Watchlist','Leaderboard'])await expect(primaryNav.getByRole('link',{name,exact:true})).toBeVisible()
   await expect(page.locator('.ax-profile-entry')).toHaveCount(1)
   await expect(page.locator('.restored-feature-dock a[href="/profile"]')).toHaveCount(1)
 
@@ -53,7 +53,7 @@ test('exact deployed release works on the public PAPER hostname',async({page,req
 
   await page.getByRole('button',{name:'More',exact:true}).click()
   const moreMenu=page.getByRole('menu',{name:'More PAPER tools'})
-  for(const name of ['Evaluation','Rewards','Wallet Tracker','Charity'])await expect(moreMenu.getByRole('menuitem',{name,exact:true})).toBeVisible()
+  for(const name of ['Rewards','Wallet Tracker','Charity'])await expect(moreMenu.getByRole('menuitem',{name,exact:true})).toBeVisible()
   await page.keyboard.press('Escape')
 
   await page.getByRole('button',{name:'Edit presets',exact:true}).click()
