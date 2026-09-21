@@ -5,6 +5,8 @@ test('landing page and terminal navigation stay connected',async({page})=>{
   await page.goto('/',{waitUntil:'domcontentloaded'})
   await expect(page.getByRole('link',{name:'Spot',exact:true})).toBeVisible()
   await expect(page.getByRole('link',{name:'Pulse',exact:true})).toBeVisible()
+  await expect(page.getByRole('link',{name:'Charity',exact:true})).toBeVisible()
+  await expect(page.getByText(/CHARITY · DORMANT BETA CONCEPT/i)).toBeVisible()
   await expect(page.getByRole('link',{name:'Open Spot',exact:true})).toBeVisible()
 
   await page.getByRole('link',{name:'Open Spot',exact:true}).click()
