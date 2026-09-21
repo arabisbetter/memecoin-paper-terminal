@@ -56,3 +56,24 @@ assert.match(layout,/Solana memecoin paper trading/i)
 
 const profile=fs.readFileSync('src/app/profile/page.tsx','utf8')
 assert.doesNotMatch(profile,/payout.wallet|payout address|funded real|REAL SOL/i)
+
+const safeRestore=fs.readFileSync('supabase/migrations/20260921181500_restore_safe_paper_features.sql','utf8')
+assert.match(safeRestore,/evaluation_entries_enabled=true/)
+assert.match(safeRestore,/funded_waitlist_enabled=false/)
+assert.match(safeRestore,/paper_beta_block_real_money_write_v1/)
+assert.match(safeRestore,/paper_funded_profiles/)
+assert.match(safeRestore,/paper_custody_wallets/)
+assert.match(safeRestore,/weekly_payouts/)
+
+const evaluationPage=fs.readFileSync('src/app/evaluation/page.tsx','utf8')
+assert.match(evaluationPage,/PAPER-only achievement/)
+assert.doesNotMatch(evaluationPage,/KYC REQUIRED|funded profile is now/i)
+
+const rewardsPage=fs.readFileSync('src/app/rewards/page.tsx','utf8')
+assert.match(rewardsPage,/PAPER-ONLY STATUS/)
+assert.match(rewardsPage,/No cash, crypto, payout, redemption, or prize value/)
+assert.doesNotMatch(rewardsPage,/View community coin policy|REAL PRIZES/i)
+
+const evaluationEdge=fs.readFileSync('supabase/functions/evaluation-status/index.ts','utf8')
+assert.doesNotMatch(evaluationEdge,/paper_funded_profiles|real_funded_activation|real_payouts_enabled/)
+assert.match(evaluationEdge,/paperOnly:true/)
