@@ -70,14 +70,16 @@ export function usePaperPresets(){
 
   const save=useCallback(async(nextValues:PaperPresetValues)=>{
     const next=clean(nextValues)
-    setValues(next)
-    localStorage.setItem('paper.quickBuyPresets.v2',JSON.stringify(next))
-    const index=Number(selectedId.slice(1))-1
+    const activeId=presetId(localStorage.getItem('paper.quickBuyPreset')||selectedId)
+    const index=Number(activeId.slice(1))-1
     const selectedValue=Number(next[index]||next[0])
-    localStorage.setItem('paper.quickBuyPreset',selectedId)
+    setValues(next)
+    setSelectedId(activeId)
+    localStorage.setItem('paper.quickBuyPresets.v2',JSON.stringify(next))
+    localStorage.setItem('paper.quickBuyPreset',activeId)
     localStorage.setItem('paper.quickBuySize',String(selectedValue))
     window.dispatchEvent(new CustomEvent('paper:presets-changed',{detail:{values:next}}))
-    window.dispatchEvent(new CustomEvent('paper:preset',{detail:{id:selectedId,value:selectedValue}}))
+    window.dispatchEvent(new CustomEvent('paper:preset',{detail:{id:activeId,value:selectedValue}}))
     if(!supabase||!userId)return next
     const {error}=await (supabase as any).from('paper_trade_presets').upsert({
       user_id:userId,p1:next[0],p2:next[1],p3:next[2],p4:next[3],updated_at:new Date().toISOString()
