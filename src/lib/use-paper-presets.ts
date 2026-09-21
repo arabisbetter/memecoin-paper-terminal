@@ -49,7 +49,10 @@ export function usePaperPresets(){
         if(error)throw error
         const next=data?clean([data.p1,data.p2,data.p3,data.p4]):DEFAULT_PAPER_PRESETS
         if(!data){
-          const {error:insertError}=await (supabase as any).from('paper_trade_presets').insert({user_id:user.id,p1:next[0],p2:next[1],p3:next[2],p4:next[3]})
+          const {error:insertError}=await (supabase as any).from('paper_trade_presets').upsert(
+            {user_id:user.id,p1:next[0],p2:next[1],p3:next[2],p4:next[3]},
+            {onConflict:'user_id',ignoreDuplicates:true}
+          )
           if(insertError)throw insertError
         }
         if(alive){
