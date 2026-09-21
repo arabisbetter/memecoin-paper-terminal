@@ -1101,3 +1101,13 @@ html,body{
 /* Account startup errors must never block unrelated navigation or feedback controls. */
 .account-start-error{pointer-events:none!important}
 .account-start-error button{pointer-events:auto!important}
+
+
+/* Keep the expanded PAPER tool menu usable as safe surfaces are restored. */
+.dock-more-menu-portal{
+  max-height:calc(100vh - 76px)!important;
+  overflow-y:auto!important;
+  overscroll-behavior:contain!important;
+  scrollbar-width:thin!important;
+}
+@media(max-width:760px){.dock-more-menu-portal{max-height:calc(100dvh - 64px)!important}}
