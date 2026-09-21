@@ -49,3 +49,10 @@ const betaLock=fs.readFileSync('supabase/migrations/20260921032000_phase1_paper_
 assert.match(betaLock,/real_funded_activation=false/)
 assert.match(betaLock,/real_payouts_enabled=false/)
 assert.match(betaLock,/turnkey_signing_enabled=false/)
+
+const layout=fs.readFileSync('src/app/layout.tsx','utf8')
+assert.doesNotMatch(layout,/EARN REAL/i)
+assert.match(layout,/Solana memecoin paper trading/i)
+
+const profile=fs.readFileSync('src/app/profile/page.tsx','utf8')
+assert.doesNotMatch(profile,/payout.wallet|payout address|funded real|REAL SOL/i)
