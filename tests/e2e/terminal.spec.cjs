@@ -11,10 +11,10 @@ test('landing page and terminal navigation stay connected',async({page})=>{
   await expect(page).toHaveURL(/\/spot/)
   await completeOnboarding(page,'home')
   const primaryNav=page.getByRole('navigation',{name:'Primary navigation'})
-  for(const label of ['Spot','Pulse']){
+  for(const label of ['Discover','Spot','Pulse','Chains','Portfolio','Watchlist','Leaderboard']){
     await expect(primaryNav.getByRole('link',{name:label,exact:true})).toBeVisible()
   }
-  for(const label of ['Discover','Evaluation','Funded','Chains','Portfolio']){
+  for(const label of ['Evaluation','Funded','Rewards']){
     await expect(primaryNav.getByRole('link',{name:label,exact:true})).toHaveCount(0)
   }
   await expect(page.locator('.ax-profile-entry')).toBeVisible()
@@ -241,13 +241,29 @@ test('token search history persists and full Pulse boards remain available',asyn
   expect(pulseOverflow.scrollWidth).toBeLessThanOrEqual(pulseOverflow.innerWidth+2)
 })
 
-test('Discover is not exposed in the PAPER-only beta',async({page})=>{
-  await page.goto('/discover',{waitUntil:'domcontentloaded'})
-  await expect(page).toHaveURL(/\/spot$/)
-  await expect(page.getByRole('navigation',{name:'Primary navigation'}).getByRole('link',{name:'Discover',exact:true})).toHaveCount(0)
+test('safe PAPER feature surfaces are restored while real-money surfaces stay hidden',async({page,request})=>{
+  const restored=['/discover','/portfolio','/chains','/watchlist','/scanner','/smart-money','/heatmap','/compare','/workspaces','/journal','/replay','/community','/leaderboards','/status']
+  for(const route of restored){
+    const response=await request.get(route,{maxRedirects:0})
+    expect(response.status(),route).toBe(200)
+  }
+  for(const route of ['/funded','/evaluation','/rewards']){
+    const response=await request.get(route,{maxRedirects:0})
+    expect(response.status(),route).toBe(307)
+    expect(response.headers().location).toBe('/spot')
+  }
+
+  await page.goto('/spot',{waitUntil:'domcontentloaded'})
+  await completeOnboarding(page,'restored')
+  const dock=page.locator('.restored-feature-dock')
+  for(const name of ['Markets','Spot','Pulse','Chains','Portfolio','Watchlist','Leaderboard','Profile'])await expect(dock.getByRole('link',{name,exact:true})).toBeVisible()
+  const more=page.getByRole('button',{name:'More',exact:true})
+  await more.click()
+  const menu=page.getByRole('menu',{name:'More PAPER tools'})
+  for(const name of ['Community','Scanner','Smart Money','Heatmap','Compare','Workspaces','Journal','Replay','Status'])await expect(menu.getByRole('menuitem',{name,exact:true})).toBeVisible()
 })
 
-test('feedback remains available while non-beta public surfaces redirect',async({page,request})=>{
+test('feedback remains available and real-money beta gates remain closed',async({page,request})=>{
   await page.goto('/spot',{waitUntil:'domcontentloaded'})
   await completeOnboarding(page,'feedback')
   await page.getByRole('button',{name:'Feedback',exact:true}).click()
@@ -255,7 +271,7 @@ test('feedback remains available while non-beta public surfaces redirect',async(
   await page.getByRole('button',{name:'Send feedback',exact:true}).click()
   await expect(page.getByText('Sent. Thank you.')).toBeVisible()
 
-  for(const route of ['/community','/status','/rewards','/leaderboards']){
+  for(const route of ['/funded','/evaluation','/rewards']){
     const response=await request.get(route,{maxRedirects:0})
     expect(response.status(),route).toBe(307)
     expect(response.headers().location).toBe('/spot')
@@ -266,14 +282,19 @@ test('feedback remains available while non-beta public surfaces redirect',async(
 })
 
 
-test('phase 1 keeps public beta scope and legal links explicit',async({page})=>{
+test('phase 1 safety language remains while safe product surfaces are restored',async({page})=>{
   await page.goto('/',{waitUntil:'domcontentloaded'})
   await expect(page.getByRole('heading',{name:/TRADE PAPER/i})).toBeVisible()
   await expect(page.getByText(/EARN REAL/i)).toHaveCount(0)
   await expect(page.getByText(/no real-money trades/i)).toBeVisible()
   const legalFooter=page.getByRole('contentinfo',{name:'Legal links'})
   for(const name of ['Terms','Privacy','Risk','Contest Rules'])await expect(legalFooter.getByRole('link',{name,exact:true})).toBeVisible()
-  for(const route of ['/funded','/evaluation','/chains','/portfolio','/community','/leaderboards']){
+
+  for(const route of ['/discover','/chains','/portfolio','/community','/leaderboards']){
+    await page.goto(route,{waitUntil:'domcontentloaded'})
+    await expect(page).toHaveURL(new RegExp(route.replace('/','\\/')))
+  }
+  for(const route of ['/funded','/evaluation','/rewards']){
     await page.goto(route,{waitUntil:'domcontentloaded'})
     await expect(page).toHaveURL(/\/spot$/)
   }
