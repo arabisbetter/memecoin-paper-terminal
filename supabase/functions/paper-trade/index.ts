@@ -22,6 +22,24 @@ async function fetchPairs(mint:string):Promise<Pair[]>{const b=await fetchJson(`
 async function bestPair(mint:string){const pairs=await fetchPairs(mint);const valid=pairs.filter(p=>p.chainId==='solana'&&finite(p.priceUsd)>0);if(!valid.length)throw new Error('no live Solana market found for token');valid.sort((a,b)=>finite(b.liquidity?.usd)-finite(a.liquidity?.usd));return valid[0]}
 async function solUsd(){const p=await bestPair('So11111111111111111111111111111111111111112');const price=finite(p.priceUsd);if(price<=0)throw new Error('SOL/USD unavailable');return price}
 
+async function verifiedBuyRisk(supabaseUrl:string,publishableKey:string,authHeader:string,mint:string){
+  try{
+    const r=await fetch(supabaseUrl+'/functions/v1/market-risk-scan',{
+      method:'POST',
+      headers:{'Content-Type':'application/json','Authorization':authHeader,'apikey':publishableKey},
+      body:JSON.stringify({mint}),
+    })
+    const body=await r.json().catch(()=>({}))
+    if(!r.ok)return {ok:false,status:r.status>=500?503:422,code:'RISK_UNVERIFIED',error:'Token risk verification is unavailable.'}
+    if(body?.dataStatus!=='LIVE')return {ok:false,status:503,code:'RISK_UNVERIFIED',error:'Token risk data is not verified live.'}
+    if(finite(body?.risk?.liquidityUsd)<=0)return {ok:false,status:422,code:'LIQUIDITY_UNAVAILABLE',error:'Token liquidity is zero or unavailable.'}
+    if(body?.fundedBuyBlocked===true)return {ok:false,status:422,code:'TOKEN_RISK_BLOCK',error:'This token does not pass PAPER risk screening.'}
+    return {ok:true,status:200,code:'OK',error:'',risk:body?.risk||null}
+  }catch{
+    return {ok:false,status:503,code:'RISK_UNVERIFIED',error:'Token risk verification is unavailable.'}
+  }
+}
+
 async function authoritativeEquity(admin:any,userId:string){
   const [{data:account,error:accountError},{data:positions,error:positionError}]=await Promise.all([
     admin.from('paper_accounts').select('cash_usd').eq('user_id',userId).maybeSingle(),
@@ -104,6 +122,7 @@ Deno.serve(async(req:Request)=>{
     if(!/^[1-9A-HJ-NP-Za-km-z]{32,60}$/.test(mint))return json({error:'invalid Solana mint'},400)
     if(side!=='buy'&&side!=='sell')return json({error:'side must be buy or sell'},400)
     if(idempotencyKey.length<8||idempotencyKey.length>128)return json({error:'idempotency key required'},400)
+    if(side==='buy'){const verified=await verifiedBuyRisk(supabaseUrl,publishableKey,authHeader,mint);if(!verified.ok)return json({error:verified.error,code:verified.code},verified.status)}
 
     const activeEvaluation=await getActiveEvaluation(admin,uid)
     const preMark=activeEvaluation?await markEvaluation(admin,uid):null
@@ -122,12 +141,12 @@ Deno.serve(async(req:Request)=>{
     const executionPair=await bestPair(mint)
     const executionReferencePrice=finite(executionPair.priceUsd),liquidity=finite(executionPair.liquidity?.usd)
     if(executionReferencePrice<=0)return json({error:'token has insufficient live execution data'},422)
+    if(liquidity<=0)return json({error:'Token liquidity is zero or unavailable.',code:'LIQUIDITY_UNAVAILABLE'},422)
     const marketMovePct=Math.abs(executionReferencePrice/displayedPrice-1)*100
     if(marketMovePct>maxSlippagePct)return json({error:'PAPER order failed: live market moved beyond your max slippage during simulated execution latency.',code:'SLIPPAGE_EXCEEDED',marketMovePct,maxSlippagePct,simulatedLatencyMs},422)
     const feeBps=PAPER_FEE_BPS,feeRate=feeBps/10_000
-    const hasQuotedLiquidity=liquidity>0
-    const executionModelVersion=hasQuotedLiquidity?'v4_constant_product_live_requote':'v5_live_requote_price_only'
-    const quality=hasQuotedLiquidity?'estimated':'live-requoted-price-only'
+    const executionModelVersion='v4_constant_product_live_requote'
+    const quality='estimated'
 
     if(side==='buy'){
       const amountSol=finite(body?.amountSol)
@@ -140,7 +159,7 @@ Deno.serve(async(req:Request)=>{
         if(existingValue+notionalUsd>limit+0.000001)return json({error:'This buy would exceed the 25% per-token concentration cap.',code:'EVALUATION_CONCENTRATION_CAP',evaluation:preMark},422)
         if(!existing&&marks.length>=5)return json({error:'Evaluation allows at most 5 simultaneous open positions.',code:'EVALUATION_POSITION_LIMIT',evaluation:preMark},422)
       }
-      const model=hasQuotedLiquidity?constantProductBuy(executionReferencePrice,liquidity,notionalUsd):{fillPrice:executionReferencePrice,impactPct:0,tokenOut:notionalUsd/executionReferencePrice}
+      const model=constantProductBuy(executionReferencePrice,liquidity,notionalUsd)
       const fillPrice=model.fillPrice,impactPct=model.impactPct,totalSlippagePct=Math.abs(fillPrice/displayedPrice-1)*100
       if(totalSlippagePct>maxSlippagePct)return json({error:'PAPER order failed: simulated fill exceeded your max slippage.',code:'SLIPPAGE_EXCEEDED',marketMovePct,priceImpactPct:impactPct,totalSlippagePct,maxSlippagePct,simulatedLatencyMs},422)
       const fillMc=marketCap>0?marketCap*(fillPrice/displayedPrice):0,feeUsd=notionalUsd*feeRate
@@ -159,7 +178,7 @@ Deno.serve(async(req:Request)=>{
     if(positionError||!position)return json({error:'no open PAPER position'},422)
     if(position.accounting_version!=='usd_v2')return json({error:'legacy PAPER position cannot be sold in USD mode'},422)
     const sellQty=finite(position.quantity_tokens)*(sellPct/100)
-    const model=hasQuotedLiquidity?constantProductSell(executionReferencePrice,liquidity,sellQty):{fillPrice:executionReferencePrice,impactPct:0,grossFillUsd:sellQty*executionReferencePrice}
+    const model=constantProductSell(executionReferencePrice,liquidity,sellQty)
     const fillPrice=model.fillPrice,impactPct=model.impactPct,totalSlippagePct=Math.abs(fillPrice/displayedPrice-1)*100
     if(totalSlippagePct>maxSlippagePct)return json({error:'PAPER order failed: simulated fill exceeded your max slippage.',code:'SLIPPAGE_EXCEEDED',marketMovePct,priceImpactPct:impactPct,totalSlippagePct,maxSlippagePct,simulatedLatencyMs},422)
     const fillMc=marketCap>0?marketCap*(fillPrice/displayedPrice):0
