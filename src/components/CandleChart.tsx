@@ -671,7 +671,7 @@ export default function CandleChart({
     },'image/png')
   }
 
-  return <div className={'chart-card lw-chart-card p23-chart axiom-chart '+(expanded?'expanded':'')}>
+  return <div className={'chart-card lw-chart-card p23-chart axiom-chart '+(expanded?'expanded':'')} data-chart-close={latest?.close??''} data-current-chart-value={currentDisplayValue||''} data-chart-mode={mode} data-chart-quote={quote}>
     <div className="axiom-chart-toolbar">
       <div className="axiom-quick-tfs">
         {quickTfs.map(value=><button type="button" aria-label={'Chart timeframe '+value} key={value} className={tf===value?'active':''} onClick={()=>chooseTimeframe(value)}>{value}</button>)}
