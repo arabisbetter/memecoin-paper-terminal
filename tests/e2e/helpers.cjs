@@ -23,9 +23,13 @@ async function liveToken(request){
   const response=await request.get('/api/market/latest')
   if(!response.ok())throw new Error('market feed '+response.status())
   const body=await response.json()
-  const tokens=(body.tokens||[]).filter(t=>t&&t.mint&&t.pairAddress&&Number(t.priceUsd)>0&&Number(t.liquidityUsd)>0)
-  tokens.sort((a,b)=>Number(b.liquidityUsd||0)-Number(a.liquidityUsd||0))
-  if(!tokens.length)throw new Error('no liquid live token')
+  const all=(body.tokens||[]).filter(t=>t&&t.mint&&t.pairAddress&&Number(t.priceUsd)>0&&Number(t.liquidityUsd)>=10000)
+  const mature=all.filter(t=>{
+    const created=Number(t.pairCreatedAt||0),createdMs=created>1e12?created:created>1e9?created*1000:0
+    return Number(t.sells5m||0)>0 && (!createdMs || Date.now()-createdMs>=15*60*1000)
+  })
+  const tokens=(mature.length?mature:all).sort((a,b)=>Number(b.liquidityUsd||0)-Number(a.liquidityUsd||0))
+  if(!tokens.length)throw new Error('no risk-policy-liquidity live token')
   return tokens[0]
 }
 function relativeDiff(a,b){return Math.abs(Number(a)-Number(b))/Math.max(1e-12,Math.abs(Number(b)))}
