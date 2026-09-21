@@ -1096,3 +1096,8 @@ html,body{
   }
   .header-viewer-pill span{display:none!important}
 }
+
+
+/* Account startup errors must never block unrelated navigation or feedback controls. */
+.account-start-error{pointer-events:none!important}
+.account-start-error button{pointer-events:auto!important}
