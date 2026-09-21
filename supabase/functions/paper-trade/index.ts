@@ -121,11 +121,13 @@ Deno.serve(async(req:Request)=>{
     await sleep(simulatedLatencyMs)
     const executionPair=await bestPair(mint)
     const executionReferencePrice=finite(executionPair.priceUsd),liquidity=finite(executionPair.liquidity?.usd)
-    if(executionReferencePrice<=0||liquidity<=0)return json({error:'token has insufficient live execution data'},422)
+    if(executionReferencePrice<=0)return json({error:'token has insufficient live execution data'},422)
     const marketMovePct=Math.abs(executionReferencePrice/displayedPrice-1)*100
     if(marketMovePct>maxSlippagePct)return json({error:'PAPER order failed: live market moved beyond your max slippage during simulated execution latency.',code:'SLIPPAGE_EXCEEDED',marketMovePct,maxSlippagePct,simulatedLatencyMs},422)
     const feeBps=PAPER_FEE_BPS,feeRate=feeBps/10_000
-    const executionModelVersion='v4_constant_product_live_requote',quality='estimated'
+    const hasQuotedLiquidity=liquidity>0
+    const executionModelVersion=hasQuotedLiquidity?'v4_constant_product_live_requote':'v5_live_requote_price_only'
+    const quality=hasQuotedLiquidity?'estimated':'live-requoted-price-only'
 
     if(side==='buy'){
       const amountSol=finite(body?.amountSol)
@@ -138,7 +140,7 @@ Deno.serve(async(req:Request)=>{
         if(existingValue+notionalUsd>limit+0.000001)return json({error:'This buy would exceed the 25% per-token concentration cap.',code:'EVALUATION_CONCENTRATION_CAP',evaluation:preMark},422)
         if(!existing&&marks.length>=5)return json({error:'Evaluation allows at most 5 simultaneous open positions.',code:'EVALUATION_POSITION_LIMIT',evaluation:preMark},422)
       }
-      const model=constantProductBuy(executionReferencePrice,liquidity,notionalUsd)
+      const model=hasQuotedLiquidity?constantProductBuy(executionReferencePrice,liquidity,notionalUsd):{fillPrice:executionReferencePrice,impactPct:0,tokenOut:notionalUsd/executionReferencePrice}
       const fillPrice=model.fillPrice,impactPct=model.impactPct,totalSlippagePct=Math.abs(fillPrice/displayedPrice-1)*100
       if(totalSlippagePct>maxSlippagePct)return json({error:'PAPER order failed: simulated fill exceeded your max slippage.',code:'SLIPPAGE_EXCEEDED',marketMovePct,priceImpactPct:impactPct,totalSlippagePct,maxSlippagePct,simulatedLatencyMs},422)
       const fillMc=marketCap>0?marketCap*(fillPrice/displayedPrice):0,feeUsd=notionalUsd*feeRate
@@ -157,7 +159,7 @@ Deno.serve(async(req:Request)=>{
     if(positionError||!position)return json({error:'no open PAPER position'},422)
     if(position.accounting_version!=='usd_v2')return json({error:'legacy PAPER position cannot be sold in USD mode'},422)
     const sellQty=finite(position.quantity_tokens)*(sellPct/100)
-    const model=constantProductSell(executionReferencePrice,liquidity,sellQty)
+    const model=hasQuotedLiquidity?constantProductSell(executionReferencePrice,liquidity,sellQty):{fillPrice:executionReferencePrice,impactPct:0,grossFillUsd:sellQty*executionReferencePrice}
     const fillPrice=model.fillPrice,impactPct=model.impactPct,totalSlippagePct=Math.abs(fillPrice/displayedPrice-1)*100
     if(totalSlippagePct>maxSlippagePct)return json({error:'PAPER order failed: simulated fill exceeded your max slippage.',code:'SLIPPAGE_EXCEEDED',marketMovePct,priceImpactPct:impactPct,totalSlippagePct,maxSlippagePct,simulatedLatencyMs},422)
     const fillMc=marketCap>0?marketCap*(fillPrice/displayedPrice):0
