@@ -38,7 +38,7 @@ export default function LandingHome(){
     <div className="paper-ambient paper-ambient-a"/><div className="paper-ambient paper-ambient-b"/><div className="paper-grid"/>
     <header className="paper-nav">
       <Link href="/" className="paper-brand"><span className="paper-brand-mark"><PaperMark/></span><span>PAPER</span></Link>
-      <nav className="paper-nav-links"><Link href="/spot">Spot</Link><Link href="/pulse">Pulse</Link><Link href="/profile">Profile</Link></nav>
+      <nav className="paper-nav-links"><Link href="/discover">Discover</Link><Link href="/spot">Spot</Link><Link href="/pulse">Pulse</Link><Link href="/portfolio">Portfolio</Link><Link href="/profile">Profile</Link></nav>
       <Link href="/spot" className="paper-nav-cta">Open Spot <ArrowUpRight size={15}/></Link>
     </header>
 
