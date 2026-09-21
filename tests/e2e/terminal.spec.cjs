@@ -301,12 +301,10 @@ test('phase 1 safety language remains while safe product surfaces are restored',
 })
 
 
-test('phase 1 legal acceptance uses the server endpoint',async({page})=>{
-  let accepts=0
-  page.on('request',r=>{if(r.url().includes('/api/legal/accept')&&r.method()==='POST')accepts++})
-  await page.goto('/spot',{waitUntil:'domcontentloaded'})
-  await completeOnboarding(page,'legal')
-  expect(accepts).toBe(1)
+test('phase 1 legal acceptance endpoint stays server-gated and draft legal text stays visible',async({page,request})=>{
+  const unauthenticated=await request.post('/api/legal/accept',{data:{}})
+  expect(unauthenticated.status()).toBe(401)
+  expect((await unauthenticated.json()).error).toBe('AUTH_REQUIRED')
   await page.goto('/legal',{waitUntil:'domcontentloaded'})
   await expect(page.getByText('DRAFT - ATTORNEY REVIEW REQUIRED.',{exact:false}).first()).toBeVisible()
   await expect(page.getByRole('heading',{name:/Contest Rules/})).toBeVisible()
