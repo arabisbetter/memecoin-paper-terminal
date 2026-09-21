@@ -467,8 +467,9 @@ export default function CandleChart({
     const last=displayCandles[displayCandles.length-1].time
     const previous=renderedRef.current
     const candlePoint=(c:Candle)=>{
-      const empty=Number(c.volume||0)===0
-      return{time:c.time as UTCTimestamp,open:c.open,high:c.high,low:c.low,close:c.close,...(empty?{color:'#5f6773',borderColor:'#5f6773',wickColor:'#5f6773'}:{})}
+      const isActive=c.time===last
+      const emptyHistorical=Number(c.volume||0)===0&&!isActive
+      return{time:c.time as UTCTimestamp,open:c.open,high:c.high,low:c.low,close:c.close,...(emptyHistorical?{color:'#5f6773',borderColor:'#5f6773',wickColor:'#5f6773'}:{})}
     }
     const volumePoint=(c:Candle)=>({time:c.time as UTCTimestamp,value:c.volume,color:Number(c.volume||0)===0?'rgba(95,103,115,.45)':c.close>=c.open?'rgba(34,197,94,.28)':'rgba(239,68,68,.25)'})
 
