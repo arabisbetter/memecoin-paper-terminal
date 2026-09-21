@@ -63,6 +63,7 @@ test('mobile Pulse keeps all five boards readable',async({page})=>{
   const moreMenu=page.getByRole('menu',{name:'More PAPER tools'})
   await expect(moreMenu).toBeVisible()
   await expect(moreMenu.getByRole('menuitem',{name:'Scanner',exact:true})).toBeVisible()
+  await expect(moreMenu.getByRole('menuitem',{name:'Charity',exact:true})).toBeVisible()
   await page.keyboard.press('Escape')
   await expect(moreMenu).toHaveCount(0)
   const refresh=page.getByRole('button',{name:'Refresh',exact:true})
