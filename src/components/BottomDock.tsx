@@ -70,9 +70,9 @@ export default function BottomDock(_props:{active:string}){
       {presetOpen&&<div className="dock-preset-menu" role="menu">{values.map((value,index)=><button key={index} role="menuitem" className={preset===`P${index+1}`?'active':''} onClick={()=>choosePreset(index)}><span>{`P${index+1}`}</span><b>{value} SOL</b></button>)}</div>}
     </div>
     <div className="dock-divider"/>
-    {primary.map(([href,label,Icon])=><Link key={href} className={active(href)?'active':''} href={href}><Icon size={14}/><span>{label}</span></Link>)}
+    {primary.map(([href,label,Icon])=><Link key={href} aria-label={label} className={active(href)?'active':''} href={href}><Icon size={14}/><span>{label}</span></Link>)}
     <div className="dock-more-wrap" ref={moreRef}>
-      <button className={`dock-more ${more.some(([href])=>active(href))?'active':''}`} aria-expanded={moreOpen} aria-haspopup="menu" onClick={()=>{setMoreOpen(v=>!v);setPresetOpen(false)}}><MoreHorizontal size={14}/><span>More</span></button>
+      <button className={`dock-more ${more.some(([href])=>active(href))?'active':''}`} aria-label="More" aria-expanded={moreOpen} aria-haspopup="menu" onClick={()=>{setMoreOpen(v=>!v);setPresetOpen(false)}}><MoreHorizontal size={14}/><span>More</span></button>
     </div>
     <div className="dock-spacer"/>
     <PaperAccountChip/>
