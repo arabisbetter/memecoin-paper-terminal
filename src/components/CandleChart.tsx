@@ -30,6 +30,7 @@ const timeframeGroups:TimeframeGroup[]=[
   {label:'LONGER',items:[{value:'1M',label:'1 month'}]},
 ]
 const quickTfs:Timeframe[]=['1s','5s','1m','5m']
+const tfSeconds:Record<Timeframe,number>={'1s':1,'5s':5,'15s':15,'30s':30,'1m':60,'3m':180,'5m':300,'15m':900,'30m':1800,'1h':3600,'4h':14400,'6h':21600,'12h':43200,'24h':86400,'1M':2592000}
 const timeframeLabel=(tf:Timeframe)=>timeframeGroups.flatMap(g=>g.items).find(x=>x.value===tf)?.label||tf
 const isSecondTf=(tf:Timeframe)=>tf.endsWith('s')
 const refreshMs=(tf:Timeframe)=>tf==='1s'?3000:tf==='5s'?5000:tf==='15s'?7500:tf==='30s'?10000:tf==='1m'?15000:tf==='3m'?18000:tf==='5m'?20000:tf==='15m'||tf==='30m'?30000:tf==='1h'?45000:tf==='4h'||tf==='6h'?60000:tf==='12h'?90000:120000
@@ -146,6 +147,7 @@ export default function CandleChart({
   const [loading,setLoading]=useState(false)
   const [status,setStatus]=useState<'LIVE'|'DEGRADED'|'STALE'>('DEGRADED')
   const [asOf,setAsOf]=useState(0)
+  const [liveClock,setLiveClock]=useState(()=>Date.now())
   const [expanded,setExpanded]=useState(false)
   const [indicatorOpen,setIndicatorOpen]=useState(false)
   const [displayOpen,setDisplayOpen]=useState(false)
@@ -175,6 +177,7 @@ export default function CandleChart({
   useEffect(()=>{const start=window.setTimeout(()=>{if(mcAvailable&&!userPickedMode.current)setMode('marketCap');if(!mcAvailable&&mode==='marketCap')setMode('price')},0);return()=>clearTimeout(start)},[mcAvailable,mode])
   useEffect(()=>{if(quote!=='sol'||solAvailable)return;const start=window.setTimeout(()=>setQuote('usd'),0);return()=>clearTimeout(start)},[quote,solAvailable])
   useEffect(()=>{const start=window.setTimeout(()=>setHover(null),0);return()=>clearTimeout(start)},[mode,quote])
+  useEffect(()=>{const tick=()=>setLiveClock(Date.now()),id=window.setInterval(tick,1000);return()=>clearInterval(id)},[])
 
   useEffect(()=>{
     const start=window.setTimeout(()=>{
@@ -429,15 +432,32 @@ export default function CandleChart({
     primitive.setMarkers(markers as any)
   },[candles,trades,showTradeMarkers])
 
+  const liveCandles=useMemo(()=>{
+    const price=Number(currentPrice||0)
+    if(!candles.length||!Number.isFinite(price)||price<=0)return candles
+    const rows=candles.map(row=>({...row}))
+    const seconds=tfSeconds[tf]||60
+    const bucket=Math.floor(Math.floor(liveClock/1000)/seconds)*seconds
+    const last=rows[rows.length-1]
+    if(bucket<last.time)return rows
+    if(bucket===last.time){
+      rows[rows.length-1]={...last,high:Math.max(last.high,price),low:Math.min(last.low,price),close:price}
+      return rows
+    }
+    const open=last.close>0?last.close:price
+    rows.push({time:bucket,open,high:Math.max(open,price),low:Math.min(open,price),close:price,volume:0})
+    return rows.slice(-420)
+  },[candles,currentPrice,tf,liveClock])
+
   const multiplier=useMemo(()=>{
     const base=mode==='marketCap'&&mcAvailable?impliedSupply:1
     const quoteFactor=quote==='sol'&&solAvailable?1/solUsd:1
     return base*quoteFactor
   },[mode,mcAvailable,impliedSupply,quote,solAvailable,solUsd])
 
-  const displayCandles=useMemo(()=>candles.map(c=>({
+  const displayCandles=useMemo(()=>liveCandles.map(c=>({
     ...c,open:c.open*multiplier,high:c.high*multiplier,low:c.low*multiplier,close:c.close*multiplier
-  })),[candles,multiplier])
+  })),[liveCandles,multiplier])
 
   useEffect(()=>{
     const candle=candleRef.current,volume=volumeRef.current
@@ -495,6 +515,13 @@ export default function CandleChart({
         }else{
           scale.fitContent()
         }
+      })
+    }else{
+      requestAnimationFrame(()=>{
+        const scale=chartRef.current?.timeScale()
+        if(!scale)return
+        const position=scale.scrollPosition()
+        if(Number.isFinite(position)&&position<3)scale.scrollToRealTime()
       })
     }
   },[displayCandles,mode,quote,showEma9,showEma21,showEma50,showSma20,showSma50,showVwap,showBollinger,poolAddress,tf])
@@ -679,8 +706,8 @@ export default function CandleChart({
       </div>
 
       <div className="axiom-toolbar-separator"/>
-      <button className="axiom-switch-button" disabled={!solAvailable} onClick={toggleQuote}>{quote==='usd'?'USD / SOL':'SOL / USD'}</button>
-      <button className="axiom-switch-button mode" disabled={!mcAvailable} onClick={()=>chooseMode(mode==='marketCap'?'price':'marketCap')}>{mode==='marketCap'?'MarketCap / Price':'Price / MarketCap'}</button>
+      <div className="axiom-switch-group" role="group" aria-label="Chart quote currency"><button type="button" className={quote==='usd'?'active':''} onClick={()=>{if(quote!=='usd')toggleQuote()}}>USD</button><button type="button" className={quote==='sol'?'active':''} disabled={!solAvailable} onClick={()=>{if(quote!=='sol')toggleQuote()}}>SOL</button></div>
+      <div className="axiom-switch-group" role="group" aria-label="Chart value mode"><button type="button" className={mode==='price'?'active':''} onClick={()=>chooseMode('price')}>Price</button><button type="button" className={mode==='marketCap'?'active':''} disabled={!mcAvailable} onClick={()=>chooseMode('marketCap')}>MarketCap</button></div>
 
       <div className="axiom-toolbar-separator"/>
       <button className="axiom-icon-button" disabled={!undoCount} onClick={undoLevel} title="Undo level"><Undo2 size={14}/></button>
