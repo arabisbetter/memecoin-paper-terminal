@@ -100,7 +100,7 @@ begin
     consistency_score=excluded.consistency_score,
     captured_at=now();
 end;
-$function$
+$function$;
 
 
 CREATE OR REPLACE FUNCTION public.paper_refresh_leaderboards_v2()
@@ -197,7 +197,7 @@ begin
     funded_capital_usd=excluded.funded_capital_usd,
     captured_at=now();
 end;
-$function$
+$function$;
 
 
 do $$
