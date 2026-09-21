@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
-import { Activity, ArrowUpRight, BarChart3, Check, Eye, ShieldCheck, Zap } from 'lucide-react'
+import { Activity, ArrowUpRight, BarChart3, Check, Eye, HeartHandshake, ShieldCheck, Zap } from 'lucide-react'
 import type { MarketToken } from '@/lib/types'
 
 const money=(n:number)=>{
@@ -38,7 +38,7 @@ export default function LandingHome(){
     <div className="paper-ambient paper-ambient-a"/><div className="paper-ambient paper-ambient-b"/><div className="paper-grid"/>
     <header className="paper-nav">
       <Link href="/" className="paper-brand"><span className="paper-brand-mark"><PaperMark/></span><span>PAPER</span></Link>
-      <nav className="paper-nav-links"><Link href="/discover">Discover</Link><Link href="/spot">Spot</Link><Link href="/pulse">Pulse</Link><Link href="/portfolio">Portfolio</Link><Link href="/profile">Profile</Link></nav>
+      <nav className="paper-nav-links"><Link href="/discover">Discover</Link><Link href="/spot">Spot</Link><Link href="/pulse">Pulse</Link><Link href="/portfolio">Portfolio</Link><Link href="/charity">Charity</Link><Link href="/profile">Profile</Link></nav>
       <Link href="/spot" className="paper-nav-cta">Open Spot <ArrowUpRight size={15}/></Link>
     </header>
 
@@ -86,6 +86,17 @@ export default function LandingHome(){
     <section className="paper-split paper-section">
       <div className="paper-split-copy"><div className="paper-section-tag">BUILT DIFFERENT</div><h2>NO WALLET.<br/>NO DEPOSIT.<br/><span>NO PRETENDING.</span></h2><p>PAPER never asks you to fund a trading account or sign an on-chain trade. Memecoins can rug, become illiquid, or lose all real-world value. Bad coin performance does not create a payout, refund, reimbursement, or make-good.</p><Link href="/legal" className="paper-text-link">READ HOW PAPER WORKS <ArrowUpRight size={14}/></Link></div>
       <div className="paper-truth-stack"><article><Eye/><span><b>REAL MARKET INPUTS</b><small>External providers can be delayed, wrong, or unavailable.</small></span></article><article><ShieldCheck/><span><b>SIMULATED EXECUTION</b><small>PAPER SOL only — no blockchain trade is submitted.</small></span></article><article><Activity/><span><b>HIGH-RISK MARKETS</b><small>Rugs, honeypots, freezes, manipulation, and total loss can occur in real markets.</small></span></article><article><Check/><span><b>NO REIMBURSEMENT</b><small>Bad market outcomes do not create a refund, payout, or make-good obligation.</small></span></article></div>
+    </section>
+
+    <section id="charity" className="paper-charity paper-section">
+      <div className="paper-charity-glow"/>
+      <div className="paper-charity-icon"><HeartHandshake size={38}/></div>
+      <div className="paper-section-tag">CHARITY · DORMANT BETA CONCEPT</div>
+      <h2>PRACTICE PAPER.<br/><span>GIVE BACK.</span></h2>
+      <p className="paper-charity-lead"><b>DRAFT - ATTORNEY REVIEW REQUIRED.</b> If an official PAPER giveaway program is activated in the future, the charity concept is a dollar-for-dollar match: each $1 actually distributed in that campaign would be paired with $1 donated to the named charity under the final published terms.</p>
+      <div className="paper-charity-grid"><article><small>EXAMPLE CAMPAIGN</small><strong>$1,000</strong><span>actually distributed</span></article><div className="paper-charity-plus">+</div><article><small>CHARITY MATCH</small><strong>$1,000</strong><span>donated to charity</span></article><div className="paper-charity-equals">=</div><article className="impact"><small>VISIBLE IMPACT</small><strong>$2,000</strong><span>campaign + charity</span></article></div>
+      <div className="paper-charity-proof"><ShieldCheck size={18}/><span><b>Proof over promises.</b> Real prizes and payouts are OFF today. No user balance or PAPER SOL is used for charity. If a campaign is activated later, the campaign amount, charity, donation amount and proof should be published together.</span></div>
+      <div className="paper-charity-actions"><Link href="/charity">CHARITY TRANSPARENCY <ArrowUpRight size={14}/></Link><Link href="/rewards">PAPER REWARDS <ArrowUpRight size={14}/></Link></div>
     </section>
 
     <section className="paper-final-cta paper-section"><div className="paper-final-mark"><PaperMark/></div><div className="paper-section-tag">PAPER-ONLY BETA</div><h2>PRACTICE FIRST.<br/><span>RISK NOTHING.</span></h2><p>Use PAPER SOL to practice against real Solana market inputs.</p><Link href="/spot" className="paper-primary-btn"><Zap size={18}/> START WITH 1,000 PAPER SOL</Link></section>
