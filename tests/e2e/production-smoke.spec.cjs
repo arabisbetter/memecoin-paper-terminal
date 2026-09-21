@@ -37,15 +37,24 @@ test('exact deployed release works on the public PAPER hostname',async({page,req
   await expect(page.locator('.ax-profile-entry')).toHaveCount(1)
   await expect(page.locator('.restored-feature-dock a[href="/profile"]')).toHaveCount(1)
 
-  for(const route of ['/discover','/portfolio','/chains','/watchlist','/scanner','/smart-money','/heatmap','/compare','/workspaces','/journal','/replay','/community','/leaderboards','/status']){
+  for(const route of ['/discover','/portfolio','/chains','/watchlist','/scanner','/smart-money','/heatmap','/compare','/workspaces','/journal','/replay','/community','/leaderboards','/status','/wallets','/evaluation','/rewards']){
     const restored=await request.get(route,{maxRedirects:0})
     expect(restored.status(),route).toBe(200)
   }
-  for(const route of ['/funded','/evaluation','/rewards']){
+  for(const route of ['/funded','/coin']){
     const blocked=await request.get(route,{maxRedirects:0})
     expect(blocked.status(),route).toBe(307)
     expect(blocked.headers().location).toBe('/spot')
   }
+  const intel=await request.get('/token/'+encodeURIComponent(token.mint)+'/intelligence',{maxRedirects:0})
+  expect(intel.status()).toBe(200)
+  const trader=await request.get('/trader/00000000-0000-0000-0000-000000000000',{maxRedirects:0})
+  expect(trader.status()).toBe(200)
+
+  await page.getByRole('button',{name:'More',exact:true}).click()
+  const moreMenu=page.getByRole('menu',{name:'More PAPER tools'})
+  for(const name of ['Evaluation','Rewards','Wallet Tracker'])await expect(moreMenu.getByRole('menuitem',{name,exact:true})).toBeVisible()
+  await page.keyboard.press('Escape')
 
   await page.getByRole('button',{name:'Edit presets',exact:true}).click()
   await page.getByLabel('Preset P1 SOL').fill('0.01')
