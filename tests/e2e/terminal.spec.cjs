@@ -106,6 +106,12 @@ test('candle API fills gaps and chart survives repeated timeframe changes',async
   const priceMode=valueMode.getByRole('button',{name:'Price',exact:true})
   const marketCapMode=valueMode.getByRole('button',{name:'MarketCap',exact:true})
   await priceMode.click();await expect(priceMode).toHaveClass(/active/)
+  const chartState=page.locator('.lw-chart-card')
+  await expect.poll(async()=>{
+    const close=Number(await chartState.getAttribute('data-chart-close'))
+    const current=Number(await chartState.getAttribute('data-current-chart-value'))
+    return close>0&&current>0?relativeDiff(close,current):1
+  },{timeout:25000}).toBeLessThan(1e-9)
   if(await marketCapMode.isEnabled()){
     await marketCapMode.click();await expect(marketCapMode).toHaveClass(/active/)
     await expect(page.locator('.lw-chart-canvas canvas').first()).toBeVisible()
