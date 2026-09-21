@@ -28,8 +28,9 @@ export function useTokenViewers(mints:string[]=[],refreshMs=7000):TokenViewerSta
         if(!response.ok)throw new Error(body?.error||'viewer service unavailable')
         const byMint:Record<string,number>={}
         for(const mint of list)byMint[mint]=Number(body?.byMint?.[mint]||0)
-        if(alive)setStats({byMint,total:Number(body?.viewerTotal||0),windowMinutes:Number(body?.windowMinutes||15),ready:true})
-        errorReported.current=false
+        const available=body?.available!==false
+        if(alive)setStats({byMint,total:Number(body?.viewerTotal||0),windowMinutes:Number(body?.windowMinutes||15),ready:available})
+        if(available)errorReported.current=false
       }catch(error){
         if(alive)setStats(current=>({...current,ready:true}))
         if(!errorReported.current){errorReported.current=true;void logClientError('viewers',error,{mints:mintKey?mintKey.split('|').length:0})}
