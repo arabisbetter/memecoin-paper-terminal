@@ -31,7 +31,9 @@ test('exact deployed release works on the public PAPER hostname',async({page,req
   await expect(page.getByText(/LIVE MEMECOINS/)).toBeVisible({timeout:25000})
   await expect(page.locator('.token-row-shell,.spot-list-row').first()).toBeVisible({timeout:25000}).catch(async()=>{await expect(page.locator('.spot-token-list').getByText(token.symbol).first()).toBeVisible()})
   await expect(page.getByText('INSTANT BUY',{exact:true})).toBeVisible()
-  await expect(page.locator('a[href="/profile"]')).toHaveCount(1)
+  await expect(page.getByRole('navigation',{name:'Primary navigation'}).getByRole('link',{name:'Funded',exact:true})).toHaveCount(0)
+  await expect(page.locator('.ax-profile-entry')).toHaveCount(1)
+  await expect(page.locator('.restored-feature-dock a[href="/profile"]')).toHaveCount(1)
 
   await page.getByRole('button',{name:'Edit presets',exact:true}).click()
   await page.getByLabel('Preset P1 SOL').fill('0.01')
