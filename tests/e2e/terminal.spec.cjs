@@ -242,7 +242,7 @@ test('token search history persists and full Pulse boards remain available',asyn
 })
 
 test('safe PAPER feature surfaces are restored while real-money surfaces stay hidden',async({page,request})=>{
-  const restored=['/discover','/portfolio','/chains','/watchlist','/scanner','/smart-money','/heatmap','/compare','/workspaces','/journal','/replay','/community','/leaderboards','/status','/wallets','/evaluation','/rewards']
+  const restored=['/discover','/portfolio','/chains','/watchlist','/scanner','/smart-money','/heatmap','/compare','/workspaces','/journal','/replay','/community','/leaderboards','/status','/wallets','/evaluation','/rewards','/charity']
   for(const route of restored){
     const response=await request.get(route,{maxRedirects:0})
     expect(response.status(),route).toBe(200)
@@ -260,6 +260,9 @@ test('safe PAPER feature surfaces are restored while real-money surfaces stay hi
   const more=page.getByRole('button',{name:'More',exact:true})
   await more.click()
   const menu=page.getByRole('menu',{name:'More PAPER tools'})
+  for(const name of ['Evaluation','Rewards','Wallet Tracker','Charity','Community','Scanner','Smart Money','Heatmap','Compare','Workspaces','Journal','Replay','Status']){
+    await expect(menu.getByRole('menuitem',{name,exact:true})).toBeVisible()
+  }
   const token=await liveToken(request)
   const tokenIntel=await request.get('/token/'+encodeURIComponent(token.mint)+'/intelligence',{maxRedirects:0})
   expect(tokenIntel.status()).toBe(200)
@@ -272,6 +275,10 @@ test('safe PAPER feature surfaces are restored while real-money surfaces stay hi
   await page.goto('/rewards',{waitUntil:'domcontentloaded'})
   await expect(page.getByText(/PAPER-ONLY STATUS/i)).toBeVisible()
   await expect(page.getByText(/No cash, crypto, payout, redemption, or prize value/i)).toBeVisible()
+  await page.goto('/charity',{waitUntil:'domcontentloaded'})
+  await expect(page.getByRole('heading',{name:/Give back, transparently/i})).toBeVisible()
+  await expect(page.getByText(/DRAFT - ATTORNEY REVIEW REQUIRED/i)).toBeVisible()
+  await expect(page.getByText(/real prizes and payouts are OFF/i)).toBeVisible()
 })
 
 test('feedback remains available and real-money beta gates remain closed',async({page,request})=>{
@@ -301,7 +308,7 @@ test('phase 1 safety language remains while safe product surfaces are restored',
   const legalFooter=page.getByRole('contentinfo',{name:'Legal links'})
   for(const name of ['Terms','Privacy','Risk','Contest Rules'])await expect(legalFooter.getByRole('link',{name,exact:true})).toBeVisible()
 
-  for(const route of ['/discover','/chains','/portfolio','/community','/leaderboards','/wallets','/evaluation','/rewards']){
+  for(const route of ['/discover','/chains','/portfolio','/community','/leaderboards','/wallets','/evaluation','/rewards','/charity']){
     await page.goto(route,{waitUntil:'domcontentloaded'})
     await expect(page).toHaveURL(new RegExp(route.replace('/','\\/')))
   }
