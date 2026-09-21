@@ -5,6 +5,7 @@ test('landing page and terminal navigation stay connected',async({page})=>{
   await page.goto('/',{waitUntil:'domcontentloaded'})
   await expect(page.getByRole('link',{name:'Spot',exact:true})).toBeVisible()
   await expect(page.getByRole('link',{name:'Pulse',exact:true})).toBeVisible()
+  await expect(page.getByRole('link',{name:'Evaluation',exact:true})).toBeVisible()
   await expect(page.getByRole('link',{name:'Charity',exact:true})).toBeVisible()
   await expect(page.getByText(/CHARITY · DORMANT BETA CONCEPT/i)).toBeVisible()
   await expect(page.getByRole('link',{name:'Open Spot',exact:true})).toBeVisible()
@@ -13,10 +14,10 @@ test('landing page and terminal navigation stay connected',async({page})=>{
   await expect(page).toHaveURL(/\/spot/)
   await completeOnboarding(page,'home')
   const primaryNav=page.getByRole('navigation',{name:'Primary navigation'})
-  for(const label of ['Discover','Spot','Pulse','Chains','Portfolio','Watchlist','Leaderboard']){
+  for(const label of ['Discover','Spot','Pulse','Evaluation','Chains','Portfolio','Watchlist','Leaderboard']){
     await expect(primaryNav.getByRole('link',{name:label,exact:true})).toBeVisible()
   }
-  for(const label of ['Evaluation','Funded','Rewards']){
+  for(const label of ['Funded','Rewards']){
     await expect(primaryNav.getByRole('link',{name:label,exact:true})).toHaveCount(0)
   }
   await expect(page.locator('.ax-profile-entry')).toBeVisible()
@@ -262,7 +263,7 @@ test('safe PAPER feature surfaces are restored while real-money surfaces stay hi
   const more=page.getByRole('button',{name:'More',exact:true})
   await more.click()
   const menu=page.getByRole('menu',{name:'More PAPER tools'})
-  for(const name of ['Evaluation','Rewards','Wallet Tracker','Charity','Community','Scanner','Smart Money','Heatmap','Compare','Workspaces','Journal','Replay','Status']){
+  for(const name of ['Rewards','Wallet Tracker','Charity','Community','Scanner','Smart Money','Heatmap','Compare','Workspaces','Journal','Replay','Status']){
     await expect(menu.getByRole('menuitem',{name,exact:true})).toBeVisible()
   }
   const token=await liveToken(request)
