@@ -4,7 +4,7 @@ const PUBLIC_UI_PREFIXES=[
   '/discover','/spot','/pulse','/profile','/portfolio','/chains','/watchlist',
   '/scanner','/smart-money','/heatmap','/compare','/workspaces','/journal',
   '/replay','/community','/leaderboards','/status','/legal','/wallets',
-  '/evaluation','/rewards','/trader','/token'
+  '/evaluation','/rewards','/charity','/trader','/token'
 ]
 const INTERNAL_PREFIXES=['/admin']
 
