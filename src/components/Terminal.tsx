@@ -33,6 +33,21 @@ const short=(s:string)=>s.length>13?`${s.slice(0,6)}…${s.slice(-5)}`:s
 const isMint=(s:string)=>/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(s.trim())
 const age=(created?:number)=>{if(!created)return'—';const ms=Math.max(0,Date.now()-created),m=Math.floor(ms/60000);if(m<1)return'<1m';if(m<60)return`${m}m`;const h=Math.floor(m/60);if(h<48)return`${h}h`;return`${Math.floor(h/24)}d`}
 
+async function edgeFunctionMessage(error:unknown){
+  const fallback=error instanceof Error?error.message:'PAPER order rejected'
+  try{
+    const context=(error as {context?:Response})?.context
+    if(context){
+      const payload=await context.clone().json().catch(()=>null) as {error?:unknown;message?:unknown;code?:unknown}|null
+      const message=payload?.error||payload?.message
+      if(message)return String(message)
+      const text=await context.clone().text().catch(()=>'')
+      if(text.trim())return text.trim().slice(0,300)
+    }
+  }catch{}
+  return fallback
+}
+
 function statsFor(token:MarketToken|null,window:StatsWindow):WindowStats{
   if(!token)return{label:window,ready:false,volume:0,buys:0,sells:0,change:0}
   if(window==='1m')return{label:'1m',ready:Boolean(token.observed1mReady),volume:Number(token.volume1m||0),buys:Number(token.buys1m||0),sells:Number(token.sells1m||0),change:Number(token.priceChange1m||0)}
@@ -165,7 +180,7 @@ export default function Terminal(){
     setBusy(true);setMessage('');setReceipt(null)
     try{
       const idempotencyKey=crypto.randomUUID(),body=action==='buy'?{mint:target.mint,side:'buy',amountSol:orderBuySol,idempotencyKey,maxSlippagePct}:{mint:target.mint,side:'sell',sellPct:orderSellPct,idempotencyKey,maxSlippagePct}
-      const {data,error}=await supabase.functions.invoke('paper-trade',{body});if(error)throw error;if(data?.error)throw new Error(data.error)
+      const {data,error}=await supabase.functions.invoke('paper-trade',{body});if(error)throw new Error(await edgeFunctionMessage(error));if(data?.error)throw new Error(data.error)
       const fill=data.fill||{},market=data.market||{},result=data.account||{}
       chooseToken(target,true,false)
       setReceipt({side:action,symbol:target.symbol,amountUsd:Number(fill.requestedAmountUsd||result.gross_usd||0),referencePrice:Number(market.referencePriceUsd||0),executionReferencePrice:Number(market.executionReferencePriceUsd||0),fillPrice:Number(fill.simulatedFillPriceUsd||0),impactPct:Number(fill.priceImpactPct||0),totalSlippagePct:Number(fill.totalSlippagePct||0),marketMovePct:Number(market.marketMovePct||0),latencyMs:Number(market.simulatedLatencyMs||0),maxSlippagePct:Number(market.maxSlippagePct||maxSlippagePct),feeUsd:Number(fill.paperFeeUsd||0),quality:String(fill.executionQuality||'estimated'),ageMs:Number(market.marketDataAgeMs||0),orderId:String(result.order_id||''),replayed:Boolean(result.replayed)})
