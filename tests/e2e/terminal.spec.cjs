@@ -242,12 +242,12 @@ test('token search history persists and full Pulse boards remain available',asyn
 })
 
 test('safe PAPER feature surfaces are restored while real-money surfaces stay hidden',async({page,request})=>{
-  const restored=['/discover','/portfolio','/chains','/watchlist','/scanner','/smart-money','/heatmap','/compare','/workspaces','/journal','/replay','/community','/leaderboards','/status']
+  const restored=['/discover','/portfolio','/chains','/watchlist','/scanner','/smart-money','/heatmap','/compare','/workspaces','/journal','/replay','/community','/leaderboards','/status','/wallets','/evaluation','/rewards']
   for(const route of restored){
     const response=await request.get(route,{maxRedirects:0})
     expect(response.status(),route).toBe(200)
   }
-  for(const route of ['/funded','/evaluation','/rewards']){
+  for(const route of ['/funded','/coin']){
     const response=await request.get(route,{maxRedirects:0})
     expect(response.status(),route).toBe(307)
     expect(response.headers().location).toBe('/spot')
@@ -260,7 +260,18 @@ test('safe PAPER feature surfaces are restored while real-money surfaces stay hi
   const more=page.getByRole('button',{name:'More',exact:true})
   await more.click()
   const menu=page.getByRole('menu',{name:'More PAPER tools'})
-  for(const name of ['Community','Scanner','Smart Money','Heatmap','Compare','Workspaces','Journal','Replay','Status'])await expect(menu.getByRole('menuitem',{name,exact:true})).toBeVisible()
+  const token=await liveToken(request)
+  const tokenIntel=await request.get('/token/'+encodeURIComponent(token.mint)+'/intelligence',{maxRedirects:0})
+  expect(tokenIntel.status()).toBe(200)
+  const traderProfile=await request.get('/trader/00000000-0000-0000-0000-000000000000',{maxRedirects:0})
+  expect(traderProfile.status()).toBe(200)
+
+  await page.goto('/evaluation',{waitUntil:'domcontentloaded'})
+  await expect(page.getByText(/PAPER EVALUATION/i).first()).toBeVisible()
+  await expect(page.getByText(/does not create or unlock a funded account/i)).toBeVisible()
+  await page.goto('/rewards',{waitUntil:'domcontentloaded'})
+  await expect(page.getByText(/PAPER-ONLY STATUS/i)).toBeVisible()
+  await expect(page.getByText(/No cash, crypto, payout, redemption, or prize value/i)).toBeVisible()
 })
 
 test('feedback remains available and real-money beta gates remain closed',async({page,request})=>{
@@ -271,7 +282,7 @@ test('feedback remains available and real-money beta gates remain closed',async(
   await page.getByRole('button',{name:'Send feedback',exact:true}).click()
   await expect(page.getByText('Sent. Thank you.')).toBeVisible()
 
-  for(const route of ['/funded','/evaluation','/rewards']){
+  for(const route of ['/funded','/coin']){
     const response=await request.get(route,{maxRedirects:0})
     expect(response.status(),route).toBe(307)
     expect(response.headers().location).toBe('/spot')
@@ -290,11 +301,11 @@ test('phase 1 safety language remains while safe product surfaces are restored',
   const legalFooter=page.getByRole('contentinfo',{name:'Legal links'})
   for(const name of ['Terms','Privacy','Risk','Contest Rules'])await expect(legalFooter.getByRole('link',{name,exact:true})).toBeVisible()
 
-  for(const route of ['/discover','/chains','/portfolio','/community','/leaderboards']){
+  for(const route of ['/discover','/chains','/portfolio','/community','/leaderboards','/wallets','/evaluation','/rewards']){
     await page.goto(route,{waitUntil:'domcontentloaded'})
     await expect(page).toHaveURL(new RegExp(route.replace('/','\\/')))
   }
-  for(const route of ['/funded','/evaluation','/rewards']){
+  for(const route of ['/funded','/coin']){
     await page.goto(route,{waitUntil:'domcontentloaded'})
     await expect(page).toHaveURL(/\/spot$/)
   }
