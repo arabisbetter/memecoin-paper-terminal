@@ -5,9 +5,9 @@ import { usePathname } from 'next/navigation'
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import {
-  Activity, BarChart3, BookOpen, BriefcaseBusiness, CircleDollarSign, Gauge,
+  Activity, Award, BarChart3, BookOpen, BriefcaseBusiness, CircleDollarSign, Gauge,
   Grid2X2, Layers3, MoreHorizontal, Radio, RotateCcw, ScanSearch,
-  SlidersHorizontal, Star, UserRound, Waves
+  SlidersHorizontal, Star, Target, UserRound, WalletCards, Waves
 } from 'lucide-react'
 import PaperAccountChip from '@/components/PaperAccountChip'
 import { usePaperPresets } from '@/lib/use-paper-presets'
@@ -24,6 +24,9 @@ const primary=[
 ] as const
 
 const more=[
+  ['/evaluation','Evaluation',Target],
+  ['/rewards','Rewards',Award],
+  ['/wallets','Wallet Tracker',WalletCards],
   ['/community','Community',Waves],
   ['/scanner','Scanner',ScanSearch],
   ['/smart-money','Smart Money',Activity],
