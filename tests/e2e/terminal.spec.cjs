@@ -301,3 +301,17 @@ test('phase 1 legal acceptance uses the server endpoint',async({page})=>{
   await expect(page.getByText('DRAFT - ATTORNEY REVIEW REQUIRED.',{exact:false}).first()).toBeVisible()
   await expect(page.getByRole('heading',{name:/Contest Rules/})).toBeVisible()
 })
+
+
+test('phase 1 hard-disables funded execution, custody and payout surfaces',async({page,request})=>{
+  for(const route of ['/api/funded/execute','/api/funded/payout']){
+    const response=await request.post(route,{data:{}})
+    expect(response.status(),route).toBe(410)
+    const body=await response.json()
+    expect(body.code).toBe('REAL_MONEY_DISABLED_PAPER_BETA')
+  }
+  await page.goto('/profile',{waitUntil:'domcontentloaded'})
+  await completeOnboarding(page,'profilebeta')
+  await expect(page.getByText(/LINK SOLANA PAYOUT ADDRESS/i)).toHaveCount(0)
+  await expect(page.getByText(/funded real-sol prize/i)).toHaveCount(0)
+})
