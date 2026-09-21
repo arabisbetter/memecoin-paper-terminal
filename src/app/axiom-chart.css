@@ -56,6 +56,11 @@
 .axiom-tool-label.active,.axiom-switch-button.mode{color:#7f92ff}
 .axiom-switch-button{padding:0 7px}
 .axiom-switch-button:disabled,.axiom-icon-button:disabled{opacity:.3;cursor:not-allowed}
+.axiom-switch-group{display:inline-flex;align-items:center;height:28px;padding:2px;border:1px solid #242b34;border-radius:5px;background:#090c10;flex:none}
+.axiom-switch-group button{height:22px;min-height:22px!important;padding:0 8px!important;border:0!important;border-radius:3px!important;background:transparent!important;color:#7f8896!important;font-size:9px!important;font-weight:750!important;cursor:pointer}
+.axiom-switch-group button:hover:not(:disabled){color:#dce1e8!important;background:#121820!important}
+.axiom-switch-group button.active{color:#8ea0ff!important;background:#151c2a!important}
+.axiom-switch-group button:disabled{opacity:.28;cursor:not-allowed}
 .axiom-icon-button{width:29px;padding:0}
 .axiom-chart-brand{
   margin-left:auto;
