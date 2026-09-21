@@ -17,14 +17,15 @@ test('landing page and terminal navigation stay connected',async({page})=>{
   for(const label of ['Discover','Evaluation','Funded','Chains','Portfolio']){
     await expect(primaryNav.getByRole('link',{name:label,exact:true})).toHaveCount(0)
   }
-  await expect(page.getByRole('link',{name:'Profile',exact:true})).toBeVisible()
+  await expect(page.locator('.ax-profile-entry')).toBeVisible()
   await expect(page.getByLabel('Search tokens')).toBeVisible()
-  await expect(page.locator('a[href="/profile"]')).toHaveCount(1)
+  await expect(page.locator('.ax-profile-entry')).toHaveCount(1)
+  await expect(page.locator('.restored-feature-dock a[href="/profile"]')).toHaveCount(1)
   await expect(page.locator('.token-row-shell').first()).toBeVisible({timeout:25000})
   await expect(page.locator('.lw-chart-canvas').first()).toBeVisible({timeout:25000})
 
   const searchBox=await page.getByLabel('Search tokens').boundingBox()
-  const profileBox=await page.getByRole('link',{name:'Profile',exact:true}).boundingBox()
+  const profileBox=await page.locator('.ax-profile-entry').boundingBox()
   expect(searchBox&&profileBox).toBeTruthy()
   const overlap=!(searchBox.x+searchBox.width<=profileBox.x||profileBox.x+profileBox.width<=searchBox.x||searchBox.y+searchBox.height<=profileBox.y||profileBox.y+profileBox.height<=searchBox.y)
   expect(overlap).toBeFalsy()
@@ -69,7 +70,7 @@ test('presets save, reload, instant buy, and percentage sell work for a fresh an
   await expect(sell25).toBeEnabled({timeout:25000})
   await sell25.click()
   await expect(page.locator('.trade-message').filter({hasText:/^PAPER SELL FILLED$/})).toBeVisible({timeout:30000})
-  await expect(page.locator('a[href="/profile"]')).toHaveCount(1)
+  await expect(page.locator('.ax-profile-entry')).toHaveCount(1)
 })
 
 test('candle API fills gaps and chart survives repeated timeframe changes',async({page,request})=>{
@@ -240,13 +241,13 @@ test('token search history persists and full Pulse boards remain available',asyn
   expect(pulseOverflow.scrollWidth).toBeLessThanOrEqual(pulseOverflow.innerWidth+2)
 })
 
-test('Discover uses all four shared PAPER presets',async({page})=>{
+test('Discover is not exposed in the PAPER-only beta',async({page})=>{
   await page.goto('/discover',{waitUntil:'domcontentloaded'})
-  await completeOnboarding(page,'discover')
-  for(const id of ['P1','P2','P3','P4'])await expect(page.getByRole('button',{name:id,exact:true}).first()).toBeVisible()
+  await expect(page).toHaveURL(/\/spot$/)
+  await expect(page.getByRole('navigation',{name:'Primary navigation'}).getByRole('link',{name:'Discover',exact:true})).toHaveCount(0)
 })
 
-test('feedback and core Part 10 public surfaces remain available',async({page,request})=>{
+test('feedback remains available while non-beta public surfaces redirect',async({page,request})=>{
   await page.goto('/spot',{waitUntil:'domcontentloaded'})
   await completeOnboarding(page,'feedback')
   await page.getByRole('button',{name:'Feedback',exact:true}).click()
@@ -255,8 +256,9 @@ test('feedback and core Part 10 public surfaces remain available',async({page,re
   await expect(page.getByText('Sent. Thank you.')).toBeVisible()
 
   for(const route of ['/community','/status','/rewards','/leaderboards']){
-    const response=await request.get(route)
-    expect(response.ok(),route).toBeTruthy()
+    const response=await request.get(route,{maxRedirects:0})
+    expect(response.status(),route).toBe(307)
+    expect(response.headers().location).toBe('/spot')
   }
   const status=await request.get('/api/status')
   expect(status.ok()).toBeTruthy()
@@ -282,20 +284,7 @@ test('phase 1 legal acceptance uses the server endpoint',async({page})=>{
   let accepts=0
   page.on('request',r=>{if(r.url().includes('/api/legal/accept')&&r.method()==='POST')accepts++})
   await page.goto('/spot',{waitUntil:'domcontentloaded'})
-  const profile=page.getByRole('heading',{name:'Create your trader profile'})
-  if(await profile.isVisible().catch(()=>false)){
-    const suffix=String(Date.now()).slice(-8)
-    await page.getByLabel('Username').fill(('legal_'+suffix).slice(0,24))
-    const display=page.getByLabel(/Display name/i)
-    if(await display.isVisible().catch(()=>false))await display.fill('PAPER LEGAL E2E')
-    await page.getByRole('button',{name:'Continue',exact:true}).click()
-    await profile.waitFor({state:'hidden',timeout:20000})
-  }
-  const legalGate=page.getByRole('heading',{name:'Current PAPER terms'})
-  await expect(legalGate).toBeVisible({timeout:20000})
-  await page.getByRole('checkbox').check()
-  await page.getByRole('button',{name:'Accept & enter PAPER',exact:true}).click()
-  await legalGate.waitFor({state:'hidden',timeout:20000})
+  await completeOnboarding(page,'legal')
   expect(accepts).toBe(1)
   await page.goto('/legal',{waitUntil:'domcontentloaded'})
   await expect(page.getByText('DRAFT - ATTORNEY REVIEW REQUIRED.',{exact:false}).first()).toBeVisible()
