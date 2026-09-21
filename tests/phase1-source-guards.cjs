@@ -77,3 +77,18 @@ assert.doesNotMatch(rewardsPage,/View community coin policy|REAL PRIZES/i)
 const evaluationEdge=fs.readFileSync('supabase/functions/evaluation-status/index.ts','utf8')
 assert.doesNotMatch(evaluationEdge,/paper_funded_profiles|real_funded_activation|real_payouts_enabled/)
 assert.match(evaluationEdge,/paperOnly:true/)
+
+const terminal=fs.readFileSync('src/components/Terminal.tsx','utf8')
+assert.doesNotMatch(terminal,/OPEN REAL MARKET|Open real market|trade-real-link/)
+
+const charityPage=fs.readFileSync('src/app/charity/page.tsx','utf8')
+assert.match(charityPage,/DRAFT - ATTORNEY REVIEW REQUIRED/)
+assert.match(charityPage,/No user deposits, PAPER SOL, wallet funds, or trading balances are collected or transferred for charity/)
+assert.match(charityPage,/real prizes and payouts are OFF/i)
+assert.doesNotMatch(charityPage,/sendRawTransaction|Turnkey|payout wallet|OFFICIAL BUY LINK/i)
+
+const middleware=fs.readFileSync('src/middleware.ts','utf8')
+assert.match(middleware,/['"]\/charity['"]/)
+
+const bottomDock=fs.readFileSync('src/components/BottomDock.tsx','utf8')
+assert.match(bottomDock,/\['\/charity','Charity'/)
