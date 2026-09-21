@@ -102,6 +102,25 @@ test('candle API fills gaps and chart survives repeated timeframe changes',async
     await expect(page.getByText(/chart unavailable/i)).toHaveCount(0)
   }
 
+  const valueMode=page.getByRole('group',{name:'Chart value mode'})
+  const priceMode=valueMode.getByRole('button',{name:'Price',exact:true})
+  const marketCapMode=valueMode.getByRole('button',{name:'MarketCap',exact:true})
+  await priceMode.click();await expect(priceMode).toHaveClass(/active/)
+  if(await marketCapMode.isEnabled()){
+    await marketCapMode.click();await expect(marketCapMode).toHaveClass(/active/)
+    await expect(page.locator('.lw-chart-canvas canvas').first()).toBeVisible()
+    await priceMode.click();await expect(priceMode).toHaveClass(/active/)
+  }
+  const quoteMode=page.getByRole('group',{name:'Chart quote currency'})
+  const usdMode=quoteMode.getByRole('button',{name:'USD',exact:true})
+  const solMode=quoteMode.getByRole('button',{name:'SOL',exact:true})
+  await usdMode.click();await expect(usdMode).toHaveClass(/active/)
+  if(await solMode.isEnabled()){
+    await solMode.click();await expect(solMode).toHaveClass(/active/)
+    await expect(page.locator('.lw-chart-canvas canvas').first()).toBeVisible()
+    await usdMode.click();await expect(usdMode).toHaveClass(/active/)
+  }
+
   await page.getByRole('button',{name:'Indicators',exact:true}).click()
   for(const name of ['EMA 9','EMA 21','EMA 50','SMA 20','SMA 50','VWAP','Bollinger 20']){
     const box=page.getByRole('checkbox',{name,exact:true})
