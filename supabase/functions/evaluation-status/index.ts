@@ -132,15 +132,12 @@ Deno.serve(async(req:Request)=>{
     const marked=await markActiveEvaluation(admin,user.id)
     const {data:latest,error:latestError}=await admin.from('paper_evaluations').select('*').eq('user_id',user.id).order('attempt_no',{ascending:false}).limit(1).maybeSingle()
     if(latestError)throw new Error(latestError.message)
-    const {data:funded}=await admin.from('paper_funded_profiles').select('stage,kyc_status,payout_wallet_address,payout_wallet_verified_at').eq('user_id',user.id).maybeSingle()
-    const {data:flags}=await admin.from('paper_platform_flags').select('real_funded_activation,real_payouts_enabled,kyc_provider_configured,turnkey_signing_enabled').eq('id',true).maybeSingle()
     return reply({
       ok:true,
       anonymous:Boolean(user.is_anonymous),
       hasEvaluation:Boolean(latest),
       evaluation:marked?{...latest,...marked}:latest,
-      funded:funded||null,
-      platform:flags||{real_funded_activation:false,real_payouts_enabled:false,kyc_provider_configured:false,turnkey_signing_enabled:false},
+      paperOnly:true,
       rules:{startingBalanceUsd:1000,profitTargetUsd:5000,passEquityUsd:6000,trailingDrawdownPct:10,maxDailyLossUsd:50,maxPositionPct:25,maxSingleTradePct:25,maxOpenPositions:5,minTrades:1,windowDays:30,cooldownHours:24,feeBps:100,timezone:'UTC'},
     })
   }catch(error){return reply({error:error instanceof Error?error.message:'unknown error'},500)}
