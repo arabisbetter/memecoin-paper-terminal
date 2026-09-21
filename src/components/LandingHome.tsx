@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
-import { Activity, ArrowUpRight, BarChart3, Check, Eye, HeartHandshake, Layers3, ShieldCheck, Sparkles, Zap } from 'lucide-react'
+import { Activity, ArrowUpRight, BarChart3, Check, Eye, ShieldCheck, Zap } from 'lucide-react'
 import type { MarketToken } from '@/lib/types'
 
 const money=(n:number)=>{
@@ -38,17 +38,17 @@ export default function LandingHome(){
     <div className="paper-ambient paper-ambient-a"/><div className="paper-ambient paper-ambient-b"/><div className="paper-grid"/>
     <header className="paper-nav">
       <Link href="/" className="paper-brand"><span className="paper-brand-mark"><PaperMark/></span><span>PAPER</span></Link>
-      <nav className="paper-nav-links"><Link href="/spot">Trade</Link><Link href="/pulse">Pulse</Link><Link href="/portfolio">Portfolio</Link><Link href="/leaderboards">Leaderboard</Link><a href="#charity">Charity</a></nav>
-      <Link href="/spot" className="paper-nav-cta">Launch PAPER <ArrowUpRight size={15}/></Link>
+      <nav className="paper-nav-links"><Link href="/spot">Spot</Link><Link href="/pulse">Pulse</Link><Link href="/profile">Profile</Link></nav>
+      <Link href="/spot" className="paper-nav-cta">Open Spot <ArrowUpRight size={15}/></Link>
     </header>
 
     <section className="paper-hero">
       <div className="paper-hero-copy">
         <div className="paper-kicker"><span className={`paper-live-dot ${status.toLowerCase()}`}/>{status==='LOADING'?'CONNECTING TO MARKETS':`${status} · REAL MARKET DATA`}</div>
-        <h1><span>TRADE PAPER.</span><strong>EARN REAL.</strong></h1>
-        <p className="paper-hero-lead">Start with <b>$1,000 PAPER</b> and trade real Solana memecoin market conditions with simulated execution. No wallet. No deposits. No trading capital at risk.</p>
+        <h1><span>TRADE PAPER.</span><strong>LEARN FAST.</strong></h1>
+        <p className="paper-hero-lead">Start with <b>1,000 PAPER SOL</b> and practice on real Solana memecoin market conditions with simulated execution. No wallet. No deposits. No real-money trades.</p>
         <div className="paper-hero-actions"><Link href="/spot" className="paper-primary-btn"><Zap size={18}/> START TRADING</Link><Link href="/pulse" className="paper-secondary-btn"><Activity size={18}/> WATCH PULSE</Link></div>
-        <div className="paper-proof-row"><span><Check size={14}/>$1,000 PAPER bankroll</span><span><Check size={14}/>Real market feeds</span><span><Check size={14}/>Server-side PAPER fills</span></div>
+        <div className="paper-proof-row"><span><Check size={14}/>1,000 PAPER SOL bankroll</span><span><Check size={14}/>Solana market feeds</span><span><Check size={14}/>Server-side simulated fills</span></div>
       </div>
 
       <div className="paper-hero-visual">
@@ -68,13 +68,13 @@ export default function LandingHome(){
       </div>
     </section>
 
-    <section className="paper-marquee" aria-label="PAPER principles"><div>{Array.from({length:2}).map((_,group)=><span key={group}>REAL MARKETS <i/> PAPER MONEY <i/> NO WALLET <i/> TRACK EVERYTHING <i/> LEARN FASTER <i/> GIVE REAL <i/> TRADE PAPER. EARN REAL. <i/></span>)}</div></section>
+    <section className="paper-marquee" aria-label="PAPER principles"><div>{Array.from({length:2}).map((_,group)=><span key={group}>SOLANA MEMECOINS <i/> PAPER SOL <i/> NO WALLET <i/> NO DEPOSITS <i/> SIMULATED EXECUTION <i/> PAPER-ONLY BETA <i/></span>)}</div></section>
 
     <section className="paper-manifesto paper-section">
       <div className="paper-section-tag">THE IDEA</div>
       <h2>THE MARKET IS REAL.<br/><span>YOUR MONEY ISN&apos;T.</span></h2>
       <p>Memecoin markets move fast. PAPER lets you build pattern recognition, test conviction and review your decisions without paying tuition to the market every time you&apos;re wrong.</p>
-      <div className="paper-number-grid"><article><strong>01</strong><h3>SEE IT LIVE</h3><p>Real prices, liquidity, volume, transactions and OHLCV where providers make them available.</p></article><article><strong>02</strong><h3>TRADE IT PAPER</h3><p>Simulated fills include visible fees, estimated price impact, stale-data rejection and server authority.</p></article><article><strong>03</strong><h3>PROVE IT</h3><p>Positions, P&amp;L, equity history, fills, Degen Hours, points and leaderboards live in one terminal.</p></article></div>
+      <div className="paper-number-grid"><article><strong>01</strong><h3>SPOT</h3><p>Review Solana memecoin markets and submit simulated PAPER SOL buys and sells.</p></article><article><strong>02</strong><h3>PULSE</h3><p>Watch fast-moving Solana memecoin markets with explicit live or degraded data states.</p></article><article><strong>03</strong><h3>PROFILE</h3><p>Manage your PAPER identity and recovery settings without connecting a trading wallet.</p></article></div>
     </section>
 
     <section className="paper-market-wall paper-section">
@@ -84,23 +84,11 @@ export default function LandingHome(){
     </section>
 
     <section className="paper-split paper-section">
-      <div className="paper-split-copy"><div className="paper-section-tag">BUILT DIFFERENT</div><h2>NO WALLET.<br/>NO DEPOSIT.<br/><span>NO PRETENDING.</span></h2><p>PAPER never asks you to fund an account or sign an on-chain transaction. If market data is stale, missing or degraded, the product says so instead of inventing a number.</p><Link href="/legal" className="paper-text-link">READ HOW PAPER WORKS <ArrowUpRight size={14}/></Link></div>
-      <div className="paper-truth-stack"><article><Eye/><span><b>REAL MARKET INPUTS</b><small>Prices and activity come from external market providers, not synthetic candles.</small></span></article><article><ShieldCheck/><span><b>SIMULATED EXECUTION</b><small>PAPER only — no real trade is submitted.</small></span></article><article><Layers3/><span><b>MULTI-CHAIN WATCH</b><small>Solana trading plus Base and Ethereum market discovery in watch mode.</small></span></article><article><Sparkles/><span><b>STATUS, NOT CASH</b><small>Points and tiers are community status. Real-money prizes remain disabled.</small></span></article></div>
+      <div className="paper-split-copy"><div className="paper-section-tag">BUILT DIFFERENT</div><h2>NO WALLET.<br/>NO DEPOSIT.<br/><span>NO PRETENDING.</span></h2><p>PAPER never asks you to fund a trading account or sign an on-chain trade. Memecoins can rug, become illiquid, or lose all real-world value. Bad coin performance does not create a payout, refund, reimbursement, or make-good.</p><Link href="/legal" className="paper-text-link">READ HOW PAPER WORKS <ArrowUpRight size={14}/></Link></div>
+      <div className="paper-truth-stack"><article><Eye/><span><b>REAL MARKET INPUTS</b><small>External providers can be delayed, wrong, or unavailable.</small></span></article><article><ShieldCheck/><span><b>SIMULATED EXECUTION</b><small>PAPER SOL only — no blockchain trade is submitted.</small></span></article><article><Activity/><span><b>HIGH-RISK MARKETS</b><small>Rugs, honeypots, freezes, manipulation, and total loss can occur in real markets.</small></span></article><article><Check/><span><b>NO REIMBURSEMENT</b><small>Bad market outcomes do not create a refund, payout, or make-good obligation.</small></span></article></div>
     </section>
 
-    <section id="charity" className="paper-charity paper-section">
-      <div className="paper-charity-glow"/>
-      <div className="paper-charity-icon"><HeartHandshake size={38}/></div>
-      <div className="paper-section-tag">REAL IMPACT · FUTURE PLEDGE</div>
-      <h2>TRADE PAPER.<br/><span>GIVE REAL.</span></h2>
-      <p className="paper-charity-lead">If official PAPER giveaways are activated, our stated policy is a <b>dollar-for-dollar charity match</b>: every $1 distributed in an official giveaway is paired with $1 donated to charity.</p>
-      <div className="paper-charity-grid"><article><small>EXAMPLE GIVEAWAY</small><strong>$1,000</strong><span>to the community</span></article><div className="paper-charity-plus">+</div><article><small>CHARITY MATCH</small><strong>$1,000</strong><span>donated to charity</span></article><div className="paper-charity-equals">=</div><article className="impact"><small>VISIBLE IMPACT</small><strong>$2,000</strong><span>community + charity</span></article></div>
-      <div className="paper-charity-proof"><ShieldCheck size={18}/><span><b>Proof over promises.</b> Giveaway rules, recipients, donation amounts and receipts should be published together after each completed campaign. Giveaways and matching are not active yet.</span></div>
-      <div className="paper-charity-actions"><Link href="/coin">CHARITY POLICY <ArrowUpRight size={14}/></Link><Link href="/rewards">REWARDS &amp; POINTS <ArrowUpRight size={14}/></Link></div>
-    </section>
+    <section className="paper-final-cta paper-section"><div className="paper-final-mark"><PaperMark/></div><div className="paper-section-tag">PAPER-ONLY BETA</div><h2>PRACTICE FIRST.<br/><span>RISK NOTHING.</span></h2><p>Use PAPER SOL to practice against real Solana market inputs.</p><Link href="/spot" className="paper-primary-btn"><Zap size={18}/> START WITH 1,000 PAPER SOL</Link></section>
 
-    <section className="paper-final-cta paper-section"><div className="paper-final-mark"><PaperMark/></div><div className="paper-section-tag">READY?</div><h2>TRADE PAPER.<br/><span>EARN REAL.</span></h2><p>Real market experience starts with fake money.</p><Link href="/spot" className="paper-primary-btn"><Zap size={18}/> START WITH $1,000 PAPER</Link></section>
-
-    <footer className="paper-footer"><div className="paper-brand"><span className="paper-brand-mark"><PaperMark/></span><span>PAPER</span></div><p>PAPER is a simulated trading product. No real trade is submitted. External market links may involve real funds.</p><div><a href="#charity">Charity</a><Link href="/legal#terms">Terms</Link><Link href="/legal#privacy">Privacy</Link><Link href="/legal#risk">Risk</Link></div></footer>
   </main>
 }

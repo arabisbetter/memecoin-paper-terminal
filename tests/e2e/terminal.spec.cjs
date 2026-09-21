@@ -11,8 +11,11 @@ test('landing page and terminal navigation stay connected',async({page})=>{
   await expect(page).toHaveURL(/\/spot/)
   await completeOnboarding(page,'home')
   const primaryNav=page.getByRole('navigation',{name:'Primary navigation'})
-  for(const label of ['Discover','Trade','Evaluation','Funded','Pulse','Chains','Portfolio']){
+  for(const label of ['Spot','Pulse']){
     await expect(primaryNav.getByRole('link',{name:label,exact:true})).toBeVisible()
+  }
+  for(const label of ['Discover','Evaluation','Funded','Chains','Portfolio']){
+    await expect(primaryNav.getByRole('link',{name:label,exact:true})).toHaveCount(0)
   }
   await expect(page.getByRole('link',{name:'Profile',exact:true})).toBeVisible()
   await expect(page.getByLabel('Search tokens')).toBeVisible()
@@ -258,4 +261,18 @@ test('feedback and core Part 10 public surfaces remain available',async({page,re
   const status=await request.get('/api/status')
   expect(status.ok()).toBeTruthy()
   expect((await status.json()).status).toBe('ok')
+})
+
+
+test('phase 1 keeps public beta scope and legal links explicit',async({page})=>{
+  await page.goto('/',{waitUntil:'domcontentloaded'})
+  await expect(page.getByRole('heading',{name:/TRADE PAPER/i})).toBeVisible()
+  await expect(page.getByText(/EARN REAL/i)).toHaveCount(0)
+  await expect(page.getByText(/no real-money trades/i)).toBeVisible()
+  const legalFooter=page.getByRole('contentinfo',{name:'Legal links'})
+  for(const name of ['Terms','Privacy','Risk','Contest Rules'])await expect(legalFooter.getByRole('link',{name,exact:true})).toBeVisible()
+  for(const route of ['/funded','/evaluation','/chains','/portfolio','/community','/leaderboards']){
+    await page.goto(route,{waitUntil:'domcontentloaded'})
+    await expect(page).toHaveURL(/\/spot$/)
+  }
 })
