@@ -8,7 +8,7 @@ import { createClient } from '@/lib/supabase/client'
 import { ensurePaperUser } from '@/lib/paper-session'
 
 type Profile={username:string|null;display_name:string|null;bio:string|null;x_handle:string|null;avatar_url:string|null;avatar_emoji:string|null;accent:string|null}
-type Stats={evaluation_pnl_usd:number;evaluation_roi_pct:number;win_rate_pct:number;trades_count:number;funded_pnl_usd:number;funded_capital_usd:number;evaluation_status:string|null}
+type Stats={evaluation_pnl_usd:number;evaluation_roi_pct:number;win_rate_pct:number;trades_count:number;evaluation_status:string|null}
 type Card={trade_id:string;token_symbol:string|null;action:string;notional_usd:number|null;fee_usd:number|null;execution_quality:string|null;verified:boolean;created_at:string}
 type Activity={id:number;event_type:string;token_symbol:string|null;payload:Record<string,unknown>;created_at:string}
 type Badge={badge_key:string;earned_at:string}
@@ -28,7 +28,7 @@ export default function TraderPage(){
       const [{data:p,error:pe},{data:v,error:ve},{data:s},{data:c},{data:a},{data:b},{count:followersCount},{count:followingTotal}]=await Promise.all([
         supabase.from('paper_public_profiles').select('username,display_name,bio,x_handle,avatar_url,avatar_emoji,accent').eq('id',params.id).single(),
         supabase.from('paper_profile_visibility').select('public_profile,activity_public,share_pnl').eq('user_id',params.id).maybeSingle(),
-        supabase.from('paper_leaderboard_v2').select('evaluation_pnl_usd,evaluation_roi_pct,win_rate_pct,trades_count,funded_pnl_usd,funded_capital_usd,evaluation_status').eq('period_key','all_time').eq('user_id',params.id).maybeSingle(),
+        supabase.from('paper_leaderboard_v2').select('evaluation_pnl_usd,evaluation_roi_pct,win_rate_pct,trades_count,evaluation_status').eq('period_key','all_time').eq('user_id',params.id).maybeSingle(),
         supabase.from('paper_trade_cards').select('trade_id,token_symbol,action,notional_usd,fee_usd,execution_quality,verified,created_at').eq('user_id',params.id).order('created_at',{ascending:false}).limit(12),
         supabase.from('paper_activity_events').select('id,event_type,token_symbol,payload,created_at').eq('user_id',params.id).order('created_at',{ascending:false}).limit(12),
         supabase.from('paper_reward_badges').select('badge_key,earned_at').eq('user_id',params.id).order('earned_at',{ascending:true}).limit(12),
@@ -77,9 +77,23 @@ export default function TraderPage(){
     }catch(e){setReportMessage(e instanceof Error?e.message:'Could not submit report')}
   }
 
-  const pnl=Number(stats?.evaluation_pnl_usd||0),funded=Number(stats?.funded_pnl_usd||0)
-  const evalPnl=(pnl>=0?'+':'')+'$'+Math.abs(pnl).toFixed(2)+' PAPER'
-  const fundedPnl=Number(stats?.funded_capital_usd||0)>0?(funded>=0?'+':'')+'$'+Math.abs(funded).toFixed(2):'—'
+  const pnl=Number(stats?.evaluation_pnl_usd||0)
+  const evalPnl=(pnl>=0?'+':'')+'
+
+  return <div className="ax-app"><AppHeader active="leaderboard"/><main className="terminal-page"><div className="terminal-page-inner">
+    {error?<div className="error-card">{error}</div>:!profile?<div className="empty-card">Loading trader…</div>:<>
+      <div className="public-profile"><div className={'public-avatar accent-'+(profile.accent||'violet')}>{profile.avatar_url?<img src={profile.avatar_url} alt="Profile"/>:profile.avatar_emoji||'🪙'}</div><div><div className="terminal-eyebrow">PAPER TRADER</div><h2>{profile.display_name||'Paper Trader'}</h2><p>@{profile.username||'paper_trader'}{profile.x_handle?' · '+profile.x_handle:''}</p>{profile.bio&&<p style={{marginTop:9,maxWidth:470,lineHeight:1.5}}>{profile.bio}</p>}<div className="p23-social-stats"><span><b>{followers}</b> followers</span><span><b>{followingCount}</b> following</span></div>{badges.length>0&&<div className="trader-badges">{badges.slice(0,6).map(x=><span key={x.badge_key} title={'Unlocked '+new Date(x.earned_at).toLocaleDateString()}>{x.badge_key.replaceAll('_',' ')}</span>)}</div>}</div><div className="spacer"/>{me&&me!==params.id&&<button className={'p23-follow-button '+(following?'following':'')} disabled={followBusy} onClick={()=>void toggleFollow()}>{following?'FOLLOWING':'FOLLOW'}</button>}<button className="report-button" onClick={()=>void reportProfile()}>REPORT</button></div>
+      {reportMessage&&<div className="profile-message">{reportMessage}</div>}
+      <div className="stat-grid"><div className="stat-card"><small>EVALUATION P&amp;L</small><b className={pnl>=0?'gain':'loss'}>{evalPnl}</b></div><div className="stat-card"><small>EVALUATION ROI</small><b>{Number(stats?.evaluation_roi_pct||0).toFixed(2)}%</b></div><div className="stat-card"><small>WIN RATE</small><b>{Number(stats?.win_rate_pct||0).toFixed(1)}%</b></div><div className="stat-card"><small>PAPER TRADES</small><b>{Number(stats?.trades_count||0).toLocaleString()}</b></div></div>
+      <div className="p23-activity-grid">
+        <section className="p23-social-card"><div className="terminal-eyebrow">VERIFIED TRADE CARDS</div><div className="p23-social-list">{!cards.length?<div className="empty-card">No public trade cards.</div>:cards.map(x=><div className="p23-social-row" key={x.trade_id}><div><b>{x.action.toUpperCase()} {'$'+(x.token_symbol||'MEME')}</b><span> · {'$'+Number(x.notional_usd||0).toFixed(2)+' PAPER · fee $'+Number(x.fee_usd||0).toFixed(2)}</span></div><span>{x.verified?'VERIFIED':'—'} · {new Date(x.created_at).toLocaleDateString()}</span></div>)}</div></section>
+        <section className="p23-social-card"><div className="terminal-eyebrow">ACTIVITY</div><div className="p23-social-list">{!activity.length?<div className="empty-card">No public activity.</div>:activity.map(x=><div className="p23-social-row" key={x.id}><div><b>{x.event_type.replaceAll('_',' ').toUpperCase()}</b>{x.token_symbol&&<span> · {'$'+x.token_symbol}</span>}</div><span>{new Date(x.created_at).toLocaleString()}</span></div>)}</div></section>
+      </div>
+      <div className="leader-rule-note">Public stats and trade cards are PAPER records only. Followers do not enable copy trading, calls, comments, or real-money execution.</div>
+    </>}
+  </div></main><BottomDock active="leaderboard"/></div>
+}
++Math.abs(pnl).toFixed(2)+' PAPER'
 
   return <div className="ax-app"><AppHeader active="leaderboard"/><main className="terminal-page"><div className="terminal-page-inner">
     {error?<div className="error-card">{error}</div>:!profile?<div className="empty-card">Loading trader…</div>:<>
