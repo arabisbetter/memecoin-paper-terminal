@@ -31,9 +31,21 @@ test('exact deployed release works on the public PAPER hostname',async({page,req
   await expect(page.getByText(/LIVE MEMECOINS/)).toBeVisible({timeout:25000})
   await expect(page.locator('.token-row-shell,.spot-list-row').first()).toBeVisible({timeout:25000}).catch(async()=>{await expect(page.locator('.spot-token-list').getByText(token.symbol).first()).toBeVisible()})
   await expect(page.getByText('INSTANT BUY',{exact:true})).toBeVisible()
-  await expect(page.getByRole('navigation',{name:'Primary navigation'}).getByRole('link',{name:'Funded',exact:true})).toHaveCount(0)
+  const primaryNav=page.getByRole('navigation',{name:'Primary navigation'})
+  await expect(primaryNav.getByRole('link',{name:'Funded',exact:true})).toHaveCount(0)
+  for(const name of ['Discover','Spot','Pulse','Chains','Portfolio','Watchlist','Leaderboard'])await expect(primaryNav.getByRole('link',{name,exact:true})).toBeVisible()
   await expect(page.locator('.ax-profile-entry')).toHaveCount(1)
   await expect(page.locator('.restored-feature-dock a[href="/profile"]')).toHaveCount(1)
+
+  for(const route of ['/discover','/portfolio','/chains','/watchlist','/scanner','/smart-money','/heatmap','/compare','/workspaces','/journal','/replay','/community','/leaderboards','/status']){
+    const restored=await request.get(route,{maxRedirects:0})
+    expect(restored.status(),route).toBe(200)
+  }
+  for(const route of ['/funded','/evaluation','/rewards']){
+    const blocked=await request.get(route,{maxRedirects:0})
+    expect(blocked.status(),route).toBe(307)
+    expect(blocked.headers().location).toBe('/spot')
+  }
 
   await page.getByRole('button',{name:'Edit presets',exact:true}).click()
   await page.getByLabel('Preset P1 SOL').fill('0.01')
