@@ -1,8 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
 
-const PUBLIC_UI_PREFIXES=['/spot','/pulse','/profile','/legal']
+const PUBLIC_UI_PREFIXES=[
+  '/discover','/spot','/pulse','/profile','/portfolio','/chains','/watchlist',
+  '/scanner','/smart-money','/heatmap','/compare','/workspaces','/journal',
+  '/replay','/community','/leaderboards','/status','/legal'
+]
 const INTERNAL_PREFIXES=['/admin']
 
+// Deliberately excluded from the public beta: /evaluation, /funded, /rewards.
+// Real-money execution/custody/payout APIs remain separately hard-disabled.
 export function middleware(req:NextRequest){
   const {pathname}=req.nextUrl
   if(pathname==='/'||PUBLIC_UI_PREFIXES.some(p=>pathname===p||pathname.startsWith(p+'/'))||INTERNAL_PREFIXES.some(p=>pathname===p||pathname.startsWith(p+'/'))){
