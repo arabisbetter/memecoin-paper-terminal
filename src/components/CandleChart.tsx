@@ -139,7 +139,7 @@ export default function CandleChart({
   const [tfOpen,setTfOpen]=useState(false)
   const [mode,setMode]=useState<ChartMode>('price')
   const [quote,setQuote]=useState<QuoteMode>('usd')
-  const [scaleMode,setScaleMode]=useState<ScaleMode>('normal')
+  const [scaleMode,setScaleMode]=useState<ScaleMode>('log')
   const [candles,setCandles]=useState<Candle[]>([])
   const [hover,setHover]=useState<Candle|null>(null)
   const [error,setError]=useState('')
@@ -179,11 +179,13 @@ export default function CandleChart({
   useEffect(()=>{
     const start=window.setTimeout(()=>{
     try{
-      const saved=JSON.parse(localStorage.getItem('paper.chart.workspace.v2')||'{}')
+      const v3=localStorage.getItem('paper.chart.workspace.v3')
+      const saved=JSON.parse(v3||localStorage.getItem('paper.chart.workspace.v2')||'{}')
       if(saved.tf&&timeframeGroups.flatMap(g=>g.items).some(i=>i.value===saved.tf)){const savedTf=saved.tf as Timeframe;setTf(savedTf==='1s'?'1m':savedTf)}
       if(saved.mode==='price'||saved.mode==='marketCap'){setMode(saved.mode);userPickedMode.current=true}
       if(saved.quote==='usd'||saved.quote==='sol')setQuote(saved.quote)
-      if(saved.scaleMode==='normal'||saved.scaleMode==='percent'||saved.scaleMode==='log')setScaleMode(saved.scaleMode)
+      if(v3&&(saved.scaleMode==='normal'||saved.scaleMode==='percent'||saved.scaleMode==='log'))setScaleMode(saved.scaleMode)
+      else setScaleMode('log')
       if(typeof saved.showVolume==='boolean')setShowVolume(saved.showVolume)
       if(typeof saved.showGrid==='boolean')setShowGrid(saved.showGrid)
       if(typeof saved.showCrosshair==='boolean')setShowCrosshair(saved.showCrosshair)
@@ -205,7 +207,7 @@ export default function CandleChart({
 
   useEffect(()=>{
     if(!workspaceLoaded.current)return
-    localStorage.setItem('paper.chart.workspace.v2',JSON.stringify({
+    localStorage.setItem('paper.chart.workspace.v3',JSON.stringify({
       tf,mode,quote,scaleMode,showVolume,showGrid,showCrosshair,showEma9,showEma21,showEma50,showSma20,showSma50,showVwap,showBollinger,showTradeMarkers,
       levels:userLevels.current
     }))
@@ -223,7 +225,7 @@ export default function CandleChart({
         horzLine:{color:'#677181',width:1,labelBackgroundColor:'#262d36'}
       },
       rightPriceScale:{borderColor:'#242a32',scaleMargins:{top:.07,bottom:.16},entireTextOnly:true,ticksVisible:true,minimumWidth:86},
-      timeScale:{borderColor:'#242a32',timeVisible:true,secondsVisible:true,rightOffset:8,barSpacing:9,minBarSpacing:2,maxBarSpacing:14,fixLeftEdge:false,fixRightEdge:false},
+      timeScale:{borderColor:'#242a32',timeVisible:true,secondsVisible:true,rightOffset:8,barSpacing:7,minBarSpacing:2,maxBarSpacing:9,fixLeftEdge:false,fixRightEdge:false},
       handleScroll:{mouseWheel:true,pressedMouseMove:true,horzTouchDrag:true,vertTouchDrag:false},
       handleScale:{axisPressedMouseMove:true,mouseWheel:true,pinch:true},
     })
@@ -290,7 +292,7 @@ export default function CandleChart({
   useEffect(()=>{
     chartRef.current?.timeScale().applyOptions({
       timeVisible:true,secondsVisible:isSecondTf(tf),rightOffset:isSecondTf(tf)?8:6,
-      barSpacing:isSecondTf(tf)?7:9,minBarSpacing:2,maxBarSpacing:14
+      barSpacing:isSecondTf(tf)?6:7,minBarSpacing:2,maxBarSpacing:9
     })
   },[tf])
 
@@ -408,19 +410,22 @@ export default function CandleChart({
       for(let i=1;i<candles.length;i++){const delta=Math.abs(candles[i].time-value);if(delta<bestDelta){best=candles[i].time;bestDelta=delta}}
       return best
     }
-    const markers=trades.map(trade=>{
+    const grouped=new Map<string,{time:number;side:'buy'|'sell';count:number}>()
+    for(const trade of trades){
       const timestamp=Math.floor(new Date(trade.ts).getTime()/1000)
-      if(!Number.isFinite(timestamp)||timestamp<first-86400||timestamp>last+86400)return null
-      const isBuy=trade.action==='buy'
-      return{
-        time:nearest(timestamp) as UTCTimestamp,
-        position:isBuy?'belowBar':'aboveBar',
-        color:isBuy?'#17d7aa':'#ff4d77',
-        shape:isBuy?'arrowUp':'arrowDown',
-        text:isBuy?'BUY':'SELL',
-        size:1.15,
-      }
-    }).filter(Boolean)
+      if(!Number.isFinite(timestamp)||timestamp<first-86400||timestamp>last+86400)continue
+      const time=nearest(timestamp),side=trade.action==='buy'?'buy':'sell',key=`${time}:${side}`
+      const previous=grouped.get(key)
+      grouped.set(key,{time,side,count:(previous?.count||0)+1})
+    }
+    const markers=[...grouped.values()].map(marker=>({
+      time:marker.time as UTCTimestamp,
+      position:marker.side==='buy'?'belowBar':'aboveBar',
+      color:marker.side==='buy'?'#17d7aa':'#ff4d77',
+      shape:marker.side==='buy'?'arrowUp':'arrowDown',
+      text:marker.count>1?`${marker.side==='buy'?'BUY':'SELL'} ×${marker.count}`:(marker.side==='buy'?'BUY':'SELL'),
+      size:.8,
+    }))
     primitive.setMarkers(markers as any)
   },[candles,trades,showTradeMarkers])
 
@@ -574,10 +579,14 @@ export default function CandleChart({
   function chooseMode(next:ChartMode){
     userPickedMode.current=true
     if(next==='marketCap'&&!mcAvailable)return
+    fittedKeyRef.current=''
+    chartRef.current?.priceScale('right').applyOptions({autoScale:true})
     setMode(next)
   }
   function toggleQuote(){
     if(!solAvailable)return
+    fittedKeyRef.current=''
+    chartRef.current?.priceScale('right').applyOptions({autoScale:true})
     setQuote(v=>v==='usd'?'sol':'usd')
   }
   function zoom(mult:number){
