@@ -8,7 +8,7 @@ export const dynamic='force-dynamic'
 type ProfileLink={type?:string;label?:string;url?:string}
 type DexProfile={chainId?:string;tokenAddress?:string;icon?:string;description?:string;url?:string;links?:ProfileLink[]}
 const cache=new Map<string,{at:number;token:MarketToken}>()
-const FRESH_MS=5_000
+const FRESH_MS=3_500
 let profileCache:{at:number;items:DexProfile[]}|null=null
 
 async function latestProfiles(){
@@ -41,7 +41,7 @@ export async function GET(_req:NextRequest,ctx:{params:Promise<{mint:string}>}){
     const profile=profiles.find(p=>p.chainId==='solana'&&p.tokenAddress===mint)
     if(profile){token.description=profile.description||token.description;token.profileUrl=profile.url||token.profileUrl;token.image=token.image||profile.icon;token.website=token.website||profileLink(profile,'website');token.twitter=token.twitter||profileLink(profile,'twitter');token.telegram=token.telegram||profileLink(profile,'telegram');token.buyUrl=profileLink(profile,'buy')||token.buyUrl||token.pairUrl}
     cache.set(mint,{at:Date.now(),token})
-    return NextResponse.json({token,live:true,asOf:Date.now(),metadata:profile?'dexscreener-profile':'pair-info'},{headers:{'Cache-Control':'public, s-maxage=4, stale-while-revalidate=15'}})
+    return NextResponse.json({token,live:true,asOf:Date.now(),metadata:profile?'dexscreener-profile':'pair-info'},{headers:{'Cache-Control':'public, s-maxage=3, stale-while-revalidate=10'}})
   }catch(error){
     console.error('market_token_lookup_error',{mint,error})
     if(previous)return NextResponse.json({token:previous.token,live:false,stale:true,asOf:previous.at,warning:error instanceof Error?error.message:'lookup failed'})
