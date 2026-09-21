@@ -44,7 +44,7 @@ export const metadata: Metadata = {
   category: "finance",
   alternates: { canonical: "/" },
   openGraph: {
-    title: "PAPER — Trade PAPER. Earn real.",
+    title: "PAPER — Solana memecoin paper trading",
     description: "1,000 PAPER SOL. Real Solana memecoin market inputs. Simulated execution only.",
     siteName: "PAPER",
     type: "website",
@@ -52,7 +52,7 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "PAPER — Trade PAPER. Earn real.",
+    title: "PAPER — Solana memecoin paper trading",
     description: "1,000 PAPER SOL. Real Solana memecoin market inputs. Simulated execution only.",
   },
 };
